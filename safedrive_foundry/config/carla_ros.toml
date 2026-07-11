@@ -1,0 +1,27 @@
+[carla]
+host = "172.30.80.1"
+port = 2000
+timeout_seconds = 10.0
+
+[ros]
+domain_id = 42
+topic = "/safedrive/carla/status"
+publish_hz = 10.0
+
+[policy]
+# The read-only bridge never calls world.tick(); this is the sole G0 tick owner.
+tick_owner = "sdf.g0-05.sync"
+
+[sync]
+# CARLA legal fixed-step/substep combination: 0.05 <= 0.01 * 5.
+synchronous_mode = true
+tick_master = "sdf.g0-05.sync"
+fixed_delta_seconds = 0.05
+substepping = true
+max_substep_delta_time = 0.01
+max_substeps = 5
+clock_topic = "/clock"
+snapshot_topic = "/safedrive/carla/status"
+frame_contract = "episode_id+carla_frame"
+timestamp_tolerance_seconds = 0.000001
+max_frame_gap = 1

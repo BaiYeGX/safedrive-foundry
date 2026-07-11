@@ -1,0 +1,25 @@
+# G0-04 skeleton lock; authoritative project freeze remains ../versions.lock
+
+[carla]
+server = "0.9.16"
+python_api = "0.9.16"
+rpc_port = 2000
+streaming_port = 2001
+traffic_manager_port = 2002
+
+[ros]
+distribution = "jazzy"
+domain_id = 42
+rmw = "rmw_fastrtps_cpp"
+
+[bridge]
+topic = "/safedrive/carla/status"
+message_type = "std_msgs/msg/String"
+tick_owner = "sdf.g0-05.sync"
+
+[sync]
+clock_topic = "/clock"
+fixed_delta_seconds = 0.05
+max_substep_delta_time = 0.01
+max_substeps = 5
+frame_contract = "episode_id+carla_frame"

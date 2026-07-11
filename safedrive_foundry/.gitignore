@@ -1,0 +1,22 @@
+# Python and ROS build products
+__pycache__/
+*.py[cod]
+.venv/
+ros_ws/build/
+ros_ws/install/
+ros_ws/log/
+
+# Runtime evidence and generated data
+data/
+recordings/
+*.log
+*.bag
+*.db3
+
+# Credentials and local overrides
+.env
+*.local.toml
+
+# Large simulator assets; keep CARLA outside this repository
+*.zip
+CARLA*/

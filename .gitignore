@@ -1,0 +1,30 @@
+# Large external assets
+*.zip
+
+# Historical archives and bundled runtimes
+archive/
+tools/
+
+# Python environments and caches
+.venv*/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ROS 2 generated directories
+**/build/
+**/install/
+**/log/
+
+# Runtime leftovers
+*.pid
+.wsl-*.txt
+
+# Editors and operating system
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

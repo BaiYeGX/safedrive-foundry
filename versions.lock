@@ -1,0 +1,41 @@
+# SafeDrive Foundry G0 version freeze (initial)
+# Decision: docs/environment/VERSION_DECISION.md
+# Installation/smoke-test status: G0-03_CARLA_VERIFIED
+
+[host]
+os = "windows-11-pro-25H2-x86_64"
+observed_build = "26200.8655"
+nvidia_driver = "591.86"
+gpu = "nvidia-geforce-rtx-4080-16gb"
+
+[preferred]
+wsl = "2.9.3.0"
+ubuntu = "24.04.4-LTS-amd64"
+ros2 = "jazzy"
+carla = "0.9.16"
+scenario_runner = "0.9.16"
+python = "3.12.3"
+pytorch = "2.12.1+cu126"
+torchvision = "0.27.1+cu126"
+torchaudio = "not-installed-no-2.12.1-cu126-wheel"
+pytorch_cuda_wheel = "cu126"
+cuda_toolkit_if_required = "12.6-toolkit-only"
+
+[fallback]
+wsl = "2"
+ubuntu = "22.04-LTS-amd64"
+ros2 = "humble"
+carla = "0.9.15"
+scenario_runner = "0.9.15"
+python = "3.10.x"
+pytorch = "2.7.1"
+torchvision = "0.22.1"
+torchaudio = "2.7.1"
+pytorch_cuda_wheel = "cu126"
+cuda_toolkit_if_required = "12.6-toolkit-only"
+
+[policy]
+carla_scenario_runner_versions_must_match = true
+linux_nvidia_driver_inside_wsl_forbidden = true
+system_python_replacement_forbidden = true
+unverified_component_substitution_forbidden = true

@@ -1,0 +1,185 @@
+{
+  "checks": [
+    {
+      "code": "project_path_ok",
+      "details": {
+        "root": "/mnt/e/autonomous driving"
+      },
+      "id": "paths.project",
+      "message": "project root and G0 skeleton are present",
+      "status": "PASS"
+    },
+    {
+      "code": "sync_config_ok",
+      "details": {
+        "clock_topic": "/clock",
+        "fixed_delta_seconds": 0.05,
+        "frame_contract": "episode_id+carla_frame",
+        "max_frame_gap": 1,
+        "max_substep_delta_time": 0.01,
+        "max_substeps": 5,
+        "snapshot_topic": "/safedrive/carla/status",
+        "substepping": true,
+        "synchronous_mode": true,
+        "tick_master": "sdf.g0-05.sync",
+        "timestamp_tolerance_seconds": 1e-06
+      },
+      "id": "sync.config",
+      "message": "fixed-step and frame contract configuration is valid",
+      "status": "PASS"
+    },
+    {
+      "code": "versions_lock_ok",
+      "details": {
+        "carla": "0.9.16",
+        "path": "/mnt/e/autonomous driving/versions.lock"
+      },
+      "id": "versions.lock",
+      "message": "authoritative version lock is readable",
+      "status": "PASS"
+    },
+    {
+      "code": "python_version_ok",
+      "details": {
+        "current": "3.12.3",
+        "expected": "3.12.3"
+      },
+      "id": "python.version",
+      "message": "Python major/minor matches the preferred frozen interpreter",
+      "status": "PASS"
+    },
+    {
+      "code": "gpu_visible",
+      "details": {
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "NVIDIA GeForce RTX 4080, 16376 MiB, 591.86"
+      },
+      "id": "gpu.visible",
+      "message": "NVIDIA GPU is visible to the diagnostic process",
+      "status": "PASS"
+    },
+    {
+      "code": "wsl_ready",
+      "details": {
+        "distros": [
+          "Ubuntu-24.04"
+        ],
+        "version": {
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "WSL Hr,g: 2.9.3.0\n\n�Q8hHr,g: 6.18.35.2-1\n\nWSLg Hr,g: 1.0.79\n\nMSRDC Hr,g: 1.2.7214\n\nDirect3D Hr,g: 1.611.1-81528511\n\nDXCore Hr,g: 10.0.26100.1-240331-1435.ge-release\n\nWindows Hr,g: 10.0.26200.8655"
+        }
+      },
+      "id": "wsl.available",
+      "message": "WSL has at least one registered distribution",
+      "status": "PASS"
+    },
+    {
+      "code": "ros2_unavailable",
+      "details": {
+        "returncode": 2,
+        "stderr": "usage: ros2 [-h] [--use-python-default-buffering]\n            Call `ros2 <command> -h` for more detailed usage. ...\nros2: error: unrecognized arguments: --version",
+        "stdout": "/opt/ros/jazzy/bin/ros2"
+      },
+      "id": "ros2.available",
+      "message": "ROS 2 Jazzy command is not available in WSL",
+      "status": "FAIL"
+    },
+    {
+      "code": "carla_installation_missing",
+      "details": {
+        "path": "E:/CARLA_0.9.16"
+      },
+      "id": "paths.carla",
+      "message": "configured CARLA installation path does not exist",
+      "status": "FAIL"
+    },
+    {
+      "code": "disk_space_ok",
+      "details": {
+        "free_gib": 113.583,
+        "minimum_free_gib": 20.0
+      },
+      "id": "disk.free",
+      "message": "free disk space is above the configured G0 safety floor",
+      "status": "PASS"
+    },
+    {
+      "code": "carla_not_started",
+      "details": {
+        "error": "TimeoutError: timed out",
+        "host": "172.30.80.1",
+        "port": 2000
+      },
+      "id": "carla.port",
+      "message": "CARLA RPC TCP endpoint 172.30.80.1:2000 is unreachable",
+      "status": "FAIL"
+    },
+    {
+      "code": "carla_not_started",
+      "details": {
+        "error": "TimeoutError: timed out"
+      },
+      "id": "carla.rpc",
+      "message": "CARLA RPC endpoint is unreachable; server may be stopped or the endpoint is wrong",
+      "status": "FAIL"
+    },
+    {
+      "code": "port_not_observed",
+      "details": {
+        "error": "TimeoutError: timed out",
+        "host": "172.30.80.1",
+        "port": 2001
+      },
+      "id": "carla.port.streaming",
+      "message": "CARLA streaming endpoint 172.30.80.1:2001 is not reachable",
+      "status": "WARN"
+    },
+    {
+      "code": "port_not_observed",
+      "details": {
+        "error": "TimeoutError: timed out",
+        "host": "172.30.80.1",
+        "port": 2002
+      },
+      "id": "carla.port.traffic_manager",
+      "message": "CARLA traffic_manager endpoint 172.30.80.1:2002 is not reachable",
+      "status": "WARN"
+    },
+    {
+      "code": "clock_observation_blocked",
+      "details": {
+        "ros_status": "FAIL"
+      },
+      "id": "ros.clock",
+      "message": "live /clock observation is blocked because ROS 2 is unavailable",
+      "status": "BLOCKED"
+    },
+    {
+      "code": "single_tick_master",
+      "details": {
+        "tick_master": "sdf.g0-05.sync"
+      },
+      "id": "sync.tick_master",
+      "message": "configuration declares exactly one tick master",
+      "status": "PASS"
+    }
+  ],
+  "generated_at_utc": "2026-07-11T18:41:32.780960+00:00",
+  "invocation": [
+    "scripts/sdf.py",
+    "doctor"
+  ],
+  "project_root": "/mnt/e/autonomous driving",
+  "schema": "safedrive.g0.doctor.v1",
+  "summary": {
+    "counts": {
+      "BLOCKED": 1,
+      "FAIL": 4,
+      "PASS": 8,
+      "WARN": 2
+    },
+    "status": "FAIL"
+  }
+}

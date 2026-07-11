@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>safedrive_carla_bridge</name>
+  <version>0.1.0</version>
+  <description>Minimal CARLA snapshot to ROS 2 status bridge for G0-04.</description>
+  <maintainer email="safedrive@example.invalid">SafeDrive Foundry</maintainer>
+  <license>MIT</license>
+  <depend>rclpy</depend>
+  <depend>rosgraph_msgs</depend>
+  <depend>std_msgs</depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
