@@ -1,0 +1,14 @@
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  trying to operate on a destroyed actor; an actor's function was called, but the actor is already destroyed.
+Fatal Python error: Aborted
+
+Thread 0x00007470efb38080 (most recent call first):
+  File "/mnt/e/autonomous driving/safedrive_foundry/runtime/scenario_runtime.py", line 151 in _connect
+  File "/mnt/e/autonomous driving/safedrive_foundry/runtime/scenario_runtime.py", line 217 in finish
+  File "/mnt/e/autonomous driving/safedrive_foundry/runtime/scenario_runtime.py", line 579 in _finalize
+  File "/mnt/e/autonomous driving/safedrive_foundry/runtime/scenario_runtime.py", line 532 in complete
+  File "/mnt/e/autonomous driving/tests/g1/run_g1_02_live_child.py", line 0 in main
+  File Fatal Python error: Segmentation fault
+
+
+Extension modules: carla.libcarla (total: 1)

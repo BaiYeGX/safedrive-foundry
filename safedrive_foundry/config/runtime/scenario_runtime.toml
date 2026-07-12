@@ -1,0 +1,10 @@
+[scenario_runtime]
+owner = "sdf.g1-02.runtime"
+expected_carla_version = "0.9.16"
+lease_file = ".runtime/tick-lease.lock"
+registry_file = ".runtime/run-registry.sqlite3"
+
+[traffic_manager]
+port = 8000
+seed = 20260712
+sync_mode = true

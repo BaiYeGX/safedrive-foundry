@@ -1,0 +1,728 @@
+{
+  "checks": {
+    "carla_frame_strict_increment": true,
+    "clock_continuous_samples_ge_20": true,
+    "clock_seconds_step_0.05": true,
+    "frame_fields_equal": true,
+    "map_observed": true,
+    "ros_clock_matches_status_clock_seconds": true,
+    "single_episode_id": true,
+    "status_samples_ge_20": true,
+    "tick_master_is_sdf.g0-05.sync": true
+  },
+  "observed": {
+    "episodes": [
+      "edfcf71663a64388985119356fab8119"
+    ],
+    "first_clock_seconds": 690.7551341988146,
+    "first_frame": 104119,
+    "first_status": {
+      "carla_frame": 104119,
+      "clock_frame": 104119,
+      "clock_seconds": 690.7551341988146,
+      "clock_topic": "/clock",
+      "command_executed_frame": 104119,
+      "command_generated_frame": 104119,
+      "command_planned_frame": 104119,
+      "delta_seconds": 0.05000000074505806,
+      "endpoint": "172.30.80.1:2000",
+      "episode_id": "edfcf71663a64388985119356fab8119",
+      "event_seq": 1,
+      "frame_key": "edfcf71663a64388985119356fab8119:104119",
+      "map": "Carla/Maps/Town10HD_Opt",
+      "message_frame": 104119,
+      "publisher_host": "BYGX",
+      "publisher_wall_time": 1783796697.4580927,
+      "schema": "safedrive.carla.sync.v1",
+      "simulation_seconds": 690.7551341988146,
+      "snapshot_frame": 104119,
+      "state_hash": "de064a2add352f0ce65e76fc8f469e27ed5e42b1fe8b5fa1e800b4d89502fb69",
+      "tick_master": "sdf.g0-05.sync"
+    },
+    "last_clock_seconds": 691.7051342129707,
+    "last_frame": 104138,
+    "last_status": {
+      "carla_frame": 104138,
+      "clock_frame": 104138,
+      "clock_seconds": 691.7051342129707,
+      "clock_topic": "/clock",
+      "command_executed_frame": 104138,
+      "command_generated_frame": 104138,
+      "command_planned_frame": 104138,
+      "delta_seconds": 0.05000000074505806,
+      "endpoint": "172.30.80.1:2000",
+      "episode_id": "edfcf71663a64388985119356fab8119",
+      "event_seq": 20,
+      "frame_key": "edfcf71663a64388985119356fab8119:104138",
+      "map": "Carla/Maps/Town10HD_Opt",
+      "message_frame": 104138,
+      "publisher_host": "BYGX",
+      "publisher_wall_time": 1783796697.629464,
+      "schema": "safedrive.carla.sync.v1",
+      "simulation_seconds": 691.7051342129707,
+      "snapshot_frame": 104138,
+      "state_hash": "929f76fc170d9421bfd6cb38d41fc35b776daf5f03663e49eaf4f3eecc0474e9",
+      "tick_master": "sdf.g0-05.sync"
+    },
+    "maps": [
+      "Carla/Maps/Town10HD_Opt"
+    ],
+    "max_ros_clock_alignment_error": 4.996536517865025e-10,
+    "tick_masters": [
+      "sdf.g0-05.sync"
+    ]
+  },
+  "observed_until": 1783796697.6307786,
+  "raw": {
+    "clocks": [
+      {
+        "nanosec": 755134199,
+        "received_wall": 1783796697.506618,
+        "sec": 690,
+        "seconds": 690.755134199
+      },
+      {
+        "nanosec": 805134200,
+        "received_wall": 1783796697.5084438,
+        "sec": 690,
+        "seconds": 690.8051342
+      },
+      {
+        "nanosec": 855134200,
+        "received_wall": 1783796697.510227,
+        "sec": 690,
+        "seconds": 690.8551342
+      },
+      {
+        "nanosec": 905134201,
+        "received_wall": 1783796697.516927,
+        "sec": 690,
+        "seconds": 690.905134201
+      },
+      {
+        "nanosec": 955134202,
+        "received_wall": 1783796697.523833,
+        "sec": 690,
+        "seconds": 690.955134202
+      },
+      {
+        "nanosec": 5134203,
+        "received_wall": 1783796697.53253,
+        "sec": 691,
+        "seconds": 691.005134203
+      },
+      {
+        "nanosec": 55134203,
+        "received_wall": 1783796697.5407512,
+        "sec": 691,
+        "seconds": 691.055134203
+      },
+      {
+        "nanosec": 105134204,
+        "received_wall": 1783796697.548692,
+        "sec": 691,
+        "seconds": 691.105134204
+      },
+      {
+        "nanosec": 155134205,
+        "received_wall": 1783796697.5556765,
+        "sec": 691,
+        "seconds": 691.155134205
+      },
+      {
+        "nanosec": 205134206,
+        "received_wall": 1783796697.562111,
+        "sec": 691,
+        "seconds": 691.205134206
+      },
+      {
+        "nanosec": 255134206,
+        "received_wall": 1783796697.5689774,
+        "sec": 691,
+        "seconds": 691.255134206
+      },
+      {
+        "nanosec": 305134207,
+        "received_wall": 1783796697.5753632,
+        "sec": 691,
+        "seconds": 691.305134207
+      },
+      {
+        "nanosec": 355134208,
+        "received_wall": 1783796697.5829964,
+        "sec": 691,
+        "seconds": 691.355134208
+      },
+      {
+        "nanosec": 405134209,
+        "received_wall": 1783796697.5900912,
+        "sec": 691,
+        "seconds": 691.405134209
+      },
+      {
+        "nanosec": 455134209,
+        "received_wall": 1783796697.596509,
+        "sec": 691,
+        "seconds": 691.455134209
+      },
+      {
+        "nanosec": 505134210,
+        "received_wall": 1783796697.603403,
+        "sec": 691,
+        "seconds": 691.50513421
+      },
+      {
+        "nanosec": 555134211,
+        "received_wall": 1783796697.6098871,
+        "sec": 691,
+        "seconds": 691.555134211
+      },
+      {
+        "nanosec": 605134211,
+        "received_wall": 1783796697.6167696,
+        "sec": 691,
+        "seconds": 691.605134211
+      },
+      {
+        "nanosec": 655134212,
+        "received_wall": 1783796697.6235497,
+        "sec": 691,
+        "seconds": 691.655134212
+      },
+      {
+        "nanosec": 705134213,
+        "received_wall": 1783796697.6300852,
+        "sec": 691,
+        "seconds": 691.705134213
+      }
+    ],
+    "statuses": [
+      {
+        "payload": {
+          "carla_frame": 104119,
+          "clock_frame": 104119,
+          "clock_seconds": 690.7551341988146,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104119,
+          "command_generated_frame": 104119,
+          "command_planned_frame": 104119,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 1,
+          "frame_key": "edfcf71663a64388985119356fab8119:104119",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104119,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.4580927,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 690.7551341988146,
+          "snapshot_frame": 104119,
+          "state_hash": "de064a2add352f0ce65e76fc8f469e27ed5e42b1fe8b5fa1e800b4d89502fb69",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.5067954
+      },
+      {
+        "payload": {
+          "carla_frame": 104120,
+          "clock_frame": 104120,
+          "clock_seconds": 690.8051341995597,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104120,
+          "command_generated_frame": 104120,
+          "command_planned_frame": 104120,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 2,
+          "frame_key": "edfcf71663a64388985119356fab8119:104120",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104120,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.5080085,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 690.8051341995597,
+          "snapshot_frame": 104120,
+          "state_hash": "15df454e24606f30a990d37373619b09259949483f52fa91ef6f8c0f8d1415e9",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.5085657
+      },
+      {
+        "payload": {
+          "carla_frame": 104121,
+          "clock_frame": 104121,
+          "clock_seconds": 690.8551342003047,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104121,
+          "command_generated_frame": 104121,
+          "command_planned_frame": 104121,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 3,
+          "frame_key": "edfcf71663a64388985119356fab8119:104121",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104121,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.5097792,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 690.8551342003047,
+          "snapshot_frame": 104121,
+          "state_hash": "a65f0f4293d14c312b0bb5be05d2297e7d79bdce7514d19e7cca22b123fc5a48",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.5103292
+      },
+      {
+        "payload": {
+          "carla_frame": 104122,
+          "clock_frame": 104122,
+          "clock_seconds": 690.9051342010498,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104122,
+          "command_generated_frame": 104122,
+          "command_planned_frame": 104122,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 4,
+          "frame_key": "edfcf71663a64388985119356fab8119:104122",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104122,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.5163634,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 690.9051342010498,
+          "snapshot_frame": 104122,
+          "state_hash": "091e0633090af002598624c884c8d8ff37bf16b7c8b034ba79bb19b6a6968c68",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.5170317
+      },
+      {
+        "payload": {
+          "carla_frame": 104123,
+          "clock_frame": 104123,
+          "clock_seconds": 690.9551342017949,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104123,
+          "command_generated_frame": 104123,
+          "command_planned_frame": 104123,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 5,
+          "frame_key": "edfcf71663a64388985119356fab8119:104123",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104123,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.5233397,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 690.9551342017949,
+          "snapshot_frame": 104123,
+          "state_hash": "5f5bf7b7c4ccefd41d9e7e981ae24417087758f6d40fd958eae821acf41b67f3",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.5239716
+      },
+      {
+        "payload": {
+          "carla_frame": 104124,
+          "clock_frame": 104124,
+          "clock_seconds": 691.0051342025399,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104124,
+          "command_generated_frame": 104124,
+          "command_planned_frame": 104124,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 6,
+          "frame_key": "edfcf71663a64388985119356fab8119:104124",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104124,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.5319588,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.0051342025399,
+          "snapshot_frame": 104124,
+          "state_hash": "418bab7f7ca0c7ffc35623fd5e617a238a522c33a6e66b1841c5cb10eb972573",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.532668
+      },
+      {
+        "payload": {
+          "carla_frame": 104125,
+          "clock_frame": 104125,
+          "clock_seconds": 691.055134203285,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104125,
+          "command_generated_frame": 104125,
+          "command_planned_frame": 104125,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 7,
+          "frame_key": "edfcf71663a64388985119356fab8119:104125",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104125,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.5402658,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.055134203285,
+          "snapshot_frame": 104125,
+          "state_hash": "9630e63659762ac8ff1897b4768380a7739ecc462d5981da7d1886861597c3ed",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.5408566
+      },
+      {
+        "payload": {
+          "carla_frame": 104126,
+          "clock_frame": 104126,
+          "clock_seconds": 691.10513420403,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104126,
+          "command_generated_frame": 104126,
+          "command_planned_frame": 104126,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 8,
+          "frame_key": "edfcf71663a64388985119356fab8119:104126",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104126,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.5481915,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.10513420403,
+          "snapshot_frame": 104126,
+          "state_hash": "91f9108ef3f9030a7bd90b6141fb27c15e204265e3dcbbba439b0a14aa0c967e",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.5488002
+      },
+      {
+        "payload": {
+          "carla_frame": 104127,
+          "clock_frame": 104127,
+          "clock_seconds": 691.1551342047751,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104127,
+          "command_generated_frame": 104127,
+          "command_planned_frame": 104127,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 9,
+          "frame_key": "edfcf71663a64388985119356fab8119:104127",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104127,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.5551193,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.1551342047751,
+          "snapshot_frame": 104127,
+          "state_hash": "a18b441def94a22597c151638dc11da2847bcbb766e1ced89f17f1fe7ba8e88c",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.5557904
+      },
+      {
+        "payload": {
+          "carla_frame": 104128,
+          "clock_frame": 104128,
+          "clock_seconds": 691.2051342055202,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104128,
+          "command_generated_frame": 104128,
+          "command_planned_frame": 104128,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 10,
+          "frame_key": "edfcf71663a64388985119356fab8119:104128",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104128,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.56162,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.2051342055202,
+          "snapshot_frame": 104128,
+          "state_hash": "4e3004147c45c8a92faad0d44d3b2058c635454ce455c8b2b52440416259ead5",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.5622165
+      },
+      {
+        "payload": {
+          "carla_frame": 104129,
+          "clock_frame": 104129,
+          "clock_seconds": 691.2551342062652,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104129,
+          "command_generated_frame": 104129,
+          "command_planned_frame": 104129,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 11,
+          "frame_key": "edfcf71663a64388985119356fab8119:104129",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104129,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.5684624,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.2551342062652,
+          "snapshot_frame": 104129,
+          "state_hash": "172acb66d729c202ab3bf84db542c979854b96d4310d9f959ce2a8beb6d3bc03",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.5690796
+      },
+      {
+        "payload": {
+          "carla_frame": 104130,
+          "clock_frame": 104130,
+          "clock_seconds": 691.3051342070103,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104130,
+          "command_generated_frame": 104130,
+          "command_planned_frame": 104130,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 12,
+          "frame_key": "edfcf71663a64388985119356fab8119:104130",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104130,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.5748556,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.3051342070103,
+          "snapshot_frame": 104130,
+          "state_hash": "2ce6db8bbfb62d50449aa06aea8c5c2934aaae092a177c470d838e5c64818c6d",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.5754695
+      },
+      {
+        "payload": {
+          "carla_frame": 104131,
+          "clock_frame": 104131,
+          "clock_seconds": 691.3551342077553,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104131,
+          "command_generated_frame": 104131,
+          "command_planned_frame": 104131,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 13,
+          "frame_key": "edfcf71663a64388985119356fab8119:104131",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104131,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.5823517,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.3551342077553,
+          "snapshot_frame": 104131,
+          "state_hash": "31be1d1497cd47e5a45e120b344886d58a86e95877510f11cfee71427317532f",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.583142
+      },
+      {
+        "payload": {
+          "carla_frame": 104132,
+          "clock_frame": 104132,
+          "clock_seconds": 691.4051342085004,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104132,
+          "command_generated_frame": 104132,
+          "command_planned_frame": 104132,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 14,
+          "frame_key": "edfcf71663a64388985119356fab8119:104132",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104132,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.5896142,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.4051342085004,
+          "snapshot_frame": 104132,
+          "state_hash": "c57ab438670fd80a8c9cbec74be661f29adfbc97dd3190eb4aebb12a80288251",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.5902
+      },
+      {
+        "payload": {
+          "carla_frame": 104133,
+          "clock_frame": 104133,
+          "clock_seconds": 691.4551342092454,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104133,
+          "command_generated_frame": 104133,
+          "command_planned_frame": 104133,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 15,
+          "frame_key": "edfcf71663a64388985119356fab8119:104133",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104133,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.5958798,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.4551342092454,
+          "snapshot_frame": 104133,
+          "state_hash": "f11c2137d1b0ac361820ec5c02800ea9c350cb7c9eaeb3834d0dd08048d91630",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.5966532
+      },
+      {
+        "payload": {
+          "carla_frame": 104134,
+          "clock_frame": 104134,
+          "clock_seconds": 691.5051342099905,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104134,
+          "command_generated_frame": 104134,
+          "command_planned_frame": 104134,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 16,
+          "frame_key": "edfcf71663a64388985119356fab8119:104134",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104134,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.6028726,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.5051342099905,
+          "snapshot_frame": 104134,
+          "state_hash": "cd473e7333d2dac5ae033a0145bbdac5da8af8bbcc89a8b711e119bb18129144",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.6035073
+      },
+      {
+        "payload": {
+          "carla_frame": 104135,
+          "clock_frame": 104135,
+          "clock_seconds": 691.5551342107356,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104135,
+          "command_generated_frame": 104135,
+          "command_planned_frame": 104135,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 17,
+          "frame_key": "edfcf71663a64388985119356fab8119:104135",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104135,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.6092713,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.5551342107356,
+          "snapshot_frame": 104135,
+          "state_hash": "f041f10d66893c09a3507bf6bc0c4a5465ef0fb040e17e3f31306eacde3d8ce3",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.6100063
+      },
+      {
+        "payload": {
+          "carla_frame": 104136,
+          "clock_frame": 104136,
+          "clock_seconds": 691.6051342114806,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104136,
+          "command_generated_frame": 104136,
+          "command_planned_frame": 104136,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 18,
+          "frame_key": "edfcf71663a64388985119356fab8119:104136",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104136,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.6162212,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.6051342114806,
+          "snapshot_frame": 104136,
+          "state_hash": "ee38ce495cc1b739fc5fa39204ad63501030d8d04f231f89a5b2fae9447a3ada",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.616897
+      },
+      {
+        "payload": {
+          "carla_frame": 104137,
+          "clock_frame": 104137,
+          "clock_seconds": 691.6551342122257,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104137,
+          "command_generated_frame": 104137,
+          "command_planned_frame": 104137,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 19,
+          "frame_key": "edfcf71663a64388985119356fab8119:104137",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104137,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.623034,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.6551342122257,
+          "snapshot_frame": 104137,
+          "state_hash": "96e498a78d8e17032b75ac26a536a282de92abe2c6da08140aa1553514fee2ff",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.6236825
+      },
+      {
+        "payload": {
+          "carla_frame": 104138,
+          "clock_frame": 104138,
+          "clock_seconds": 691.7051342129707,
+          "clock_topic": "/clock",
+          "command_executed_frame": 104138,
+          "command_generated_frame": 104138,
+          "command_planned_frame": 104138,
+          "delta_seconds": 0.05000000074505806,
+          "endpoint": "172.30.80.1:2000",
+          "episode_id": "edfcf71663a64388985119356fab8119",
+          "event_seq": 20,
+          "frame_key": "edfcf71663a64388985119356fab8119:104138",
+          "map": "Carla/Maps/Town10HD_Opt",
+          "message_frame": 104138,
+          "publisher_host": "BYGX",
+          "publisher_wall_time": 1783796697.629464,
+          "schema": "safedrive.carla.sync.v1",
+          "simulation_seconds": 691.7051342129707,
+          "snapshot_frame": 104138,
+          "state_hash": "929f76fc170d9421bfd6cb38d41fc35b776daf5f03663e49eaf4f3eecc0474e9",
+          "tick_master": "sdf.g0-05.sync"
+        },
+        "received_wall": 1783796697.630495
+      }
+    ]
+  },
+  "received": {
+    "clock": 20,
+    "status": 20,
+    "valid_status": 20
+  },
+  "schema": "safedrive.g0-05.live-observer.v1"
+}

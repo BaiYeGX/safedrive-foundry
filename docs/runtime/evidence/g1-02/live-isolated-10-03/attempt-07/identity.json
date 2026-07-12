@@ -1,0 +1,9 @@
+{
+  "attempt_id": 7,
+  "experiment_id": "g1-02-isolated-acceptance",
+  "producer_version": "g1-02-isolated-v1",
+  "run_id": "g1-02-isolated-007",
+  "scenario_id": "Town10HD_Opt.g1-02-isolated",
+  "schema_version": "safedrive.runtime.v1",
+  "server_epoch": "carla-0.9.16-live-20260712"
+}

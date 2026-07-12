@@ -1,0 +1,7 @@
+string profile_name
+---
+bool valid
+string schema_version
+float32 fixed_delta_seconds
+uint32 control_period_ms
+string[] errors

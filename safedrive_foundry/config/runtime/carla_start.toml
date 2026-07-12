@@ -1,0 +1,6 @@
+# This is the only startup specification consumed by `sdf sim ensure`.
+# The path and arguments were validated in docs/environment/CARLA_SERVER_BASELINE.md.
+[carla_start]
+expected_version = "0.9.16"
+windows_executable = "E:\\CARLA_0.9.16\\CarlaUE4.exe"
+arguments = "/Game/Carla/Maps/Town10HD -windowed -ResX=800 -ResY=600 -quality-level=Low -nosound -carla-rpc-port=2000"

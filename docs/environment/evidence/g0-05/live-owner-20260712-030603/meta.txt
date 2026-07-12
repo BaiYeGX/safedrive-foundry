@@ -1,0 +1,7 @@
+run_id=live-owner-20260712-030603
+date=2026-07-12T03:06:03+08:00
+driver_pid=31515
+observer_pid=31501
+driver_rc=0
+observer_rc=0
+finished=2026-07-12T03:06:08+08:00

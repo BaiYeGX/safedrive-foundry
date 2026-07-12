@@ -1,0 +1,15 @@
+[profile.throughput_20hz]
+synchronous_mode = true
+substepping = true
+fixed_delta_seconds = 0.05
+max_substep_delta_time = 0.01
+max_substeps = 5
+control_period_ms = 50
+
+[profile.control_50hz]
+synchronous_mode = true
+substepping = true
+fixed_delta_seconds = 0.02
+max_substep_delta_time = 0.01
+max_substeps = 2
+control_period_ms = 20

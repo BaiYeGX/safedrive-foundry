@@ -1,0 +1,8 @@
+sdf_interfaces/Frame frame
+uint64 generated_frame
+uint64 planned_frame
+uint64 executed_frame
+float32 throttle
+float32 brake
+float32 steering_angle_rad
+bool emergency_stop

@@ -1,0 +1,52 @@
+{
+  "client_version": "0.9.16",
+  "endpoint": "172.30.80.1:2000",
+  "map": "Carla/Maps/Town10HD_Opt",
+  "registry_rows": [
+    {
+      "actor_manifest": [
+        {
+          "blueprint": "vehicle.tesla.model3",
+          "name": "ego",
+          "role": "ego",
+          "spawn_order": 0
+        },
+        {
+          "blueprint": "vehicle.audi.tt",
+          "name": "npc",
+          "role": "npc",
+          "spawn_order": 1
+        }
+      ],
+      "attempt_id": 0,
+      "config_hash": "f9d35283cc22969da87bc84c172b5519815232a4858097e4db3b18eb5666c539",
+      "ended_wall_time": 1783845889.961959,
+      "failure_code": "child_exit=-6; isolated child non-zero exit",
+      "run_id": "g1-02-isolated-000",
+      "scenario_id": "Town10HD_Opt.g1-02-isolated",
+      "started_wall_time": 1783845884.063521,
+      "status": "CRASHED"
+    }
+  ],
+  "runs": [
+    {
+      "attempt": 0,
+      "parent_cleanup": {
+        "destroyed_ids": [
+          43,
+          41,
+          42
+        ],
+        "residue_ids": [],
+        "settings_restored": true,
+        "traffic_manager_error": null
+      },
+      "returncode": -6,
+      "status": "CRASHED",
+      "status_before_parent": "RUNNING"
+    }
+  ],
+  "schema": "safedrive.g1-02.isolated-evidence.v1",
+  "server_version": "0.9.16",
+  "status": "PASS"
+}

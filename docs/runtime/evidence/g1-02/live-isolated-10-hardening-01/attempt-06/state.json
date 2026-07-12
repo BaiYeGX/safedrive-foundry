@@ -1,0 +1,24 @@
+{
+  "actor_ids": {
+    "ego": 98,
+    "npc": 99
+  },
+  "attempt_id": 6,
+  "completed_wall_time": 1783847665.9470606,
+  "frame": 537436,
+  "run_id": "g1-02-isolated-006",
+  "sensor_frames": {
+    "front_camera": 537436
+  },
+  "sensor_ids": {
+    "front_camera": 100
+  },
+  "traffic_manager_port": 8000,
+  "world_settings_before": {
+    "fixed_delta_seconds": null,
+    "max_substep_delta_time": 0.01,
+    "max_substeps": 10,
+    "substepping": true,
+    "synchronous_mode": false
+  }
+}

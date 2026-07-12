@@ -76,29 +76,29 @@
       "status": "PASS"
     },
     {
-      "code": "ros2_unavailable",
+      "code": "ros2_ready",
       "details": {
-        "returncode": 2,
-        "stderr": "usage: ros2 [-h] [--use-python-default-buffering]\n            Call `ros2 <command> -h` for more detailed usage. ...\nros2: error: unrecognized arguments: --version",
-        "stdout": "/opt/ros/jazzy/bin/ros2"
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "/opt/ros/jazzy/bin/ros2\nusage: ros2 [-h] [--use-python-default-buffering]\n            Call `ros2 <command> -h` for more detailed usage. ...\n\nros2 is an extensible command-line tool for ROS 2.\n\noptions:\n  -h, --help            show this help message and exit\n  --use-python-default-buffering\n                        Do not force line buffering in stdout and instead use\n                        the python default buffering, which might be affected\n                        by PYTHONUNBUFFERED/-u and depends on whatever stdout\n                        is interactive or not\n\nCommands:\n  action     Various action related sub-commands\n  bag        Various rosbag related sub-commands\n  component  Various component related sub-commands\n  daemon     Various daemon related sub-commands\n  doctor     Check ROS setup and other potential issues\n  interface  Show information about ROS interfaces\n  launch     Run a launch file\n  lifecycle  Various lifecycle related sub-commands\n  multicast  Various multicast related sub-commands\n  node       Various node related sub-commands\n  param      Various param related sub-commands\n  pkg        Various package related sub-commands\n  plugin     Various plugin related sub-commands\n  run        Run a package specific executable\n  security   Various security related sub-commands\n  service    Various service related sub-commands\n  topic      Various topic related sub-commands\n  wtf        Use `wtf` as alias to `doctor`\n\n  Call `ros2 <command> -h` for more detailed usage."
       },
       "id": "ros2.available",
-      "message": "ROS 2 Jazzy command is not available in WSL",
-      "status": "FAIL"
+      "message": "ROS 2 Jazzy command is available in WSL",
+      "status": "PASS"
     },
     {
-      "code": "carla_installation_missing",
+      "code": "carla_path_ok",
       "details": {
-        "path": "E:/CARLA_0.9.16"
+        "path": "/mnt/e/CARLA_0.9.16"
       },
       "id": "paths.carla",
-      "message": "configured CARLA installation path does not exist",
-      "status": "FAIL"
+      "message": "configured CARLA installation path exists",
+      "status": "PASS"
     },
     {
       "code": "disk_space_ok",
       "details": {
-        "free_gib": 113.583,
+        "free_gib": 112.011,
         "minimum_free_gib": 20.0
       },
       "id": "disk.free",
@@ -106,55 +106,58 @@
       "status": "PASS"
     },
     {
-      "code": "carla_not_started",
+      "code": "port_open",
       "details": {
-        "error": "TimeoutError: timed out",
+        "error": null,
         "host": "172.30.80.1",
         "port": 2000
       },
       "id": "carla.port",
-      "message": "CARLA RPC TCP endpoint 172.30.80.1:2000 is unreachable",
-      "status": "FAIL"
+      "message": "CARLA RPC TCP endpoint 172.30.80.1:2000 is reachable",
+      "status": "PASS"
     },
     {
-      "code": "carla_not_started",
+      "code": "carla_ready",
       "details": {
-        "error": "TimeoutError: timed out"
+        "client": "0.9.16",
+        "server": "0.9.16"
       },
-      "id": "carla.rpc",
-      "message": "CARLA RPC endpoint is unreachable; server may be stopped or the endpoint is wrong",
-      "status": "FAIL"
+      "id": "carla.handshake",
+      "message": "CARLA RPC, client/server version and world handshake passed",
+      "status": "PASS"
     },
     {
-      "code": "port_not_observed",
+      "code": "port_open",
       "details": {
-        "error": "TimeoutError: timed out",
+        "error": null,
         "host": "172.30.80.1",
         "port": 2001
       },
       "id": "carla.port.streaming",
-      "message": "CARLA streaming endpoint 172.30.80.1:2001 is not reachable",
-      "status": "WARN"
+      "message": "CARLA streaming endpoint 172.30.80.1:2001 is reachable",
+      "status": "PASS"
     },
     {
-      "code": "port_not_observed",
+      "code": "port_open",
       "details": {
-        "error": "TimeoutError: timed out",
+        "error": null,
         "host": "172.30.80.1",
         "port": 2002
       },
       "id": "carla.port.traffic_manager",
-      "message": "CARLA traffic_manager endpoint 172.30.80.1:2002 is not reachable",
-      "status": "WARN"
+      "message": "CARLA traffic_manager endpoint 172.30.80.1:2002 is reachable",
+      "status": "PASS"
     },
     {
-      "code": "clock_observation_blocked",
+      "code": "clock_topic_not_observed",
       "details": {
-        "ros_status": "FAIL"
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "/parameter_events\n/rosout"
       },
       "id": "ros.clock",
-      "message": "live /clock observation is blocked because ROS 2 is unavailable",
-      "status": "BLOCKED"
+      "message": "ROS 2 is available but /clock is not currently observable; start the sync driver",
+      "status": "WARN"
     },
     {
       "code": "single_tick_master",
@@ -166,7 +169,7 @@
       "status": "PASS"
     }
   ],
-  "generated_at_utc": "2026-07-11T18:41:32.780960+00:00",
+  "generated_at_utc": "2026-07-11T18:57:29.735628+00:00",
   "invocation": [
     "scripts/sdf.py",
     "doctor"
@@ -175,11 +178,11 @@
   "schema": "safedrive.g0.doctor.v1",
   "summary": {
     "counts": {
-      "BLOCKED": 1,
-      "FAIL": 4,
-      "PASS": 8,
-      "WARN": 2
+      "BLOCKED": 0,
+      "FAIL": 0,
+      "PASS": 14,
+      "WARN": 1
     },
-    "status": "FAIL"
+    "status": "WARN"
   }
 }

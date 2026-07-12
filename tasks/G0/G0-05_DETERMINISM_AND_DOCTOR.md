@@ -1,6 +1,6 @@
 # G0-05：确定性同步与环境诊断
 
-**状态**：BLOCKED_EXTERNAL  
+**状态**：COMPLETED
 **依赖**：G0-04
 
 ## 目标
@@ -33,10 +33,10 @@
 
 | 字段 | 内容 |
 |---|---|
-| 最后状态 | 2026-07-12 `BLOCKED_EXTERNAL` |
-| 已完成 | 冻结 `episode_id + carla_frame` 主键、command 生成/计划/执行帧和 snapshot/message/clock 对齐规则；实现固定步长与子步合法性校验、唯一 tick-master lease、重复 tick/缺帧/过期/乱序检测、原子 checkpoint 恢复、离线确定性 trace 比较、CARLA live sync driver 和 `sdf doctor` JSON/Markdown 诊断。 |
+| 最后状态 | 2026-07-12 `COMPLETED` |
+| 已完成 | 冻结 `episode_id + carla_frame` 主键、command 生成/计划/执行帧和 snapshot/message/clock 对齐规则；实现固定步长与子步合法性校验、唯一 tick-master lease、重复 tick/缺帧/过期/乱序检测、原子 checkpoint 恢复、离线确定性 trace 比较、CARLA live sync driver 和 `sdf doctor` JSON/Markdown 诊断；修正 ROS 2 Jazzy 不支持 `ros2 --version` 导致的 doctor 误报；补装用户 site 的 CARLA 0.9.16 Linux client；修正 CARLA 0.9.16 `WorldSettings` 不支持 `copy.copy()` 的现场兼容性问题；完成现场 frame/clock/tick-owner 验证。 |
 | 修改文件 | `safedrive_foundry/config/carla_ros.toml`、`safedrive_foundry/versions.lock`、`safedrive_foundry/README.md`、`safedrive_foundry/ros_ws/src/safedrive_carla_bridge/package.xml`、`setup.py`、`bridge_node.py`、`sync_contract.py`、`doctor.py`、`cli.py`、`sync_driver.py`、`scripts/sdf.py`、`sdf.cmd`、`sdf`、`tests/g0/test_g0_05.py`、`docs/environment/G0_05_DETERMINISM.md`、`docs/environment/evidence/g0-05/*`。 |
-| 已运行验证 | `python -m compileall ...` 通过；`python -m unittest discover -s tests -v`：5/5 通过；`python scripts/sdf.py validate-g0`：14/14 通过；seed 2026 两次 16 帧 trace 比较通过；seed 303 中断返回 75、恢复后与 clean run 的 10 帧 trace 比较通过；`sdf doctor` 输出 JSON/Markdown 并识别 CARLA 未启动、WSL 无发行版和 ROS `/clock` 阻塞。 |
-| 阻塞 | 当前会话 `wsl.exe -l -q` 没有可用注册发行版，ROS 2 与现场 `/clock` 观察为 `BLOCKED`；配置的 CARLA `172.30.80.1:2000` 未启动/不可达。完成现场门禁需要外部 WSL 发行版注册/启动、CARLA Server 启动以及 ROS 2 GUI/跨系统环境操作；不能把离线验证替代现场对齐证据。 |
-| 恢复步骤 | 1. 用户完成最小外部步骤：注册并启动 `Ubuntu-24.04` WSL 发行版；启动 `E:\CARLA_0.9.16\CarlaUE4.exe` 的 `2000/2001/2002` 端口。 2. 运行 `python scripts/sdf.py doctor`，确认 WSL、CARLA RPC、ROS 2 不再为 `BLOCKED/FAIL`。 3. 运行 `python scripts/sdf.py sync-smoke --carla --steps 20 --run-id live-carla`。 4. 在 WSL 构建并运行 `ros2 run safedrive_carla_bridge carla_sync_driver --steps 20`，同时记录 `/clock` 与 `/safedrive/carla/status` 的 frame 对齐。 5. 通过后更新本任务状态和 `PROGRESS.md` 为 `COMPLETED`；在此之前不要开始 G0-06。 |
-| 下一建议命令 | `python scripts/sdf.py doctor` |
+| 已运行验证 | `colcon build --symlink-install`：1 package finished；`python3 -m compileall -q ...` 通过；`python3 -m unittest discover -s tests -v`：5/5 通过；`python3 scripts/sdf.py validate-g0`：14/14 通过；seed 2026 两次 16 帧 trace 比较通过；seed 303 中断返回 75、恢复后与 clean run 的 10 帧 trace 比较通过；现场 doctor 的 WSL/ROS/GPU/CARLA path/RPC/version/world/2000/2001/2002 检查通过；40-tick driver 返回 0；20 条 `/clock` 与 20 条状态消息对齐通过，最大误差 `4.9965e-10 s`；唯一 publisher/tick master graph 检查通过；退出恢复检查通过。 |
+| 阻塞 | 无。CARLA 进程、TCP 端口、ROS 2、frame/clock 对齐、唯一 tick master 和退出恢复均已现场验证。 |
+| 恢复步骤 | 若需复测：启动 `E:\CARLA_0.9.16\CarlaUE4.exe`，确认 `CARLA_ROOT=/mnt/e/CARLA_0.9.16 python3 scripts/sdf.py doctor`，source Jazzy 与 `ros_ws/install`，设置 `ROS_DOMAIN_ID=42`/`RMW_IMPLEMENTATION=rmw_fastrtps_cpp`，运行 `ros2 run safedrive_carla_bridge carla_sync_driver --host 172.30.80.1 --port 2000 --steps 20`；不要在本任务完成后自动开始 G0-06。 |
+| 下一建议命令 | 等待用户明确指令后再执行 G0-06；本次不启动 G0-06。 |

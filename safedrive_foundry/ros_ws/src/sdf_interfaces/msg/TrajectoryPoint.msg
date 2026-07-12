@@ -1,0 +1,5 @@
+float32 time_from_start_s
+geometry_msgs/Pose pose
+float32 speed_mps
+float32 acceleration_mps2
+float32 curvature_per_m

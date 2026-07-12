@@ -180,8 +180,8 @@
       "status": "PASS"
     }
   ],
-  "generated_at_utc": "2026-07-11T18:12:04.475810+00:00",
-  "project_root": "E:\\autonomous driving",
+  "generated_at_utc": "2026-07-11T19:02:41.962279+00:00",
+  "project_root": "/mnt/e/autonomous driving",
   "schema": "safedrive.g0.validation.v1",
   "status": "PASS",
   "summary": {

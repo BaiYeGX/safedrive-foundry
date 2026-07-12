@@ -1,0 +1,5 @@
+sdf_interfaces/RunIdentity identity
+uint64 carla_frame
+builtin_interfaces/Time simulation_time
+builtin_interfaces/Time wall_time
+string coordinate_frame

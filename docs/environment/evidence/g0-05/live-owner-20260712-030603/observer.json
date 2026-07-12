@@ -1,0 +1,47 @@
+{
+  "checks": {
+    "clock_publisher_count_is_one": true,
+    "clock_publisher_is_sync_driver": true,
+    "one_sync_driver_node_observed": true,
+    "status_declares_single_tick_master": true,
+    "status_publisher_count_is_one": true,
+    "status_publisher_is_sync_driver": true
+  },
+  "graph": {
+    "clock_publishers": [
+      {
+        "endpoint_type": "1",
+        "node_name": "safedrive_carla_sync_driver",
+        "node_namespace": "/",
+        "topic_type": "rosgraph_msgs/msg/Clock"
+      }
+    ],
+    "nodes": [
+      "//_ros2cli_daemon_42_851d66200c1a4ed8aeb6e18ab9acf8fd",
+      "//safedrive_carla_sync_driver",
+      "//sdf_g005_owner_observer"
+    ],
+    "received_wall": 1783796767.694355,
+    "status_publishers": [
+      {
+        "endpoint_type": "1",
+        "node_name": "safedrive_carla_sync_driver",
+        "node_namespace": "/",
+        "topic_type": "std_msgs/msg/String"
+      }
+    ]
+  },
+  "observed": {
+    "sync_driver_nodes": [
+      "//safedrive_carla_sync_driver"
+    ],
+    "tick_masters": [
+      "sdf.g0-05.sync"
+    ]
+  },
+  "received": {
+    "clock": 20,
+    "status": 20
+  },
+  "schema": "safedrive.g0-05.tick-owner-observer.v1"
+}

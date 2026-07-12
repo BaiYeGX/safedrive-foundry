@@ -1,0 +1,1 @@
+ros2 run safedrive_carla_bridge carla_sync_driver --host 172.30.80.1 --port 2000 --steps 40

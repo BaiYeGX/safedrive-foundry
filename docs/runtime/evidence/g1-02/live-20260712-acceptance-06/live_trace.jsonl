@@ -1,0 +1,7 @@
+{"phase": "empty_start", "wall_time": 1783844888.5825148}
+{"phase": "empty_complete", "wall_time": 1783844892.6775668}
+{"phase": "single_start", "wall_time": 1783844892.6855116}
+{"frame": 104935, "phase": "single_complete", "wall_time": 1783844892.8585062}
+{"attempt": 3, "phase": "repeat_prepare", "wall_time": 1783844892.8670235}
+{"attempt": 3, "phase": "repeat_start", "wall_time": 1783844892.8749957}
+{"attempt": 3, "ids": {"ego": 35, "front_camera": 37, "npc": 36}, "phase": "repeat_spawned", "wall_time": 1783844892.9752934}

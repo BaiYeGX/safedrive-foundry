@@ -63,6 +63,17 @@ def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _connection_resolver(root: Path, *, timeout_seconds: float):
+    """Load the one project connection module without duplicating its logic."""
+
+    runtime_source = root / "safedrive_foundry"
+    if str(runtime_source) not in sys.path:
+        sys.path.insert(0, str(runtime_source))
+    from runtime.carla_connection import ConnectionResolver
+
+    return ConnectionResolver(root, timeout_seconds=timeout_seconds)
+
+
 def _write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -131,6 +142,23 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--root", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     validate.add_argument("--json-out", help="JSON validation report path")
     validate.add_argument("--markdown-out", help="Markdown validation report path")
+
+    sim = subparsers.add_parser("sim", help="CARLA connection status and bounded preflight/ensure")
+    sim.add_argument("--root", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    sim_subparsers = sim.add_subparsers(dest="sim_command", required=True)
+    for name, help_text in (
+        ("status", "read-only CARLA endpoint and world status"),
+        ("preflight", "read-only CARLA version/map/settings/tick-owner gate"),
+        ("ensure", "reuse or start the validated CARLA 0.9.16 instance"),
+    ):
+        command = sim_subparsers.add_parser(name, help=help_text)
+        command.add_argument("--carla-host", help="explicit host override (otherwise unified resolver precedence applies)")
+        command.add_argument("--carla-port", type=int, help="explicit RPC port override")
+        command.add_argument("--timeout", type=float, default=3.0, help="TCP/RPC timeout in seconds")
+        command.add_argument("--json", action="store_true", help="emit one structured JSON object")
+        if name == "ensure":
+            command.add_argument("--startup-timeout", type=float, default=30.0)
+            command.add_argument("--poll-interval", type=float, default=0.5)
     return parser
 
 
@@ -248,6 +276,44 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     return 0 if report["status"] == PASS else 1
 
 
+def _print_connection_report(report: Any, *, as_json: bool) -> None:
+    payload = report.to_dict()
+    if as_json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        return
+    print(f"status={payload['status']} error_code={payload['error_code'] or '-'}")
+    print(f"host={payload['host'] or '-'} port={payload['port']} host_source={payload['host_source'] or '-'}")
+    print(f"tcp_reachable={payload['tcp_reachable']} rpc_reachable={payload['rpc_reachable']}")
+    print(f"client_version={payload['client_version'] or '-'} server_version={payload['server_version'] or '-'} map={payload['map'] or '-'}")
+    print(f"process_state={payload['process_state']} tick_owner={payload['tick_owner'] or '-'}")
+    print(f"synchronous_mode={payload['synchronous_mode']} fixed_delta_seconds={payload['fixed_delta_seconds']}")
+    if payload["error_message"]:
+        print(f"error_message={payload['error_message']}")
+
+
+def _cmd_sim(args: argparse.Namespace) -> int:
+    root = _root_from_args(args)
+    try:
+        resolver = _connection_resolver(root, timeout_seconds=args.timeout)
+        from runtime.carla_connection import exit_code
+        if args.sim_command == "status":
+            report = resolver.status(host=args.carla_host, port=args.carla_port)
+        elif args.sim_command == "preflight":
+            report = resolver.preflight(host=args.carla_host, port=args.carla_port)
+        else:
+            report = resolver.ensure(
+                host=args.carla_host,
+                port=args.carla_port,
+                startup_timeout_seconds=args.startup_timeout,
+                poll_interval_seconds=args.poll_interval,
+            )
+        _print_connection_report(report, as_json=args.json)
+        return exit_code(report)
+    except (OSError, ValueError, RuntimeError) as exc:
+        print(json.dumps({"status": FAILED_FINAL, "error_code": "CONNECTION_MODULE_FAILURE", "error_message": str(exc)}, sort_keys=True))
+        return 1
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
@@ -259,6 +325,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_compare(args)
     if args.command == "validate-g0":
         return _cmd_validate(args)
+    if args.command == "sim":
+        return _cmd_sim(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 

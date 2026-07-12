@@ -1,0 +1,24 @@
+{
+  "schema": "safedrive.g0-06.post-driver.v1",
+  "checks": {
+    "carla_version_0.9.16": true,
+    "clock_publisher_absent": true,
+    "status_publisher_absent": true,
+    "sync_driver_node_absent": true,
+    "world_settings_restored_non_synchronous": true
+  },
+  "carla": {
+    "client_version": "0.9.16",
+    "fixed_delta_seconds": null,
+    "max_substep_delta_time": 0.01,
+    "max_substeps": 10,
+    "server_version": "0.9.16",
+    "substepping": true,
+    "synchronous_mode": false
+  },
+  "ros_graph": {
+    "node_list": [],
+    "clock_topic": "Unknown topic '/clock'",
+    "status_topic": "Unknown topic '/safedrive/carla/status'"
+  }
+}

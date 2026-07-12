@@ -1,0 +1,40 @@
+timestamp=2026-07-12T03:07:37+08:00
+gateway=172.30.80.1
+--- Windows CARLA process/listeners ---
+{
+    "ProcessCount":  2,
+    "Processes":  [
+                      {
+                          "Id":  29848,
+                          "ProcessName":  "CarlaUE4"
+                      },
+                      {
+                          "Id":  31064,
+                          "ProcessName":  "CarlaUE4-Win64-Shipping"
+                      }
+                  ],
+    "Listeners":  [
+                      {
+                          "LocalAddress":  "0.0.0.0",
+                          "LocalPort":  2002,
+                          "OwningProcess":  31064
+                      },
+                      {
+                          "LocalAddress":  "0.0.0.0",
+                          "LocalPort":  2001,
+                          "OwningProcess":  31064
+                      },
+                      {
+                          "LocalAddress":  "0.0.0.0",
+                          "LocalPort":  2000,
+                          "OwningProcess":  31064
+                      }
+                  ]
+}
+--- WSL TCP probes ---
+172.30.80.1:2000=OPEN
+172.30.80.1:2001=OPEN
+172.30.80.1:2002=OPEN
+--- CARLA Python API ---
+/home/sdf/.local/lib/python3.12/site-packages/carla/__init__.py
+0.9.16 client import=PASS

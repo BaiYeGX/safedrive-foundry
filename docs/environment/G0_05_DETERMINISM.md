@@ -27,18 +27,32 @@
 
 ## 当前现场门禁
 
-2026-07-12 在当前 Windows 会话执行 `sdf doctor` 的结果为 `FAIL`，报告位于：
+2026-07-12 现场门禁已通过，doctor 报告位于：
 
 - [doctor.json](./evidence/g0-05/doctor.json)
 - [doctor.md](./evidence/g0-05/doctor.md)
 
-已识别的外部状态：RTX 4080、版本锁、磁盘、CARLA 安装路径和同步配置通过；CARLA RPC `172.30.80.1:2000` 未连通；当前 `wsl.exe` 没有可用注册发行版，因此 ROS 2 和现场 `/clock` 观察为 `BLOCKED`。因此现场 CARLA/ROS `/clock` 对齐尚未宣称通过，G0-05 保持 `BLOCKED_EXTERNAL`，恢复后必须继续同一任务，不得开始 G0-06。
+现场结果：
 
-恢复时先完成 WSL 发行版注册并启动 CARLA，再运行：
+- `CarlaUE4`/`CarlaUE4-Win64-Shipping` 进程存在，TCP `172.30.80.1:2000/2001/2002` 全部可达；CARLA 0.9.16 client/server version 与 Town10HD world handshake 通过。
+- `carla_sync_driver --steps 40` 返回码为 `0`；observer 收到 20 条 `/clock` 和 20 条 `/safedrive/carla/status`。
+- `snapshot_frame == message_frame == clock_frame == carla_frame`、frame 严格递增、`clock_seconds` 步长 `0.05` 均通过；ROS `/clock` 与状态 `clock_seconds` 最大误差 `4.9965e-10 s`。
+- ROS graph 显示 `/clock` 与 status 各只有一个 publisher，均为 `safedrive_carla_sync_driver`；状态消息的 tick master 均为 `sdf.g0-05.sync`。
+- driver 退出后 `WorldSettings` 恢复为 `synchronous_mode=False`，无残留 sync driver、`/clock` 或 status publisher。
 
-```powershell
-python scripts/sdf.py doctor
-python scripts/sdf.py sync-smoke --carla --steps 20 --run-id live-carla
+详细现场证据：
+
+- `evidence/g0-05/live-20260712-030454/observer.json`：frame/clock 对齐与 20 条样本；
+- `evidence/g0-05/live-owner-20260712-030603/observer.json`：唯一 tick master 与 publisher graph；
+- `evidence/g0-05/live-owner-20260712-030603/preflight.txt`、`post_driver.txt`：进程、端口、API 与退出恢复。
+
+`sdf doctor` 的 ROS 探测已改用 Jazzy 支持的 `ros2 --help`，不再把 `ros2 --version` 误报为不可用。G0-05 现场门禁完成，任务状态为 `COMPLETED`；本次不启动 G0-06。
+
+若需复测，先启动 Windows CARLA，再运行（WSL shell 使用 Linux 路径覆盖 CARLA 安装路径）：
+
+```bash
+CARLA_ROOT=/mnt/e/CARLA_0.9.16 python3 scripts/sdf.py doctor
+CARLA_ROOT=/mnt/e/CARLA_0.9.16 python3 scripts/sdf.py sync-smoke --carla --steps 20 --run-id live-carla
 ```
 
-在 WSL 中构建并运行 ROS driver，然后用 `ros2 topic echo /clock` 与 `/safedrive/carla/status` 比较同一批 `carla_frame`；完成后把现场结果追加到本文件和 G0-05 断点记录。
+在 WSL 中构建并运行 ROS driver：`source /opt/ros/jazzy/setup.bash && source safedrive_foundry/ros_ws/install/setup.bash && export ROS_DOMAIN_ID=42 && export RMW_IMPLEMENTATION=rmw_fastrtps_cpp && ros2 run safedrive_carla_bridge carla_sync_driver --host 172.30.80.1 --port 2000 --steps 20`；同时用 `ros2 topic echo /clock` 与 `ros2 topic echo /safedrive/carla/status` 观察并核对同一批 `carla_frame` 的时间和帧契约。复测时将结果追加到本文件和 G0-05 断点记录。

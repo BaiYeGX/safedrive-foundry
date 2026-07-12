@@ -406,7 +406,9 @@ def _check_ros(distro: str | None, wsl_check: DoctorCheck) -> tuple[DoctorCheck,
             "--",
             "bash",
             "-lc",
-            "source /opt/ros/jazzy/setup.bash && command -v ros2 && ros2 --version",
+            # ROS 2 Jazzy's CLI does not expose a ``--version`` option; use
+            # the portable help command after resolving the executable.
+            "source /opt/ros/jazzy/setup.bash && command -v ros2 && ros2 --help",
         ]
     )
     if result.get("returncode") == 0 and "ros2" in result.get("stdout", ""):

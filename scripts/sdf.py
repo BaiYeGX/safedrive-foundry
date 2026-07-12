@@ -8,7 +8,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_SOURCE = ROOT / "safedrive_foundry" / "ros_ws" / "src" / "safedrive_carla_bridge"
+RUNTIME_SOURCE = ROOT / "safedrive_foundry"
 sys.path.insert(0, str(PACKAGE_SOURCE))
+sys.path.insert(0, str(RUNTIME_SOURCE))
 
 from safedrive_carla_bridge.cli import main  # noqa: E402
 

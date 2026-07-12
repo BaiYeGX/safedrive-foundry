@@ -1,0 +1,8 @@
+sdf_interfaces/Frame frame
+string trajectory_id
+uint64 generated_frame
+uint64 planned_frame
+uint64 intended_execution_frame
+sdf_interfaces/TrajectoryPoint[] points
+float32 risk_cost
+float32 tracking_cost

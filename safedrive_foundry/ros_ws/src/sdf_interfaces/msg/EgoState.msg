@@ -1,0 +1,7 @@
+sdf_interfaces/Frame frame
+geometry_msgs/Pose pose
+geometry_msgs/Twist twist
+geometry_msgs/Accel acceleration
+float32 steering_angle_rad
+float32 longitudinal_speed_mps
+float32 yaw_rate_radps

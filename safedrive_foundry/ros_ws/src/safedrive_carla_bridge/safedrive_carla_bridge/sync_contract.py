@@ -478,12 +478,49 @@ def validate_carla_settings(settings: Any, config: SyncConfig) -> list[str]:
     return errors
 
 
+_CARLA_WORLD_SETTINGS_FIELDS = (
+    "synchronous_mode",
+    "no_rendering_mode",
+    "fixed_delta_seconds",
+    "substepping",
+    "max_substep_delta_time",
+    "max_substeps",
+    "max_culling_distance",
+    "deterministic_ragdolls",
+    "tile_stream_distance",
+    "actor_active_distance",
+    "spectator_as_ego",
+)
+
+
+def _clone_world_settings(settings: Any) -> Any:
+    """Clone CARLA WorldSettings without relying on Python pickling.
+
+    CARLA 0.9.16 exposes a Boost.Python object whose ``copy.copy`` path
+    attempts pickling and raises ``RuntimeError``.  Constructing a fresh
+    WorldSettings and copying its public scalar fields preserves the full
+    setting contract while remaining compatible with small test doubles.
+    """
+
+    try:
+        clone = type(settings)()
+    except Exception:
+        try:
+            clone = copy.copy(settings)
+        except Exception as exc:
+            raise ContractViolation("carla_settings_clone_failed", str(exc)) from exc
+    for field in _CARLA_WORLD_SETTINGS_FIELDS:
+        if hasattr(settings, field) and hasattr(clone, field):
+            setattr(clone, field, getattr(settings, field))
+    return clone
+
+
 def apply_sync_settings(world: Any, config: SyncConfig) -> Any:
-    """Apply G0 settings and return a copy suitable for restoration."""
+    """Apply G0 settings and return a standalone snapshot for restoration."""
 
     config.assert_valid()
-    original = copy.copy(world.get_settings())
-    settings = copy.copy(original)
+    original = _clone_world_settings(world.get_settings())
+    settings = _clone_world_settings(original)
     settings.synchronous_mode = config.synchronous_mode
     settings.fixed_delta_seconds = config.fixed_delta_seconds
     settings.substepping = config.substepping
