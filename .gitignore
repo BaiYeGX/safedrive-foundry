@@ -29,3 +29,7 @@ tools/
 Thumbs.db
 .DS_Store
 .obsidian/
+
+# Codex + Grok collaboration runtime artifacts
+.collab/runs/
+.collab/local.json
