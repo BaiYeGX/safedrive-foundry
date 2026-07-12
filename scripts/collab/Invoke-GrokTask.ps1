@@ -38,12 +38,20 @@ $args = @('--cwd', $worktree, '--prompt-file', $promptPath, '--output-format', [
     '--permission-mode', [string]$config.grok.permission_mode, '--max-turns', [string]$maxTurns)
 if ([bool]$config.grok.disable_subagents) { $args += '--no-subagents' }
 if ([bool]$config.grok.disable_memory) { $args += '--no-memory' }
+if ([bool]$config.grok.always_approve) { $args += '--always-approve' }
 
 $exitCode = Invoke-CapturedProcess -FilePath $grok -ArgumentList $args -WorkingDirectory $worktree `
     -TimeoutSeconds 7200 -StdoutPath $stdout -StderrPath $stderr
 $changed = @(& git -C $worktree status --porcelain)
 $headAfter = ((& git -C $worktree rev-parse HEAD 2>&1) -join '').Trim()
-$result = [ordered]@{ run_id=$runId; task_id=$manifest.task_id; base_sha=$baseSha; branch=$branch; worktree=$worktree; head_after=$headAfter; commit_detected=($headAfter -ne $baseSha); exit_code=$exitCode; changed=$changed; stdout=$stdout; stderr=$stderr }
+$stopReason = ''
+try {
+    $grokJson = Get-Content -LiteralPath $stdout -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    $stopReason = [string]$grokJson.stopReason
+} catch {
+    $stopReason = 'UNPARSEABLE_OUTPUT'
+}
+$result = [ordered]@{ run_id=$runId; task_id=$manifest.task_id; base_sha=$baseSha; branch=$branch; worktree=$worktree; head_after=$headAfter; commit_detected=($headAfter -ne $baseSha); exit_code=$exitCode; stop_reason=$stopReason; changed=$changed; stdout=$stdout; stderr=$stderr }
 $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $runDir 'grok-run.json') -Encoding UTF8
 $result | ConvertTo-Json -Depth 6
-if ($exitCode -ne 0) { exit $exitCode }
+if ($exitCode -ne 0 -or $stopReason -notin @('EndTurn','Stop')) { exit 1 }

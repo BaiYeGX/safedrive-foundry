@@ -89,7 +89,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File `
   -Worktree $created.worktree
 ```
 
-脚本要求 Grok worktree 在开始时干净、HEAD 与任务清单的 immutable base SHA 一致，拒绝 `main`/`master`，固定使用 `--prompt-file`、JSON 输出、`--no-subagents`、`--no-memory` 和最大回合数。Grok 原始 stdout、stderr、退出码、最终 HEAD 及工作区状态保存在 `.collab/runs/<run-id>/`。如果 Grok 自行提交，运行记录会标记 `commit_detected`，独立验证仍按 base SHA 比较完整差异。
+脚本要求 Grok worktree 在开始时干净、HEAD 与任务清单的 immutable base SHA 一致，拒绝 `main`/`master`，固定使用 `--prompt-file`、JSON 输出、`--no-subagents`、`--no-memory`、`--always-approve` 和最大回合数。自动批准只作用于隔离 worktree 的编码回合，最终范围和测试仍由 Codex 独立检查。Grok 原始 stdout、stderr、退出码、JSON `stopReason`、最终 HEAD 及工作区状态保存在 `.collab/runs/<run-id>/`。如果 Grok 自行提交，运行记录会标记 `commit_detected`，独立验证仍按 base SHA 比较完整差异。
+
+进程返回码为 0 仍不一定代表 Grok 回合成功；只有 JSON 中的 `stopReason` 为正常结束状态才算成功。取消、达到限制或无法解析输出都会失败并停止交接。
 
 Grok 退出成功只代表编码回合结束，不代表任务通过。
 

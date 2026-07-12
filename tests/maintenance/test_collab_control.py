@@ -38,6 +38,8 @@ class CollaborationControlTests(unittest.TestCase):
         text = (SCRIPT_DIR / "Invoke-GrokTask.ps1").read_text(encoding="utf-8")
         for token in ("--prompt-file", "--output-format", "--no-subagents", "--no-memory", "--max-turns"):
             self.assertIn(token, text)
+        self.assertIn("--always-approve", text)
+        self.assertIn("stopReason", text)
         self.assertRegex(text, re.compile(r"main.*master", re.DOTALL))
 
     def test_verifier_checks_scope_diff_and_both_environments(self):
