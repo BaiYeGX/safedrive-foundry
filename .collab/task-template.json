@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "task_id": "G1-03",
+  "slug": "short-description",
+  "base_ref": "REPLACE_WITH_40_HEX_BASE_COMMIT",
+  "max_turns": 40,
+  "prompt_file": "C:\\absolute\\trusted\\task-prompt.md",
+  "allowed_paths": [
+    "safedrive_foundry/example/",
+    "tests/g1/test_example.py"
+  ],
+  "verification": [
+    {
+      "environment": "windows",
+      "command": "python -m unittest tests.g1.test_example -v",
+      "timeout_seconds": 300
+    },
+    {
+      "environment": "wsl",
+      "command": "python3 -m compileall -q safedrive_foundry/example",
+      "timeout_seconds": 300
+    }
+  ]
+}
