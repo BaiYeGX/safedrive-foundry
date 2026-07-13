@@ -2,7 +2,7 @@
 
 > 固定启动口令：`读取 START_TASK.md，启动 GX-XX。`
 
-本文件是 G0～G8 全部 48 项任务的唯一启动路由。它负责定位任务、规定读取顺序、检查依赖和资源准入；任务目标、允许修改范围、验收命令与停止点仍以唯一匹配的 `tasks/GX/GX-XX_*.md` 为准。
+本文件是 G0～G8 全部 48 项任务的唯一启动路由。G3～G8 的最小范围、World 条件门禁和 Optional 状态以本文第5节为上位执行约束；旧任务文件中的更大 K/T/N/M、自动搜索、复杂后训练和 Agent 要求不得扩大第一版范围。
 
 ## 1. 一行启动协议
 
@@ -12,7 +12,7 @@
 2. 读取根目录 `AGENTS.md` 与 `PROGRESS.md`；检查当前分支和 `git status --short`。
 3. 按第 4 节任务总表定位唯一任务文件并完整读取；0 个或多个匹配立即停止。
 4. 按任务文件中的 `启动读取清单` 顺序读取指定文档章节、直接依赖的最终断点和明确产物。清单继续指向其他必读项时，只沿当前任务链继续读取，不横向通读。
-5. 读取 `ROADMAP.md` 当前阶段表，核对任务编号、直接依赖和阶段关闭点；以任务文件的 `依赖` 字段执行完成状态检查。
+5. 读取 `ROADMAP.md` 当前阶段表，核对任务编号、直接依赖和阶段关闭点；G3～G8依赖先应用本文第5节的World门禁和Optional覆盖，再检查任务文件其余依赖。
 6. G2～G8 在实施前执行第 3 节的单机资源准入；依赖真实 CARLA 时再执行第 2 节预检。
 7. 只实施这一项任务，按任务文件运行验证、记录断点并更新 `PROGRESS.md`；达到验收或停止条件后立即停止，不自动开始下一项。
 
@@ -95,9 +95,9 @@ G1 固定文档链：任务文件 → `docs/project/EXECUTION_ARCHITECTURE.md` �
 | ID | 唯一任务文件 | 任务内主阅读锚点 |
 |---|---|---|
 | G3-01 | `tasks/G3/G3-01_DATA_SCENARIO_SPLITS.md` | Observation/Data contract、split、VLA 路径 |
-| G3-02 | `tasks/G3/G3-02_NONLANGUAGE_MULTICANDIDATE_BASELINES.md` | 非语言基线、公平预算、CLAIMS C2 |
-| G3-03 | `tasks/G3/G3-03_LIGHTWEIGHT_FAST_SLOW_VLA.md` | Fast/Slow VLA、并行轨迹头、单卡准入 |
-| G3-04 | `tasks/G3/G3-04_TRAINING_CALIBRATION_OOD.md` | LoRA/QLoRA、grounding、校准/OOD |
+| G3-02 | `tasks/G3/G3-02_NONLANGUAGE_MULTICANDIDATE_BASELINES.md` | V0 K1 / V1 K2 公平基线 |
+| G3-03 | `tasks/G3/G3-03_VLA_V0_UPSTREAM_CANONICALIZER.md` | VLA-V0 + F0 checkpoint 门禁、canonicalizer、5Hz 首门槛 |
+| G3-04 | `tasks/G3/G3-04_VLA_V1_OPTIONAL_ROUTER.md` | VLA-V1；V2 FAST/REASON 递进 optional |
 | G3-05 | `tasks/G3/G3-05_VLA_SAFETY_CLOSED_LOOP_ACCEPTANCE.md` | VLA→Safety→MPC 闭环与阶段 Evidence |
 
 ### 4.5 G4（5 项，场景搜索与反事实）
@@ -105,38 +105,40 @@ G1 固定文档链：任务文件 → `docs/project/EXECUTION_ARCHITECTURE.md` �
 | ID | 唯一任务文件 | 任务内主阅读锚点 |
 |---|---|---|
 | G4-01 | `tasks/G4/G4-01_SCENARIO_REGISTRY_SUITES.md` | Registry、场景层级、覆盖/可解性 |
-| G4-02 | `tasks/G4/G4-02_RANDOM_LHS_SEARCH_BASELINES.md` | Random/LHS、公平预算、可恢复执行器 |
-| G4-03 | `tasks/G4/G4-03_COVERAGE_GUIDED_MAP_ELITES.md` | MAP-Elites、有效性门禁、archive |
-| G4-04 | `tasks/G4/G4-04_COUNTERFACTUAL_REPLAY_MINIMIZATION.md` | 可比重放、反事实、最小化与聚类 |
-| G4-05 | `tasks/G4/G4-05_SEARCH_COUNTERFACTUAL_ACCEPTANCE.md` | CLAIMS C4、复现率与阶段 Evidence |
+| G4-02 | `tasks/G4/G4-02_FIXED_SCENARIO_REPLAY_EXECUTOR.md` | G4A 固定场景、seed/replay、可恢复执行 |
+| G4-03 | `tasks/G4/G4-03_COVERAGE_GUIDED_MAP_ELITES.md` | G4B Optional：MAP-Elites/自动搜索 |
+| G4-04 | `tasks/G4/G4-04_COMPARABLE_K2_ORACLE_BEST_OF_K.md` | G4A K2 可比分支/oracle；最小化聚类 optional |
+| G4-05 | `tasks/G4/G4-05_SEARCH_COUNTERFACTUAL_ACCEPTANCE.md` | G4A 与 World 入口门禁 Evidence |
 
 ### 4.6 G5（5 项，动作条件世界模型）
 
 | ID | 唯一任务文件 | 任务内主阅读锚点 |
 |---|---|---|
 | G5-01 | `tasks/G5/G5-01_ACTION_BRANCH_DATA_BASELINES.md` | ActionBranchDataset、简单动力学/Reward 基线 |
-| G5-02 | `tasks/G5/G5-02_OBJECT_CENTRIC_WORLD_MODEL.md` | object/vector latent World、单卡训练 |
-| G5-03 | `tasks/G5/G5-03_RISK_CAUSAL_CALIBRATION.md` | 多模态风险、action intervention、校准 |
+| G5-02 | `tasks/G5/G5-02_OBJECT_CENTRIC_WORLD_MODEL.md` | World-V0 K2/T10/N8/M1、4M～8M |
+| G5-03 | `tasks/G5/G5-03_RISK_CAUSAL_CALIBRATION.md` | collision/TTC/off-road、action/no-action |
 | G5-04 | `tasks/G5/G5-04_VLA_WORLD_RUNTIME_ACTIVE_VERIFY.md` | VLA 候选排序、异步 Active CARLA、降级 |
-| G5-05 | `tasks/G5/G5-05_VLA_WORLD_SAFETY_ACCEPTANCE.md` | CLAIMS C1～C3、World 净收益与阶段 Evidence |
+| G5-05 | `tasks/G5/G5-05_VLA_WORLD_SAFETY_ACCEPTANCE.md` | CLAIMS C2、World 开/关 A/B 与阶段 Evidence |
 
 ### 4.7 G6（5 项，失败驱动安全后训练）
 
 | ID | 唯一任务文件 | 任务内主阅读锚点 |
 |---|---|---|
 | G6-01 | `tasks/G6/G6-01_EVENT_HARDCASE_DATA_GATES.md` | EventWindow、Hard Case、谱系/数据门禁 |
-| G6-02 | `tasks/G6/G6-02_SHADOW_DAGGER_TAKEOVER.md` | Shadow DAgger、Takeover、查询预算 |
-| G6-03 | `tasks/G6/G6-03_PREFERENCE_RISK_POSTTRAIN.md` | CARLA 验证偏好、Risk Anticipation、LoRA |
+| G6-02 | `tasks/G6/G6-02_SHADOW_EXPERT_CORRECTION_COLLECTION.md` | Shadow 专家修正采集、查询预算 |
+| G6-03 | `tasks/G6/G6-03_SUPERVISED_ADAPTER_LORA_POSTTRAIN.md` | 单轮监督 adapter/LoRA（禁多 preference/RL） |
 | G6-04 | `tasks/G6/G6-04_REGRESSION_ANTI_FORGETTING.md` | 正常/OOD/历史失败回归与抗遗忘 |
 | G6-05 | `tasks/G6/G6-05_FLYWHEEL_ACCEPTANCE.md` | CLAIMS C5、飞轮 A/B 与阶段 Evidence |
 
-### 4.8 G7（3 项，受控 Agentic Research Loop）
+### 4.8 G7（3 项，Optional / After Release）
 
 | ID | 唯一任务文件 | 任务内主阅读锚点 |
 |---|---|---|
 | G7-01 | `tasks/G7/G7-01_AGENT_TOOLS_GOVERNANCE.md` | typed tools、白名单、权限/预算/审计 |
 | G7-02 | `tasks/G7/G7-02_SCENARIO_FAILURE_RESEARCH_ASSISTANT.md` | 场景/失败研究助手与证据 grounding |
 | G7-03 | `tasks/G7/G7-03_DETERMINISTIC_DATA_RELEASE_ACCEPTANCE.md` | 确定性裁决、LLM-off 对照、红队验收 |
+
+G7 不属于正式主线完成条件，不是 G8 依赖。普通脚本、CLI、Registry、自动报告和 Evidence Bundle 由 G3～G6/G8 的确定性实现承担，不得为了这些基础能力强制启动 Agent。
 
 ### 4.9 G8（5 项，系统准出与成果证据）
 
@@ -150,38 +152,50 @@ G1 固定文档链：任务文件 → `docs/project/EXECUTION_ARCHITECTURE.md` �
 
 ## 5. VLA 与 World Model 的跨阶段实现路径
 
+本节同时是最终范围覆盖层。作品级成功口径见 `docs/project/PROJECT_SUCCESS_PROFILE.md`（**稳定可跑 + VLA 与 World 都真实接入；效果可负；不上实车**）。本机路径与 **Python venv（`/home/sdf/.venvs/sdf`）** 见 `docs/project/LOCAL_ASSETS.md`。G3+ 涉及 torch 的命令必须在该 venv 内执行，不得使用系统 `python3`。
+
+启动 G3 或 G6 时读取 `SDF_VLA_1B_DESIGN.md`；启动 G4-04/05 或任何 G5 时读取 `SDF_WORLD_MODEL_DESIGN.md`；G3-05、G5-04/05、G6-05 和 G8 还读取 `SDF_VLA_WORLD_SYSTEM_ARCHITECTURE.md`。当任务旧文本要求更大的第一版范围时，以本节与 `PROJECT_SUCCESS_PROFILE.md` 为准，且不得修改 G2。
+
 ### 5.1 VLA 路径
 
 ```text
-G2-05 安全边界冻结
-  → G3-01 ObservationBundle / 数据 / split
-  → G3-02 非语言与多候选基线
-  → G3-03 轻量 Fast/Slow VLA + K 条轨迹
-  → G3-04 LoRA/QLoRA + grounding + calibration/OOD
-  → G3-05 VLA → Validator/Safety → MPC 闭环
-  → G5-04/05 接 World 排序但不交出控制权
-  → G6-02/03 Shadow 数据与安全后训练
-  → G6-04/05 抗遗忘与飞轮验收
-  → G8 四配置冻结、统计和复现
+G2-05 安全边界冻结（只读）
+  → G3-01/02 数据契约与非语言基线
+  → G3-03 F0 + VLA-V0: K1/T10/2.5s + 无 Classic 闭环
+  → G3-04 VLA-V1: K2 + 低维 history；V2 Router optional
+  → G3-05 VLA+Safety 与 Hybrid 验收
+  → G4A 固定场景 + oracle best-of-K（科学标注）
+  → G5 World-V0 必做接入（作品完整性）
+  → G6 一轮困难样本监督适配（推荐；增益可负）
+  → G8 冻结、统计、演示 Evidence
 ```
 
-VLA 输出 `PolicyCandidateSet`（轨迹、概率、有效期、行为/关键 Actor/风险时域、不确定性），不直接输出未经约束的车辆控制。Slow 路径异步触发，超时不能阻塞 20ms 控制环。完整模块/文件落点和接口字段见工业架构第 12 节。
+VLA 输出完整 `PolicyCandidateSet`，不直接输出未经约束的车辆控制。V0/V1 P95 首门槛为200ms，超时不能阻塞20ms控制环。VLA_SAFETY 模式禁止 Classic 当前帧候选。
 
-### 5.2 World Model 路径
+基础模型选型冻结为 **SimLingo / InternVL2-1B** 路线，不再在 G3 前重新选型；不得直接切换 3B/7B。`F0` 在 **G3-03** 落地；仅当 SimLingo checkpoint 在真实 F0 中无法解决时，才启用干净 InternVL2-1B 并保留相同 Adapter/轨迹头/Safety 接口（`SDF-VLA-1B-IVL`，重跑 F0～F3）。详见 `docs/project/SDF_VLA_1B_DESIGN.md`。
+
+VLA 固定首版为 V0 `K1/T10` 和 V1 `K2/T10`、2.5s/0.25s；不把上游输出外推成3秒预测。
+
+### 5.2 World Model 路径（本项目必做接入）
 
 ```text
-G3-01 复用身份、Observation 与 split
-  → G4-04 可比反事实起点
-  → G5-01 多动作分支数据 + CV/CTRV/IDM/Reward 基线
-  → G5-02 轻量 object/vector latent 动作条件动力学
-  → G5-03 多模态风险/奖励/不确定性 + action intervention
-  → G5-04 只排序已通过预筛的 VLA/Classic 候选
-  → G5-05 相对简单基线证明闭环净收益
-  → G6-01 挖掘误排/不确定困难样本
-  → G8 作为可关闭配置完成消融、资源与复现
+G4A 比较 VLA top-1 与 oracle best-of-K
+  → 输出科学标签：ENTER_WORLD / WEAK_SELECTION_SPACE / NO_SELECTION_SPACE
+  → 无论标签强弱，均进入 G5 实现（作品要求 VLA+World 都上）
+       → G5-01 K2 branches + CV/CTRV/Reward 基线
+       → G5-02/03 World-V0 K2/T10/N8/M1
+       → G5-04/05 soft ranking + World 开关闭环 A/B
 ```
 
-World Model 预测 `WorldRolloutBatch`，永远不是安全真值；高风险/不确定候选只能进入异步 Active CARLA 研发验证队列，不能进行当前帧在线分叉，也不能成为 tick owner。完整模块/文件落点见工业架构第 13～14 节。
+World Model 预测 `WorldRolloutBatch`，永远不是安全真值；不能成为 tick owner，不能当前帧在线 CARLA 分叉控车。首版 4M～8M World-V0。
+
+| 科学标签 | 实现 | C2 表述 |
+|---|---|---|
+| `ENTER_WORLD` | 必做 | 可冲正收益 |
+| `WEAK_SELECTION_SPACE` | 必做 | 谨慎/可能负 |
+| `NO_SELECTION_SPACE` | **仍必做接入** | 负结论或“无稳定净收益” |
+
+**禁止**用 `SKIPPED_BY_GATE` 跳过本项目 G5 实现。无净收益时仍保留 World 模块与 on/off 对照；可默认演示 World on，并保留一键 off。G4B/G7 仍为 Optional。
 
 ### 5.3 工业运行闭环
 
@@ -197,22 +211,29 @@ ObservationBundle
 
 学习模块只能改变候选和软风险代价，不能覆盖硬约束、slack 上限、回退权限或紧急动作。VLA、World 或 Agent 全失效时，Classic + Safety + MPC/PID 必须仍能闭环。
 
+两种运行模式固定为 `VLA_SAFETY`（无 Classic 当前帧候选，World 可开）和 `HYBRID`（Classic+VLA，World 可开）。
+
 ## 6. 完成与停止
 
-每次只完成一个任务。结束前必须检查真实 `git diff`/`git diff --stat`、运行任务规定的最小验证、记录实际命令和结果、更新任务断点与 `PROGRESS.md`。只有全部验收通过才能写 `COMPLETED`；未运行测试不能写通过，预期指标不能写成实测结果。
+每次只完成一个任务。结束前必须检查真实 `git diff`/`git diff --stat`、运行任务规定的最小验证、记录实际命令和结果、更新任务断点与 `PROGRESS.md`。
+
+- 必做验收通过：`COMPLETED` 或 `COMPLETED_WITH_LIMITS`  
+- G4B/G7 未执行：`OPTIONAL_NOT_RUN`  
+- **不得**用 `SKIPPED_BY_GATE` 逃避 G5 World 实现  
+- 未运行测试不得写通过；预期指标不得写成实测；负结果必须保留  
 
 达到验收、停止点、未知工作区改动、文档实质冲突、同一问题两次修复无进展、外部权限/GUI/登录/网络阻塞或需要扩大架构范围时，按 `AGENTS.md` 记录状态并立即停止。
 
 ## 7. 固定口令
 
 ```text
-读取 START_TASK.md，启动 G2-01。
+读取 START_TASK.md，启动 G3-01。
 ```
 
 ```text
-读取 START_TASK.md，恢复 G2-01。
+读取 START_TASK.md，恢复 G3-01。
 ```
 
 ```text
-读取 START_TASK.md，继续解决 G2-01；不要开始下一任务。
+读取 START_TASK.md，继续解决 G3-01；不要开始下一任务。
 ```

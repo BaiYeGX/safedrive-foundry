@@ -1,43 +1,60 @@
-# G5-01：动作分支数据与简单世界基线
+# G5-01：动作分支数据与简单世界基线（WE0 标注）
 
-**状态**：PENDING
-**依赖**：G4-05
+**状态**：PENDING  
+**依赖**：G4-05  
+**阶段角色**：必做（本项目 World 必上）  
+**一句话**：为 World-V0 准备 K2 动作分支数据，并钉住 CV/CTRV/Reward 等简单基线。
 
 ## 启动读取清单
 
-启动本任务前，除 START_TASK.md、PROGRESS.md、ROADMAP.md 对应阶段和本任务全文外，按顺序读取：
+1. `docs/project/PROJECT_SUCCESS_PROFILE.md`；  
+2. `docs/project/SDF_WORLD_MODEL_DESIGN.md` 第 1～3 节、WE0；  
+3. `docs/project/EXECUTION_ARCHITECTURE.md` 身份/Oracle/Observable/Registry；  
+4. `docs/project/G2_G8_INDUSTRIAL_ARCHITECTURE.md` 第 3、5、8、13、14 节；  
+5. `docs/project/SINGLE_MACHINE_EXECUTION_BUDGET.md` 第 1～4、6～8 节；  
+6. G4-05 标签与场景/反事实产物；G3/G2 候选与安全接口。
 
-1. docs/project/EXECUTION_ARCHITECTURE.md 身份、时间、Oracle/Observable 与 Registry 章节；
-2. docs/project/G2_G8_INDUSTRIAL_ARCHITECTURE.md 第 3、5、8、13、14 节；
-3. docs/project/SINGLE_MACHINE_EXECUTION_BUDGET.md 第 1～4、6～8 节；
-4. G4-05 发布场景/反事实产物与 G3/G2 候选、安全接口；
+## 项目成功口径（本任务）
 
-只读取列出的章节和直接依赖最终产物；引用文档继续列出必读项时，按其任务索引继续读取。
+- **无论 G4-05 是 ENTER / WEAK / NO_SELECTION，本任务都执行。**  
+- WE0 结果写入数据卡，只影响 C2 表述强度，不取消实现。  
+- 简单基线必须存在，防止 World “必赢空气”。
 
 ## 目标
 
-从可比起点执行专家、VLA、非专家、危险和扰动 trajectory chunk，构建 P(other future | scene, ego action)，实现 persistence、CV/CTRV、IDM/规则和 Reward MLP。
+- 冻结 ActionBranchDatasetV0（K2、可比起点）；  
+- 实现 persistence / CV / CTRV / 规则或 IDM / Reward MLP 等**至少两类**简单基线；  
+- 明确 train 标签不含 runtime Oracle 泄漏。
 
 ## 实现范围与边界
 
-- scene/candidate/action、Actor 现态与 1～5 秒未来严格对齐；
-- occupancy、碰撞/TTC、规则、进度、舒适、termination 和可比性；
-- 非专家动作覆盖，Regression/VLA 测试集隔离；
-- 不可比、仿真异常、Safety 提前终止分别登记；
+### 必做
+
+- 分支轨迹 chunk、actor 集合上限 N≤8 的数据约定；  
+- hash、split、resource smoke。
+
+### 明确不做
+
+- 不训完整 World-V0（G5-02）；不在线控车分叉。
 
 ## 完成标准与验证
 
-- 基线报告 actor/occupancy、collision/ranking、校准、时延和资源。
-- action swap 改变基线输出，固定 seed 数据 hash 一致可续采。
-- 数据卡含动作分布、场景覆盖、危险动作和 Oracle 字段。
-- CARLA 分支只走统一 runtime/反事实入口。
+### 最小通过
 
-## 允许修改与交付物
+- 数据集可重建；基线可跑；  
+- action 置换后标签/特征关系可测；  
+- G4-05 标签原样登记到 manifest。
 
-本节所列实现组件路径均相对 safedrive_foundry/；tests/、docs/、tasks/ 与 PROGRESS.md 相对仓库根目录。
+### 建议验证命令
 
-允许修改 `world_model/data、baselines、schema、registry、config、tests/g5、docs` 及本任务和 `PROGRESS.md`。交付实现/配置、对应测试、原始运行、可追溯报告和精确断点；涉及真实 CARLA 时先执行 `sdf sim preflight`。当前任务通过后停止，不自动开始下一任务。
+```text
+python3 -m unittest discover -s tests/g5 -t . -v
+```
+
+## 允许修改
+
+`world_model/data`、`baselines`、`config`、`tests/g5`、`registry`、本任务、`PROGRESS.md`。
 
 ## 断点记录
 
-尚未开始。恢复时先核对直接依赖的最终接口、版本、冻结协议和外部状态。
+尚未开始。

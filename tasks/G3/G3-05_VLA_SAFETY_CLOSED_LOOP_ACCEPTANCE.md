@@ -1,43 +1,80 @@
-# G3-05：VLA+Safety 闭环、选择性驾驶与阶段验收
+# G3-05：VLA+Safety 闭环与阶段验收
 
-**状态**：PENDING
-**依赖**：G3-01～G3-04
+**状态**：PENDING  
+**依赖**：G3-01～G3-04  
+**阶段角色**：必做（G3 关闭）  
+**一句话**：证明 VLA 真能进 Safety→控制闭环；稳与可降级优先，分数其次。
 
 ## 启动读取清单
 
-启动本任务前，除 START_TASK.md、PROGRESS.md、ROADMAP.md 对应阶段和本任务全文外，按顺序读取：
+1. `docs/project/PROJECT_SUCCESS_PROFILE.md`；  
+2. `docs/project/CLAIMS.md` C1（主）、C3（Safety 护栏交叉）；  
+3. `docs/project/SDF_VLA_WORLD_SYSTEM_ARCHITECTURE.md` 运行模式相关节；  
+4. `docs/project/G2_G8_INDUSTRIAL_ARCHITECTURE.md` 第 1～7、10、12 节；  
+5. `docs/project/SINGLE_MACHINE_EXECUTION_BUDGET.md` 第 1、2、4、5、7、8 节；  
+6. G2-05 与 G3-01～G3-04 最终产物、失败 Evidence、断点。
 
-1. docs/project/CLAIMS.md C1、C3 与统一指标；
-2. docs/project/G2_G8_INDUSTRIAL_ARCHITECTURE.md 第 1～7、10、12 节；
-3. docs/project/SINGLE_MACHINE_EXECUTION_BUDGET.md 第 1、2、4、5、7、8 节；
-4. G2-05 发布接口与 G3-01～G3-04 最终产物、失败 Evidence 和断点；
+## 项目成功口径（本任务）
 
-只读取列出的章节和直接依赖最终产物；引用文档继续列出必读项时，按其任务索引继续读取。
+- **C1 最小成功**：单机上 VLA 产出完整轨迹并完成无 Classic 当前帧候选的可重复闭环（可 `WITH_LIMITS`）。  
+- Hybrid 作为工程稳健对照，**不替代** VLA_SAFETY 主证明。  
+- 不要求全面超过 Classic；超过了是加分，没超过诚实写。
 
 ## 目标
 
-接入 Runtime、G2 Safety 和 MPC，比较 Classic-Observable、非语言多候选、Raw VLA、VLA+Validator、VLA+完整 Safety，验证无特权闭环与失效边界。
+在 Runtime + G2 Safety + MPC 上对比并固化：
+
+| 配置 | 目的 |
+|---|---|
+| Classic-Observable | 系统下界/对照 |
+| 非语言基线 | 隔离轨迹头 |
+| Raw VLA | 无/弱 Safety 行为（慎用，短测） |
+| VLA+Validator | 硬预筛 |
+| VLA+完整 Safety | 主配置 |
+| HYBRID | 工程稳健 |
+
+记录拒绝/修复、超时、接管、资源与失败类型。
 
 ## 实现范围与边界
 
-- ID/OOD、退化视觉和交互长尾多 seed；
-- 记录拒绝/修复、OOD/abstain、超时、接管和资源；
-- 比较 open-loop/closed-loop 排名并登记失败类型；
-- 控制 20ms loop 不等待 GPU；
+### 必做
+
+- 固定场景 + 多种子（至少小集合）；  
+- 控制 20ms 环不等待 GPU；  
+- unavailable/timeout/stale → 既定降级；  
+- 模型卡 + Evidence 目录。
+
+### 明确不做
+
+- 不开始 G4 大规模搜索；不训 World；  
+- 不把 live 未跑写成 VERIFIED。
 
 ## 完成标准与验证
 
-- 安全、完成、舒适、grounding、时延和资源证据完整。
-- unavailable/timeout/stale/OOD 按 G2 链降级。
-- C1 可为负，但真实闭环、模型卡和 Evidence 必须完成。
-- Evidence 自检通过且不自动开始 G4。
+### 最小通过
 
-## 允许修改与交付物
+- `VLA_SAFETY` 固定简单路线可重复跑通；  
+- 故障注入至少覆盖 timeout/stale/NaN 之一并正确降级；  
+- Evidence hash/link 自检。
 
-本节所列实现组件路径均相对 safedrive_foundry/；tests/、docs/、tasks/ 与 PROGRESS.md 相对仓库根目录。
+### 诚实记录
 
-允许修改 `G3 小型缺陷、runtime adapter、validation/g3、registry、artifacts/g3、tests/g3、reports` 及本任务和 `PROGRESS.md`。交付实现/配置、对应测试、原始运行、可追溯报告和精确断点；涉及真实 CARLA 时先执行 `sdf sim preflight`。当前任务通过后停止，不自动开始下一任务。
+- 碰撞/完成/舒适/时延表，负结果保留；  
+- G2 live 限制若仍在，写入本阶段限制清单。
+
+### 建议验证命令
+
+```text
+sdf sim preflight
+python3 -m unittest discover -s tests/g3 -t . -v
+# live 验收脚本（实现后登记）
+```
+
+## 允许修改
+
+G3 小型缺陷修复、`runtime` adapter、`validation/g3`、`registry`、`artifacts/g3`、`tests/g3`、`reports`、本任务、`PROGRESS.md`。  
+通过后停止，不自动开 G4。
 
 ## 断点记录
 
-尚未开始。恢复时先核对直接依赖的最终接口、版本、冻结协议和外部状态。
+尚未开始。

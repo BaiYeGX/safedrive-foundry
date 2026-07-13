@@ -209,11 +209,22 @@ def _check_progress(root: Path, task_statuses: dict[str, str]) -> list[dict[str,
     if re.match(r"^(?:无|none|n/a)\b", current_cell, re.IGNORECASE):
         return []
     current_ids = TASK_ID_RE.findall(current_cell)
-    current_status_match = re.search(r"[A-Z][A-Z_]+", status_match.group(1))
-    if not current_ids or not current_status_match:
+    if not current_ids:
         return []
     task_id = current_ids[0]
-    expected = current_status_match.group(0)
+    status_cell = status_match.group(1).replace("*", "").replace("`", "")
+    # Prefer "<task_id> STATUS" near the current task; fall back to first token.
+    near_task = re.search(
+        rf"{re.escape(task_id)}\s+([A-Z][A-Z_]*)",
+        status_cell,
+    )
+    if near_task:
+        expected = near_task.group(1)
+    else:
+        current_status_match = re.search(r"[A-Z][A-Z_]+", status_cell)
+        if not current_status_match:
+            return []
+        expected = current_status_match.group(0)
     actual = task_statuses.get(task_id)
     if actual is None:
         return [_error("progress_current_task_missing", f"PROGRESS points to missing task {task_id}", task_id=task_id)]

@@ -1,5 +1,8 @@
 # Large external assets
 *.zip
+# Upstream VLA code tree and multi-GB weights (paths registered in docs/project/LOCAL_ASSETS.md)
+simlingo-main/
+models/
 
 # Historical archives and bundled runtimes
 archive/

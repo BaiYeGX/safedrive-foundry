@@ -1,0 +1,60 @@
+# Local machine asset paths for VLA (Windows host + WSL mounts).
+# Prefer env overrides when set:
+#   SDF_VENV, SDF_PYTHON, SDF_SIMLINGO_CODE_ROOT, SDF_SIMLINGO_CKPT_ROOT,
+#   SDF_INTERNVL2_1B_ROOT, CARLA_ROOT
+# Policy: docs/project/LOCAL_ASSETS.md
+
+[meta]
+registered = "2026-07-14"
+status = "registered_and_verified"
+repo_root_windows = "E:\\autonomous driving"
+repo_root_wsl = "/mnt/e/autonomous driving"
+
+[python]
+# G3+ VLA must use this venv — NOT system /usr/bin/python3 (PEP 668)
+# NOT carla_ros venv (no torch)
+venv_wsl = "/home/sdf/.venvs/sdf"
+python_wsl = "/home/sdf/.venvs/sdf/bin/python"
+activate_wsl = "source /home/sdf/.venvs/sdf/bin/activate"
+# Verified 2026-07-14
+torch_version = "2.12.1+cu126"
+torch_cuda_available = true
+torch_device = "NVIDIA GeForce RTX 4080"
+cuda_sum_check = 523776
+carla_import_ok = true
+
+[python.do_not_use]
+system_python = "/usr/bin/python3"
+reason_system = "PEP 668 externally-managed; no torch; do not pip install --break-system-packages"
+carla_ros_venv = "/home/sdf/.venvs/carla_ros"
+reason_carla_ros = "carla only; no torch; not for SimLingo/VLA"
+# Windows conda env name used for G0-03 Server smoke ONLY (not G3 VLA)
+windows_conda_carla0916 = "carla0916"
+reason_windows_conda = "Windows-only carla wheel smoke; no WSL/ROS/fcntl/SimLingo; see CARLA_SERVER_BASELINE.md"
+
+[simlingo_code]
+windows = "E:\\autonomous driving\\simlingo-main"
+wsl = "/mnt/e/autonomous driving/simlingo-main"
+role = "code_reference"
+
+[simlingo_checkpoint]
+windows = "E:\\autonomous driving\\models\\simlingo"
+wsl = "/mnt/e/autonomous driving/models/simlingo"
+role = "primary_vla_weights"
+preferred_file = "simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt"
+epoch_dir = "simlingo/checkpoints/epoch=013.ckpt"
+approx_size_gb = 9.02
+
+[internvl2_1b]
+windows = "E:\\autonomous driving\\models\\InternVL2-1B"
+wsl = "/mnt/e/autonomous driving/models/InternVL2-1B"
+role = "fallback_base_weights"
+approx_size_gb = 1.75
+
+[carla]
+expected_version = "0.9.16"
+windows = "E:\\CARLA_0.9.16"
+wsl = "/mnt/e/CARLA_0.9.16"
+windows_executable = "E:\\CARLA_0.9.16\\CarlaUE4.exe"
+wsl_executable = "/mnt/e/CARLA_0.9.16/CarlaUE4.exe"
+# host/IP must come from sdf sim resolution, never hardcode

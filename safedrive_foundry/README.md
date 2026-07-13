@@ -7,6 +7,8 @@
 ## 固定约定
 
 - CARLA Server 安装：Windows `E:\CARLA_0.9.16\CarlaUE4.exe`（WSL 路径 `/mnt/e/CARLA_0.9.16/CarlaUE4.exe`）
+- VLA 本机资产与 venv：见 `docs/project/LOCAL_ASSETS.md` 与 `config/vla/local_assets.toml`  
+  - 权重/代码路径已登记；**G3+ 必须** `source /home/sdf/.venvs/sdf/bin/activate`（torch 2.12.1+cu126）
 - 官方 OpenDRIVE：`/mnt/e/CARLA_0.9.16/CarlaUE4/Content/Carla/Maps/OpenDrive/*.xodr`
 - CARLA RPC：`2000`；streaming：`2001`；Traffic Manager：`2002`
 - **Host 不得写死**：由 `sdf sim preflight|status|ensure` → `runtime.carla_connection` 动态解析

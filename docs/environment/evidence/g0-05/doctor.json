@@ -92,7 +92,7 @@
     {
       "code": "disk_space_ok",
       "details": {
-        "free_gib": 89.741,
+        "free_gib": 120.916,
         "minimum_free_gib": 20.0
       },
       "id": "disk.free",
@@ -163,7 +163,7 @@
       "status": "PASS"
     }
   ],
-  "generated_at_utc": "2026-07-13T12:34:13.537612+00:00",
+  "generated_at_utc": "2026-07-13T17:05:03.592328+00:00",
   "invocation": [
     "scripts/sdf.py",
     "doctor"

@@ -1,42 +1,57 @@
-# G8-05：最终审计、限制登记与版本准出
+# G8-05：最终审计与版本准出
 
-**状态**：PENDING
-**依赖**：G8-04
+**状态**：PENDING  
+**依赖**：G8-04  
+**阶段角色**：必做（项目关闭）  
+**一句话**：确认作品可答辩：VLA+World 真上了、能稳跑、限制写清、不夸大。
 
 ## 启动读取清单
 
-启动本任务前，除 START_TASK.md、PROGRESS.md、ROADMAP.md 对应阶段和本任务全文外，按顺序读取：
+1. `docs/project/PROJECT_SUCCESS_PROFILE.md`；  
+2. `docs/project/CLAIMS.md` 全文；  
+3. `docs/project/G2_G8_INDUSTRIAL_ARCHITECTURE.md` 全文；  
+4. `docs/project/SINGLE_MACHINE_EXECUTION_BUDGET.md` 全文；  
+5. G8-01～G8-04 产物与限制。
 
-1. docs/project/CLAIMS.md 全文；
-2. docs/project/G2_G8_INDUSTRIAL_ARCHITECTURE.md 全文；
-3. docs/project/SINGLE_MACHINE_EXECUTION_BUDGET.md 全文；
-4. G8-01～G8-04 最终产物、限制和失败门禁；
+## 项目成功口径（本任务）
 
-只读取列出的章节和直接依赖最终产物；引用文档继续列出必读项时，按其任务索引继续读取。
+准出检查清单：
+
+| 项 | 要求 |
+|---|---|
+| VLA | 闭环证据存在 |
+| World | 接入证据存在，on/off 对照存在 |
+| Safety | 降级与硬约束未被学习覆盖 |
+| 稳定 | 演示配置可重复跑 |
+| 诚实 | 负结果/limits 已登记 |
+| 实车 | **明确不宣称** |
+| G4B/G7 | 可为 `OPTIONAL_NOT_RUN` |
+| G5 | **不得**用 SKIPPED 逃避实现（本作品路径） |
 
 ## 目标
 
-输出可复现、可演示、可答辩且不夸大的发布候选，冻结四配置、资源预算、已知限制、发布清单和项目叙事。
+输出发布候选：叙事、限制、复现索引、配置表；只修发布阻塞。
 
 ## 实现范围与边界
 
-- 需求→任务→测试→Evidence 追踪；
-- VLA、World、Safety 的贡献与边界分别解释；
-- CARLA 结果不宣称真实道路安全证明；
-- 只修复发布阻塞，不扩大实验或移动阈值；
+### 必做
+
+- 需求→任务→测试→Evidence 追踪表；  
+- 不扩大实验、不移动阈值换结论。
+
+### 明确不做
+
+- 自动 commit/push/merge main。
 
 ## 完成标准与验证
 
-- G0～G8 条件满足，C1～C6 有证据或降级/负结论。
-- 最终清单、回归索引、链接/hash 和从零抽检通过。
-- 单机复现、演示、失败回放和限制完整。
-- 不自动 commit/push/merge main，完成后停止。
+- 清单勾选完成；从零抽检通过；  
+- 完成后停止。
 
-## 允许修改与交付物
+## 允许修改
 
-实现组件路径均相对 safedrive_foundry/；tests/、docs/、tasks/ 与 PROGRESS.md 相对仓库根。允许修改当前能力直接需要的实现、配置、测试、验证、Registry、Evidence、本任务和 PROGRESS.md；不得提前实现下一任务。涉及真实 CARLA 时先执行 sdf sim preflight。
+发布阻塞级最小修复、`validation/g8`、`docs`、本任务、`PROGRESS.md`。
 
 ## 断点记录
 
-尚未开始。恢复时先复核启动读取清单、直接依赖接口、版本、冻结协议和外部状态。
-
+尚未开始。

@@ -1,8 +1,8 @@
 # 任务目录与管理文档一致性审计
 
-审计日期：2026-07-13（Asia/Singapore）
+审计日期：2026-07-13（Asia/Singapore）；**文档对齐补丁 2026-07-14**
 审计范围：`ROADMAP.md`、`PROGRESS.md`、`START_TASK.md`、`FUTURE_PROJECT_VISION.md`、`CLAIMS.md`、活动 `tasks/G0`～`tasks/G8`、维护检查器与维护测试。
-执行边界：用户授权重构 G2～G8 路线和全部相关任务；G0 冻结，G1 已关闭且实现/证据不改，本轮未启动任何 G2 实现。
+执行边界：用户授权重构 G2～G8 路线和全部相关任务；G0 冻结，G1 已关闭且实现/证据不改。2026-07-14 仅做目录/任务正文/路由对齐，不启动新实现任务。
 
 ## 1. 任务统计
 
@@ -10,12 +10,12 @@
 |---|---:|---|
 | G0 | 6 | 6 项 `COMPLETED / FROZEN` |
 | G1 | 9 | G1-01～G1-09 已关闭，具体限制见 `PROGRESS.md` |
-| G2 | 5 | 5 项 `PENDING` |
+| G2 | 5 | offline 已关闭（`COMPLETED` / `COMPLETED_WITH_LIMITS`，见 `PROGRESS.md`） |
 | G3 | 5 | 5 项 `PENDING` |
-| G4 | 5 | 5 项 `PENDING` |
-| G5 | 5 | 5 项 `PENDING` |
+| G4 | 5 | 5 项 `PENDING`（G4-03 为 Optional） |
+| G5 | 5 | 5 项 `PENDING`（受 World 入口门禁） |
 | G6 | 5 | 5 项 `PENDING` |
-| G7 | 3 | 3 项 `PENDING` |
+| G7 | 3 | 3 项 `PENDING`（Optional / After Release） |
 | G8 | 5 | 5 项 `PENDING` |
 | **合计** | **48** | ROADMAP 48 行、活动文件 48 个、唯一 ID 48 个 |
 
@@ -38,7 +38,7 @@
 ### 2.3 任务结构
 
 - G2～G8 的 33 个任务统一包含启动读取清单、目标、实现边界、完成标准、验证、允许路径、交付物和断点；目标频率均明确为待实测门禁，不是结果。
-- 删除重复的数据/验收拆分、CMA-ES 与多套 QD 并行、PPO 前置和五 Agent 角色；强化 Fast/Slow VLA、动作条件结构化 World、两级 Safety 和确定性准出。
+- 删除重复的数据/验收拆分、CMA-ES 与多套 QD 并行、PPO 前置和五 Agent 角色；强化 VLA-V0/V1（SimLingo/InternVL2-1B）、门禁式 World-V0、两级 Safety 和确定性准出。
 - 将纵向 QP/RATO-SCP、反事实实现/搜索验收、抗遗忘/飞轮验收、统计/Evidence/最终准出拆成独立可验证边界，使 33 项仍适合逐项单机执行。
 - `START_TASK.md` 包含全部 48 个文件路由；检查器要求每个活动任务都被入口覆盖，全部 G2～G8 任务具有 `启动读取清单`，且清单引用的 `docs/*.md` 真实存在。
 - G0 任务未按统一模板重写，因为 G0 任务、配置、代码、README 和历史证据已冻结。
@@ -52,7 +52,7 @@
 
 ## 3. 状态与共享规则
 
-- **现行（2026-07-13，以 `PROGRESS.md` 为准）**：G1-01～G1-09 已关闭，G2 未启动；固定推荐口令为 `读取 START_TASK.md，启动 G2-01。`。
+- **现行（2026-07-14，以 `PROGRESS.md` 为准）**：G0 冻结；G1/G2 已关闭（G2 offline `COMPLETED_WITH_LIMITS`）；推荐下一任务口令为 `读取 START_TASK.md，启动 G3-01。`
 - `AGENTS.md` 已明确验收任务的小型集成缺陷与实质缺陷边界，要求实质缺陷退回原任务并重验受影响结果。
 - `AGENTS.md` 已明确任务状态与单次运行状态分层，`RETRYABLE_FAILURE` 不得直接等同于 `BLOCKED_EXTERNAL`，并保留 G1-02 连接与生命周期加固。
 - 已补充统一连接/预检、无硬编码 CARLA host、无独立 gateway 解析、无第二 tick master、业务节点不得直接 `world.tick()`、Agent 不得任意 shell、学习模块不得覆盖 Safety 硬约束，以及 MCP 保留至 G7-01 的规则。
@@ -74,15 +74,19 @@
 - 自动测试：`tests/maintenance/__init__.py`、`tests/maintenance/test_task_catalog_check.py`。
 - 审计报告：本文件。
 
-已运行并通过：
+### 5.1 2026-07-14 文档对齐补丁
+
+- 重命名过时任务文件名，使文件名与正文一致（见第 2.5 节列表意图：G3-03/04、G4-02/04、G6-02/03）。
+- 硬依赖字段与 ROADMAP 解析一致：Optional ID 不得写进 `**依赖**` 行。
+- F0 明确落在 G3-03；G6 第一轮为监督 adapter/LoRA，非 preference/RL 主线。
+- `task_catalog_check`：PROGRESS 状态优先匹配“当前任务旁 STATUS”。
+- `FUTURE_PROJECT_VISION.md` 保持长期愿景冻结件，不在本轮改写。
+
+已运行并通过（2026-07-14 复核）：
 
 ```text
-python3 scripts/maintenance/task_catalog_check.py       PASS
-python3 scripts/maintenance/task_catalog_check.py --json PASS; ok=true, errors=[]
+python3 scripts/maintenance/task_catalog_check.py       PASS; errors=0
 python3 -m unittest discover -s tests/maintenance -t . -v  PASS; 19/19
-python3 -m py_compile scripts/maintenance/task_catalog_check.py PASS
-python3 -m compileall -q scripts/maintenance tests/maintenance PASS
-git diff --check                                      PASS
 ```
 
 工作树状态以本轮结束时的终端输出为准；不包含任何 Git 提交。

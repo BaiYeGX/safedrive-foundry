@@ -1,18 +1,21 @@
 # 可证伪主张与证据矩阵
 
-本文件只定义项目最终需要证明的研究主张。通用证据状态、完成规则和简历表述边界见根目录 `AGENTS.md`。
+本文件只定义项目最终需要证明的研究主张。通用证据状态、完成规则和简历表述边界见根目录 `AGENTS.md`。  
+作品级成功口径（稳定可跑、VLA+World 必接入、效果可负、不上实车）见 `docs/project/PROJECT_SUCCESS_PROFILE.md`。
+
+**重要：** 主张可以为负或“无稳定净收益”，但不得用负结论作为“删除 World/VLA 模块”的借口；模块接入与科学增益分开记录。
 
 ## 核心主张
 
 | Claim | 要回答的问题 | 必须对照 | 主要证据阶段 |
 |---|---|---|---|
 | C0 | RACE 是否比公开基础专家在同安全/计算预算下改善规划效率、可跟踪性和扰动鲁棒性 | 固定 Frenet、基础 Hybrid A*、固定 MPC、各单项消融 | G1、G8 |
-| C1 | 轻量 Fast/Slow VLA 是否比非语言多候选基线产生更可执行、可校准的候选 | Classic-Observable、单轨迹视觉基线、非语言多候选、无 Slow 分支 | G3、G8 |
-| C2 | 动作条件结构化世界模型是否改善 VLA 候选排序并减少昂贵 CARLA 分支 | CV/CTRV/IDM、Reward MLP、无动作条件、无 World | G5、G8 |
+| C1 | VLA-V0/V1是否能在单机产生完整K1/K2轨迹并完成无Classic当前帧候选闭环 | Classic-Observable、上游anchor、V0 K1、V1 K2 | G3、G8 |
+| C2 | 在oracle best-of-K证明存在选择空间后，World-V0是否改善VLA候选排序 | VLA top-1、oracle best-of-K、CV/CTRV、Reward MLP、无动作条件、无World | G4A、条件式G5、G8 |
 | C3 | 两级 Safety 修复是否优于 Hard Reject/Rule Slowdown 且不过度停车 | Raw、Validator、Hard Fallback、Longitudinal QP、受限 RATO-SCP | G2、G8 |
-| C4 | 覆盖引导搜索是否在同预算下发现更多独立可复现失败 | Random、LHS、无 archive 搜索 | G4、G8 |
-| C5 | CARLA 验证的失败驱动后训练是否降低重复失败且保持旧能力 | 训练前模型、随机/周期采样后训练 | G6、G8 |
-| C6 | 受控研发助手是否相对确定性脚本提高场景提议或诊断效率且不破坏治理 | 固定模板、确定性脚本、无 Agent | G7、G8 |
+| C4 | G4A固定困难场景和可比K2分支能否复现并量化top-1与oracle best-of-K差距 | 不可比分支、候选同步失败、不同seed replay | G4A、G8；主动搜索C4B optional |
+| C5 | 一轮困难样本监督adapter/LoRA是否改善预登记切片且保持正常能力 | 同一冻结集训练前模型 | G6、G8 |
+| C6 | Optional Agent是否相对确定性脚本提高研发效率且不破坏治理 | 固定模板、确定性脚本、无Agent | Optional G7；不属于发布门禁 |
 
 ## 统一指标维度
 
@@ -30,10 +33,10 @@
 
 1. `Classic`：经典专家与控制；
 2. `VLA+Safety`：轻量 VLA、多候选轨迹与独立 Safety；
-3. `VLA+World+Safety`：加入动作条件世界模型排序；
-4. `PostTrained-Full`：加入一轮失败驱动后训练。
+3. `VLA+World+Safety`：仅World门禁通过后在线；否则标Shadow/SKIPPED/negative；
+4. `PostTrained VLA+World+Safety`：加入一轮监督后训练；World未通过时对应`PostTrained VLA+Safety`。
 
-Agent、Active CARLA 和单个算法增强以消融开关评价，不新增不可维护的发布栈。
+Hybrid单独报告工程稳健性。G4B、Agent、Active CARLA和单个算法增强均为optional，不新增不可维护的发布栈。
 
 ## C0专项证据
 

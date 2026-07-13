@@ -7,12 +7,12 @@
 | 字段 | 当前值 |
 |---|---|
 | 当前阶段 | G2：**COMPLETED_WITH_LIMITS（offline）** |
-| 当前任务 | **G2-05 COMPLETED_WITH_LIMITS**；G2 离线阶段关闭 |
-| 当前状态 | **G2-01～G2-04 COMPLETED**；**G2-05 COMPLETED_WITH_LIMITS**（无 live CARLA 短闭环） |
+| 当前任务 | **G2-05**；G2 离线阶段关闭，不自动启动 G3 |
+| 当前状态 | **COMPLETED_WITH_LIMITS**（G2-01～G2-04 COMPLETED；G2-05 offline fault matrix，无 live CARLA 短闭环） |
 | 最近完成 | Codex G2 复核修复（NaN actor / identity / deadline / RATO timeout / 故障矩阵 / evidence 门控）；`tests/g2` **111/111** |
 | 推荐下一任务 | 仅当用户明确指令：`读取 START_TASK.md，启动 G3-01。`（或授权 live 补验 G2-05） |
-| 最近更新 | 2026-07-13 |
-| 工作分支 | `grok/g2-01-safety-contracts`（未 merge main；未 push） |
+| 最近更新 | 2026-07-14 |
+| 工作分支 | `main`（G2 已 merge；工作区含 G3～G8 文档对齐改动，未单独提交本轮文档补丁） |
 
 ## 阶段状态
 
@@ -21,7 +21,7 @@
 | G0 | `COMPLETED / FROZEN` | 任务/代码/历史 evidence 冻结 |
 | G1 | **`COMPLETED_WITH_LIMITS`** | 正式关闭 |
 | G2 | **`COMPLETED_WITH_LIMITS`** | 离线 Safety Kernel 全链路完成；无 live 50Hz/短闭环 VERIFIED |
-| G3 | `PENDING` | 5 项；统一数据、非语言多候选、轻量 Fast/Slow VLA 与闭环 |
+| G3 | `PENDING` | 5 项；数据契约、非语言基线、VLA-V0(F0)/V1 与 VLA+Safety 闭环 |
 | G4 | `PENDING` | 5 项 |
 | G5 | `PENDING` | 5 项 |
 | G6 | `PENDING` | 5 项 |
@@ -77,6 +77,10 @@
 
 | 日期 | 变更 |
 |---|---|
+| 2026-07-14 | **环境约定写入文档**：`LOCAL_ASSETS.md` / `local_assets.toml` 登记 sdf venv（torch 2.12.1+cu126+CUDA 已验证）、禁系统 python / carla_ros；自检脚本改测 venv；CARLA 未开 preflight 失败为预期。 |
+| 2026-07-14 | **本机资产路径登记**：`docs/project/LOCAL_ASSETS.md` + `config/vla/local_assets.toml`（simlingo-main、models/simlingo、InternVL2-1B、CARLA_0.9.16）；`.gitignore` 忽略大体积权重/上游树。 |
+| 2026-07-14 | **G3～G8 任务正文细化**：统一模板（成功口径/必做不做/验证）；作品路径“VLA+World 必接入、稳定优先、效果可负”；新增 `PROJECT_SUCCESS_PROFILE.md`；更新 START/ROADMAP/CLAIMS/World 设计；不启动实现。 |
+| 2026-07-14 | **G3～G8 文档对齐**：重命名过时任务文件；修正依赖/START 锚点/G6 Preference 话术/F0 落点；`task_catalog_check` 与 PROGRESS 状态解析修复；不启动 G3 实现。 |
 | 2026-07-13 | **Codex G2 复核修复**：P0 NaN actor state-lock、identity 契约硬校验、QP deadline→TIMEOUT；P1 RATO timeout 不执行、故障矩阵补齐、g2-04 场景隔离；P2 evidence 资源/hash/git/门控；`tests/g2` **111/111**；G2-05 仍 `COMPLETED_WITH_LIMITS`。 |
 | 2026-07-13 | **G2 语义修复**：state floor lock、soft_stale 仅 VLA、final 扫全 ranked、ROS conf、公开 event/latency API、VISION_SOFT_DEGRADE 入矩阵。 |
 | 2026-07-13 | **G2 离线收口**：G2-04 仲裁/Shadow/回退 + G2-05 故障矩阵；阶段 `COMPLETED_WITH_LIMITS`。 |

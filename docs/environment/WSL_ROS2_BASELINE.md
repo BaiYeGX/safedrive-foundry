@@ -10,8 +10,8 @@
 - 发行版：Ubuntu `24.04.4 LTS`，WSL2，默认用户 `sdf`（UID 1000）
 - GPU：NVIDIA GeForce RTX 4080，`16376 MiB`，Windows 驱动 `591.86`
 - Python：系统 Python `3.12.3`
-- 虚拟环境：`/home/sdf/.venvs/sdf`
-- PyTorch：`2.12.1+cu126`；torchvision `0.27.1+cu126`
+- 虚拟环境：`/home/sdf/.venvs/sdf`（**G3+ VLA 唯一默认解释器**；系统 `python3` 无 torch / PEP 668；`carla_ros` venv 仅 carla、无 torch）
+- PyTorch：`2.12.1+cu126`；torchvision `0.27.1+cu126`（2026-07-14 复核：`cuda True`，`arange(1024).sum()==523776`）
 - ROS 2：Jazzy Desktop；`ros-jazzy-desktop 0.11.0-1noble.20260616.084553`
 - 开发工具：`ros-dev-tools 1.0.1`，`python3-colcon-common-extensions 0.3.0-100`
 - 工作区（G0-02 烟雾）：`/home/sdf/safedrive_ws`

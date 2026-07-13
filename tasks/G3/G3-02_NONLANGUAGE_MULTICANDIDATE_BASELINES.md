@@ -1,43 +1,81 @@
-# G3-02：非语言单轨迹与多候选基线
+# G3-02：非语言单轨迹与多候选公平基线
 
-**状态**：PENDING
-**依赖**：G3-01
+**状态**：PENDING  
+**依赖**：G3-01  
+**阶段角色**：必做  
+**一句话**：用便宜、可复现的非语言基线钉住“多候选轨迹”的对照标尺，避免后来把一切收益都算给 VLA。
 
 ## 启动读取清单
 
-启动本任务前，除 START_TASK.md、PROGRESS.md、ROADMAP.md 对应阶段和本任务全文外，按顺序读取：
+1. `docs/project/PROJECT_SUCCESS_PROFILE.md`；  
+2. `docs/project/G2_G8_INDUSTRIAL_ARCHITECTURE.md` 第 3～5、12 节；  
+3. `docs/project/SINGLE_MACHINE_EXECUTION_BUDGET.md` 第 2～4、7、8 节；  
+4. `docs/project/CLAIMS.md` C1 与统一指标；  
+5. G3-01 数据 schema、冻结 split、泄漏审计与断点。
 
-1. docs/project/G2_G8_INDUSTRIAL_ARCHITECTURE.md 第 3～5、12 节；
-2. docs/project/SINGLE_MACHINE_EXECUTION_BUDGET.md 第 2～4、7、8 节；
-3. docs/project/CLAIMS.md C1 与统一指标；
-4. G3-01 数据 schema、冻结 split、泄漏审计和断点；
+## 项目成功口径（本任务）
 
-只读取列出的章节和直接依赖最终产物；引用文档继续列出必读项时，按其任务索引继续读取。
+- 基线用于**对照**，不要求超过未来 VLA。  
+- 基础模型选型已冻结为 SimLingo/InternVL2-1B；**本任务不重新选型**。  
+- 输出必须能进同一套 CandidateSet / Safety 解析链。
 
 ## 目标
 
-用 Route/Ego MLP、时序视觉单轨迹、时序视觉多候选三个基线隔离多候选轨迹本身的价值，避免把轨迹头收益误归因于语言。
+在统一数据、split、轨迹格式与计算预算下，实现并可评测：
+
+1. Route/Ego 类简单策略或 MLP 基线；  
+2. 时序视觉 **单轨迹** 基线（对齐 V0 K1 合同）；  
+3. 时序视觉 **多候选** 基线接口（对齐 V1 K2 预算，可先 stub 后填）。
+
+Classic-Observable 仅作系统参照，不额外喂特权信息给“公平学习基线”。
 
 ## 实现范围与边界
 
-- 统一 Policy Adapter、数据/split、encoder 预算、轨迹格式和 seed；
-- Classic-Observable 作为系统参照，不获取额外 Observable 信息；
-- checkpoint 精确恢复和 model/data/config hash；
-- 短闭环与 open-loop 同时评价；
+### 必做
+
+- 统一 Policy Adapter：输入 schema、输出 `K/T/dt/horizon`、坐标系、概率占位；  
+- V0 合同：`K=1,T=10,dt=0.25s,horizon=2.5s`；为 V1 `K=2` 预留接口与预算表；  
+- checkpoint 保存/恢复与 model/data/config hash；  
+- open-loop 指标 + 可选极短闭环 smoke（不阻塞本任务，若环境未就绪记 `NOT_RUN`）。
+
+### 明确不做
+
+- 不加载完整 SimLingo 训练；不做 LoRA；不做 World；  
+- 不把随机噪声伪造成“模型候选”；  
+- 不根据单一 ADE 决定“换基础模型”。
+
+## 接口与交付物
+
+| 类型 | 内容 |
+|---|---|
+| 代码 | `safedrive_foundry/driving_vla/baselines`、`adapter`、`config` |
+| 报告 | ADE/FDE/覆盖/可执行率/Safety 拒绝率/资源表 |
+| 测试 | `tests/g3` 形状、hash、恢复、非法轨迹拒绝 |
 
 ## 完成标准与验证
 
-- 报告 ADE/FDE/NLL、候选覆盖/多样性、可执行率、Safety 拒绝、闭环和资源。
-- 单轨迹/多候选固定 encoder、预算和 seed 公平比较。
-- 基础模型选择不能只依赖单一 open-loop 指标。
-- 负结果和失败 slice 完整保留。
+### 最小通过
 
-## 允许修改与交付物
+- 三基线（或 1+2 已实现且 K2 接口冻结）在固定 split 上可跑通推理；  
+- 输出可被 Validator 解析；非法/NaN 被拒；  
+- 单轨迹 vs 多候选在**相同 encoder 预算声明**下可比。
 
-本节所列实现组件路径均相对 safedrive_foundry/；tests/、docs/、tasks/ 与 PROGRESS.md 相对仓库根目录。
+### 诚实记录
 
-允许修改 `driving_vla/baselines、training、adapter、config、tests/g3、validation/g3、reports` 及本任务和 `PROGRESS.md`。交付实现/配置、对应测试、原始运行、可追溯报告和精确断点；涉及真实 CARLA 时先执行 `sdf sim preflight`。当前任务通过后停止，不自动开始下一任务。
+- 负结果与失败 slice 保留；  
+- 未跑 live 闭环不得写闭环 VERIFIED。
+
+### 建议验证命令
+
+```text
+python3 -m unittest discover -s tests/g3 -t . -v
+```
+
+## 允许修改
+
+`safedrive_foundry/driving_vla/baselines`、`training`（仅基线）、`adapter`、`config`、`tests/g3`、`validation/g3`、`reports`、本任务、`PROGRESS.md`。  
+当前任务通过后停止。
 
 ## 断点记录
 
-尚未开始。恢复时先核对直接依赖的最终接口、版本、冻结协议和外部状态。
+尚未开始。

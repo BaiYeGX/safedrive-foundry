@@ -1,7 +1,7 @@
 # SafeDrive G0-05 environment doctor
 
 - Overall status: **FAIL**
-- Generated (UTC): `2026-07-13T12:34:13.537612+00:00`
+- Generated (UTC): `2026-07-13T17:05:03.592328+00:00`
 - Project root: `/mnt/e/autonomous driving`
 
 | Check | Status | Code | Message |
@@ -109,7 +109,7 @@
 
 ```json
 {
-  "free_gib": 89.741,
+  "free_gib": 120.916,
   "minimum_free_gib": 20.0
 }
 ```

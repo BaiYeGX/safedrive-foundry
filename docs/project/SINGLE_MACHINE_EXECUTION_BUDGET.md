@@ -37,8 +37,8 @@ Windows CARLA 与 WSL CUDA 共享同一张物理 GPU。资源报告必须记录�
 | 占用 | 目标上限 |
 |---|---:|
 | Windows CARLA Low/No Rendering | 实测后控制在约 4～5GB |
-| 量化 VLA Fast/Slow | 约 5～6GB |
-| 结构化 World Model | 约 2～3GB |
+| 量化 VLA-V0/V1 | 约 5～6GB |
+| World-V0（仅入口门禁通过后） | 增量目标不高于约 1.5GB |
 | CUDA context、缓存和安全余量 | 至少约 2GB |
 | 整卡稳定峰值 | 不高于约 14～14.5GB |
 
@@ -51,15 +51,16 @@ Windows CARLA 与 WSL CUDA 共享同一张物理 GPU。资源报告必须记录�
 - LoRA/QLoRA、4-bit/8-bit 权重、BF16/FP16；
 - gradient checkpointing 和梯度累积；
 - 单前视 224～320 像素级输入起步；
-- 4～8 帧短历史，micro-batch 1～2 起步；
+- 当前单图 + 4 时刻低维 ego history；完整图像历史不是第一版；
+- V0 K=1、V1 K=2，micro-batch 1 起步；
 - 训练显存稳定峰值目标不高于约 14.5GB；
 - 先完成 20～100 step resource smoke，再批准正式训练。
 
 ### 3.3 World Model 训练
 
-- 仅训练 object/vector/BEV latent dynamics，不做像素视频 diffusion；
-- Actor 数、候选 K、horizon 和 mode 数配置化；
-- 从 1～3 秒和小 K 起步，再扩展到 5 秒；
+- 只有 oracle best-of-K 入口门禁通过才训练；
+- World-V0 固定 K=2、T=10、2.5秒、N≤8、M=1、约4M～8M；
+- 仅训练 object/vector latent dynamics，不做像素视频 diffusion；
 - mixed precision、gradient accumulation 和变长 mask；
 - 训练显存稳定峰值目标不高于约 12～14GB；
 - actor/occupancy/ranking 小样本过拟合通过后才正式训练。
@@ -84,10 +85,10 @@ VLA 与 World 使用只读 feature cache；不得由两个模块分别复制完�
 
 降级顺序：
 
-1. 关闭 Slow VLA；
-2. 降低 World candidate batch/mode/horizon；
-3. 跳过 World，进入 VLA+Safety；
-4. VLA stale/unavailable，进入 Classic+Safety；
+1. 关闭 VLA-V2 REASON；
+2. 跳过 World，进入 VLA+Safety；
+3. VLA-V1 回退经验证的 VLA-V0；
+4. VLA stale/unavailable：Hybrid 进入 Classic+Safety，VLA_SAFETY 进入 MRM；
 5. 无合法轨迹，进入 Minimal Risk/Emergency。
 
 Safety 状态监控和 MPC/PID 不等待上述 GPU 工作。
@@ -101,6 +102,17 @@ Safety 状态监控和 MPC/PID 不等待上述 GPU 工作。
 - Regression、Evidence 和冻结数据只读；
 - World action-branch 数据优先保存结构化未来，像素视频不是核心训练输入。
 
+整项目活跃工作集按以下共享口径准入，不能把同一原始帧分别计入 VLA 和 World 后重复落盘：
+
+| 资产池 | 计划范围 |
+|---|---:|
+| 共享原始帧、状态、route、split 和 Evidence | 25～35GB |
+| VLA 独占权重、特征、标签、困难窗口和 checkpoint | 55～90GB |
+| World-V0 独占（仅门禁通过后） | 25～45GB |
+| **无 World / 有 World 常态目标** | **80～125GB / 105～170GB** |
+
+200GB 是软上限，不是要求预先占满。物理空间若最多可提供400GB，多出的空间只作导入、重打 shard 和迁移缓冲；达到软上限后先停止采集、内容 hash 去重、清除可重建 cache 和滚动非审计 checkpoint，不自动删除冻结 Regression/Evidence。
+
 ## 7. 阶段资源门禁
 
 ### G2
@@ -109,7 +121,7 @@ Safety、QP、RATO 和故障注入主要使用 CPU。必须证明学习模块/GP
 
 ### G3
 
-先做非语言多候选资源基线，再批准 VLA。Fast、Slow、候选 K、历史帧和分辨率分别消融。训练和 CARLA 不并发。
+先完成 VLA-V0 K1，再做 VLA-V1 K2。首门槛 P95≤200ms；10Hz、完整图像历史、K4 是后续优化。训练和 CARLA 不并发。
 
 ### G4
 
@@ -117,13 +129,13 @@ Safety、QP、RATO 和故障注入主要使用 CPU。必须证明学习模块/GP
 
 ### G5
 
-World 必须批量评价候选而不是逐候选重复编码。Active CARLA 是异步研发验证，不参与当前帧控制。
+先完成 top-1 vs oracle best-of-K 科学标注。本项目 World-V0 仍实现并对 K2 软排序；异常退化 VLA+Safety。无选择空间或无净收益时保留模块与 on/off，不删实现。
 
 ### G6
 
-一次只训练一个 adapter。后训练前后模型串行评测，避免同时加载多个 checkpoint。
+只完成一轮困难窗口监督适配，一次训练一个 adapter/LoRA。禁止 PPO/GRPO/RL、多种 preference 和同时训练 VLA/World。
 
-### G7
+### G7（Optional / After Release）
 
 Agent 默认离线；优先受控 API 或小型量化模型。无 Agent 时确定性 workflow 必须运行。
 
@@ -160,4 +172,3 @@ OOM/thermal/disconnect/recovery
 - G6：读取第 1～4、6～8 节；
 - G7：读取第 1、2、4、7、8 节；
 - G8：读取全文并冻结实际资源结果。
-

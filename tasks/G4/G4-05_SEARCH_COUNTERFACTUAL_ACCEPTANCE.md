@@ -1,42 +1,58 @@
-# G4-05：搜索、反事实与复现性阶段验收
+# G4-05：G4A 验收与选择空间科学标注
 
-**状态**：PENDING
-**依赖**：G4-01～G4-04
+**状态**：PENDING  
+**依赖**：G4-01、G4-02、G4-04  
+**阶段角色**：必做（G4 关闭）  
+**一句话**：验收固定包与 oracle 表，输出选择空间标签；**不否决**后续 World 实现。
 
 ## 启动读取清单
 
-启动本任务前，除 START_TASK.md、PROGRESS.md、ROADMAP.md 对应阶段和本任务全文外，按顺序读取：
+1. `docs/project/PROJECT_SUCCESS_PROFILE.md`；  
+2. `docs/project/SDF_WORLD_MODEL_DESIGN.md` 第 3 节与 WE0；  
+3. `docs/project/CLAIMS.md` C4；  
+4. `docs/project/G2_G8_INDUSTRIAL_ARCHITECTURE.md` 第 8、10 节；  
+5. `docs/project/SINGLE_MACHINE_EXECUTION_BUDGET.md` G4 字段；  
+6. G4-01、G4-02、G4-04 最终产物与失败清单。
 
-1. docs/project/CLAIMS.md C4 与统一指标；
-2. docs/project/G2_G8_INDUSTRIAL_ARCHITECTURE.md 第 8、10 节；
-3. docs/project/SINGLE_MACHINE_EXECUTION_BUDGET.md G4 与资源字段；
-4. G4-01～G4-04 最终产物、断点和失败清单；
+## 项目成功口径（本任务）
 
-只读取列出的章节和直接依赖最终产物；引用文档继续列出必读项时，按其任务索引继续读取。
+输出三态科学标签（写入 Evidence）：
+
+| 标签 | 含义 | 对 G5 实现 |
+|---|---|---|
+| `ENTER_WORLD` | 四项选择空间条件通过 | 实现 World，C2 可冲正收益 |
+| `WEAK_SELECTION_SPACE` | 部分满足/不稳定 | **仍实现 World**；C2 默认谨慎/可能负 |
+| `NO_SELECTION_SPACE` / `IMPROVE_VLA` | 几乎无排序空间 | **仍实现 World 作作品模块**；C2 记负或“无增益”；演示可 World on + 对照 off |
+
+旧文 `SKIPPED_BY_GATE` **不再用于跳过本项目 G5 实现**；仅可在严格发表附录中讨论“若追求净收益可暂缓”。
 
 ## 目标
 
-冻结协议比较 Random、LHS 和 MAP-Elites，验收有效场景、独立失败、可比反事实、最小反例和资源成本。
+- 验收 Registry、20～40 场景、replay、K2 谱系、top-1 vs oracle；  
+- 固化 C4 对照与统计单位；  
+- 为 G5 提供数据指针与标签。
 
 ## 实现范围与边界
 
-- 固定 rollout 预算、seed、参数域、有效性和终止规则；
-- 报告首次失败、独立失败、覆盖、严重度、INVALID 和复现率；
-- 稀有事件区间、代表性失败人工复核和 wall-time/资源；
-- 搜索结果进入 Counterexample/Regression Registry；
+### 必做
+
+- 复现率、候选同步失败、资源/wall-time；  
+- G4B 未执行 → `OPTIONAL_NOT_RUN`。
+
+### 明确不做
+
+- 不自动开始 G5 实现（仍需用户口令）；  
+- 不因弱选择空间删除 World 计划。
 
 ## 完成标准与验证
 
-- MAP-Elites 无收益可关闭，但 Random/LHS、重建和最小化必须通过。
-- C4 对照、统计单位和负结果完整。
-- Evidence hash/link/schema 与原始 run 一致。
-- 完成后停止，不自动开始 G5。
+- 标签与原始 run 一致；Evidence 自检通过；  
+- 完成后停止。
 
-## 允许修改与交付物
+## 允许修改
 
-实现组件路径均相对 safedrive_foundry/；tests/、docs/、tasks/ 与 PROGRESS.md 相对仓库根。允许修改当前能力直接需要的实现、配置、测试、验证、Registry、Evidence、本任务和 PROGRESS.md；不得提前实现下一任务。涉及真实 CARLA 时先执行 sdf sim preflight。
+`validation/g4`、`registry`、`artifacts/g4`、`tests/g4`、`reports`、本任务、`PROGRESS.md`。
 
 ## 断点记录
 
-尚未开始。恢复时先复核启动读取清单、直接依赖接口、版本、冻结协议和外部状态。
-
+尚未开始。

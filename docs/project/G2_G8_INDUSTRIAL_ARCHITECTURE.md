@@ -4,7 +4,7 @@
 
 ## 1. 系统目标与不可变边界
 
-SafeDrive Foundry 的学习主线由轻量驾驶 VLA 和动作条件结构化 World Model 组成，独立 Safety Kernel 决定轨迹是否允许执行，Classic Expert 提供基线、标签、Shadow 和回退。任何模型升级都不得改变以下边界：
+SafeDrive Foundry 的必做学习主线是轻量驾驶 VLA；动作条件结构化 World Model 只有在 oracle best-of-K 证明存在选择空间后才进入。独立 Safety Kernel 决定轨迹是否允许执行，Classic Expert 提供基线、标签、Shadow 和 Hybrid 候选。任何模型升级都不得改变以下边界：
 
 1. VLA 和 World Model 不直接输出未经约束的车辆控制；
 2. World Model 是候选结果预测与软排序器，不是安全真值；
@@ -16,19 +16,19 @@ SafeDrive Foundry 的学习主线由轻量驾驶 VLA 和动作条件结构化 Wo
 ## 2. 在线执行链
 
 ```text
-Camera short history + Ego history + Route/navigation
+Current camera + low-dimensional Ego history + Route/navigation
                           │
                  temporal feature cache
                           │
              ┌────────────┴────────────┐
              │                         │
-       Fast/Slow VLA              Classic Expert
-      K trajectory chunks         candidate/shadow
+       VLA-V0/V1                 Classic Expert
+    K1/K2 trajectory             Hybrid candidate/shadow
              └────────────┬────────────┘
                           │
        Candidate freshness + hard pre-validation
                           │
-             action-conditioned World Model
+        optional gated action-conditioned World
         batched actor/occupancy/risk rollouts
                           │
              deterministic soft arbitration
@@ -58,9 +58,9 @@ VLA、World 和 Safety 必须共享同一帧身份和权限标记，但允许读
 
 - `run_id`、`frame_id`、`scenario_id`、`model_id`；
 - `candidate_id`、来源、生成时间、有效期和候选概率；
-- 3～5 秒 trajectory chunk、时间戳、坐标系和动力学元数据；
-- behavior、critical_actor、conflict_type、risk_horizon、intended_action；
-- Fast/Slow trigger、模型不确定性和 availability。
+- 首版 V0/V1 为 2.5 秒、T10、K1/K2，含时间戳、坐标系和动力学元数据；
+- behavior/intended_action；复杂 grounding 为 optional；
+- Runtime Guard、FAST/REASON、margin 和 availability。
 
 语言解释不是必需字段，也不参与 Safety 硬判断。
 
@@ -69,9 +69,8 @@ VLA、World 和 Safety 必须共享同一帧身份和权限标记，但允许读
 每个输入候选对应一个不可混淆的 rollout：
 
 - `candidate_id`、world model/data/config hash；
-- 1～5 秒 Actor 多模态未来与动态占用；
-- collision/TTC、规则、进度、舒适、termination/reward 分项；
-- epistemic/aleatoric uncertainty、OOD 和 calibration 状态；
+- World-V0 为2.5秒、N≤8、M=1 Actor future；
+- collision/TTC/off-road 与两候选排序；复杂多模态/不确定度为升级项；
 - unavailable、timeout、uncalibrated、invalid-input 等显式错误。
 
 不得用缺失输出或异常隐式表示“低风险”。
@@ -102,11 +101,10 @@ SafetyEvent 是在线事实；TrainingEvent 是离线窗口。转换时必须保
 |---|---:|---|
 | MPC/PID | 50Hz，20ms 控制周期 | 使用冻结控制降级，不等待学习模块 |
 | Safety 状态监控 | 50Hz | 进入 DEGRADED/MINIMAL_RISK/EMERGENCY |
-| VLA Fast | 10Hz | 使用仍新鲜的合法轨迹，否则 Classic |
-| World Model | 5～10Hz | 跳过 World 排序，退化为 VLA+Safety |
-| VLA Slow | 1～2Hz、事件触发 | abstain，不阻塞 Fast 或控制 |
-| Active CARLA | 异步、预算限制 | 队列保留/取消，不影响在线车辆 |
-| Agent | 离线 | 关闭后确定性流程继续 |
+| VLA-V0/V1 | 首门槛P95≤200ms（约5Hz），10Hz后续优化 | VLA_SAFETY进入MRM；Hybrid可Classic |
+| World-V0 | 门禁通过后目标约5Hz | 跳过World排序，退化为VLA+Safety |
+| VLA-V2 REASON | 事件触发、optional | 不阻塞FAST或控制 |
+| Active CARLA / Agent | Optional/离线 | 不影响在线车辆或发布主线 |
 
 实现时必须测量端到端 freshness，而不仅是单模型 kernel latency。GPU 任务采用共享只读 feature cache 和串行/流水调度；VLA/World checkpoint、availability 和消融开关保持独立。训练、CARLA 高画质、Agent 本地大模型不得并发争抢 16GB 显存。
 
@@ -114,31 +112,30 @@ SafetyEvent 是在线事实；TrainingEvent 是离线窗口。转换时必须保
 
 ### 5.1 输入
 
-第一版固定单前视短视频、Ego 历史和 Route/navigation。语言只承载导航意图、交互约束和结构化监督，不承担低层控制。多相机、LiDAR 和 radar 保留接口，不是项目成立前提。
+VLA-V0使用上游所需当前Observation；VLA-V1固定当前前视图像、当前ego、4时刻低维ego history和Route/navigation。完整图像历史、多相机、LiDAR和radar不是第一版。
 
 ### 5.2 模型
 
-- 冻结或轻量微调的时序视觉编码器；
-- 小型语言/推理模块，优先 0.5B～2B 量级和 LoRA/QLoRA；
-- Fast 融合路径与独立并行轨迹解码头；
-- Slow 只在 OOD、候选分歧或复杂交互触发；
+- V0冻结上游并确定性canonicalize为K1/T10/2.5s；
+- V1只训练低维history adapter、K2 nominal/conservative和简单概率；
+- V2学习型Router只做FAST/REASON，DEFER由deterministic Runtime Guard负责；
+- heads-only优先，必要时少量LoRA；
 - 大模型仅作离线教师或标签审查，不成为部署依赖。
 
 ### 5.3 输出与训练
 
-一次输出 4～8 条轨迹及概率，避免逐点自回归。主损失是轨迹匹配、多模态覆盖、可执行和平滑；行为、关键 Actor、风险时域和意图是动作 grounding 辅助目标。必须与非语言多候选、无 Slow、无语义头公平消融。
+V0输出K1，V1输出K2，两者均为T10/2.5s。Grounding最多keep/slow/stop/turn且非闭环前置。只有oracle best-of-K显示选择空间、候选不坍塌时才扩K4/3秒或复杂grounding/OOD。
 
 ## 6. 动作条件 World Model 设计
 
-### 6.1 必做能力
+### 6.1 门禁后必做能力
 
-World Model 学习 `P(other future | scene, ego trajectory)`，而非固定场景未来。核心是 object/vector/BEV latent dynamics：
+先比较VLA top-1与oracle best-of-K并登记科学标签；本项目World-V0仍须实现接入（弱选择空间时C2可负）。World-V0学习`P(other future | scene, ego trajectory)`：
 
-- Actor 与地图/路线 token；
-- Ego 候选轨迹作为显式条件；
-- 多 Actor 多模态未来和动态占用；
-- 风险、进度、舒适、termination/reward；
-- 不确定性、OOD 和校准。
+- ego、最多8个Actor、简化道路与K2候选；
+- K2/T10/N8/M1、约4M～8M；
+- actor future、collision、TTC、off-road与两候选排序；
+- invalid/unavailable/timeout显式错误。
 
 ### 6.2 禁止捷径
 
@@ -150,7 +147,7 @@ World Model 学习 `P(other future | scene, ego trajectory)`，而非固定场�
 
 ### 6.3 有效性证明
 
-至少执行 action swap/removal、critical actor removal/perturbation、无动作条件和简单运动学/Reward 基线。只有在预登记交互切片中改善候选排序且护栏不退化，才允许默认在线启用；否则保留 Shadow/离线模式和负结论。
+至少执行action shuffle/swap、无动作条件和CV/CTRV/Reward MLP基线。只有闭环A/B稳定改善且护栏不退化，才允许扩N/M/T/K或默认在线；否则Shadow/离线。
 
 ## 7. Safety 与回退
 
@@ -168,18 +165,18 @@ RATO 未优于纵向 QP时默认关闭二级，但不影响 Validator、状态�
 
 ## 8. 场景、反事实与数据飞轮
 
-场景层级为 Functional→Logical→Concrete→Regression→Minimal Counterexample。主动搜索只保留 Random/LHS 基线和一个 MAP-Elites coverage archive，避免多个优化器分散预算。
+G4A固定场景Registry、seed/replay、initial-state hash、20～40困难场景、可比K2分支和oracle best-of-K。MAP-Elites、自动搜索、最小化、聚类和大规模覆盖均属于G4B optional。
 
 反事实分支必须检查 Ego、关键 Actor、信号、路线和事件进度容差。超容差结果标不可比较；CARLA Recorder 不视为无损状态恢复。
 
-后训练只使用：
+G6第一轮只使用：
 
 - 版本化专家纠正；
-- 可比 CARLA 分支的 chosen/rejected；
-- Safety 接管前窗口；
+- VLA失败前2～4秒窗口；
+- Classic/Safety/人工规则生成的修正轨迹；
 - 通过泄漏、冲突、许可、去重和分布门禁的数据。
 
-第一轮使用 LoRA/QLoRA SFT、trajectory ranking/DPO 类目标和 Risk Anticipation，不以 PPO 为前置。任何 World-only 偏好必须先经 CARLA 或明确专家验证。
+只训练一个监督adapter或少量LoRA checkpoint，并用同一冻结困难集/正常集做前后比较。第一轮禁止PPO、GRPO、RL、多种preference、多轮自动飞轮和同时训练VLA/World。
 
 ## 9. Agent 与确定性工作流
 
@@ -195,7 +192,7 @@ human approval where required
 deterministic manifest and release decision
 ```
 
-C6 为负时关闭 Agent，不影响核心 VLA+World+Safety 项目准出。
+C6未执行或为负时关闭Agent，不影响VLA+Safety主线及条件式World准出。
 
 ## 10. 四个发布配置与负结果策略
 
@@ -204,15 +201,18 @@ C6 为负时关闭 Agent，不影响核心 VLA+World+Safety 项目准出。
 1. `Classic`；
 2. `VLA+Safety`；
 3. `VLA+World+Safety`；
-4. `PostTrained-Full`。
+4. `Post-trained VLA+World+Safety`。
 
-核心主张可以得到负结果，但必做模块不能因结果不佳而删除：
+World未通过入口或净收益门禁时，第3/4项标Shadow/SKIPPED/negative，并正式保留`Post-trained VLA+Safety`结果；Hybrid单独报告，不混入主要因果阶梯。
+
+核心主张可以得到负结果，范围规则为：
 
 - VLA 必须完成训练、无特权审计、真实闭环和模型卡；
-- World 必须完成动作条件建模、干预消融、候选排序接入和模型卡；
+- World 先做 oracle best-of-K 科学标注；无选择空间时仍接入模块，C2 记负/无增益，不得假冒正收益；
+- 门禁通过后必须完成 World-V0、干预消融、候选排序和模型卡；
 - World 无收益时转 Shadow/离线，而不是伪造在线价值；
 - 后训练无收益时保留数据/模型谱系和抗遗忘回归；
-- Agent 无收益时关闭，不阻塞四配置准出；
+- Agent 为 Optional/After Release，不阻塞准出；
 - Safety 的 Validator、状态机和回退失败则系统不得准出。
 
 ## 11. 阶段交付顺序
@@ -220,10 +220,10 @@ C6 为负时关闭 Agent，不影响核心 VLA+World+Safety 项目准出。
 ```text
 G2  独立安全执行边界
 G3  数据隔离 + 非语言基线 + 轻量 VLA 闭环
-G4  场景覆盖 + 失败搜索 + 可比反事实
-G5  动作条件 World + VLA 候选排序闭环
-G6  CARLA 验证的数据飞轮与轻量后训练
-G7  可关闭研发助手 + 确定性数据/准出
+G4A 固定场景 + 可比分支 + oracle best-of-K；G4B optional
+G5  门禁通过时完成 World-V0；否则保存负结论
+G6  一轮困难样本监督适配与抗遗忘
+G7  Optional / After Release
 G8  四配置回归、统计、证据和最终发布
 ```
 
@@ -236,19 +236,17 @@ G8  四配置回归、统计、证据和最终发布
 ```text
 G3-01  Observation/Data/Scenario identity 与冻结 split
   ↓
-G3-02  Route/Ego、视觉单轨迹、非语言多候选基线
+G3-02  V0 K1 / V1 K2 公平基线
   ↓
-G3-03  temporal encoder + Fast/Slow + parallel trajectory head
+G3-03  F0 + VLA-V0 checkpoint + canonicalizer + K1/T10闭环
   ↓
-G3-04  SFT、动作 grounding、校准、OOD 与资源稳定
+G3-04  VLA-V1低维history+K2；V2 FAST/REASON递进optional
   ↓
-G3-05  VLA+Safety 真实闭环
+G3-05  VLA+Safety无Classic当前帧候选闭环 + Hybrid
   ↓
-G5-04/05 由 World 对 VLA 合法候选排序并闭环验收
+G4A oracle best-of-K门禁；通过时可进入G5 World-V0
   ↓
-G6-02/03 Shadow DAgger 与 CARLA-verified preference 后训练
-  ↓
-G6-04/05 抗遗忘与飞轮验收
+G6 一轮Shadow修正采集 + 单个监督adapter/LoRA + 抗遗忘
   ↓
 G8 四发布配置回归、证据和准出
 ```
@@ -260,12 +258,12 @@ safedrive_foundry/driving_vla/
 ├── schema/          VLA 输入、输出和训练标签 schema
 ├── data/            数据 adapter 与 dataset，不保存 Registry 真值副本
 ├── baselines/       Route/Ego、单轨迹、非语言多候选
-├── model/           temporal encoder、Fast/Slow、trajectory/semantic heads
-├── training/        SFT、checkpoint、资源和恢复
-├── uncertainty/     calibration、OOD、selective driving
+├── model/           V0 anchor、V1 K2、V2 FAST/REASON
+├── training/        heads-only/少量LoRA、checkpoint、恢复
+├── runtime/         deterministic Guard / DEFER / deadline
 ├── evaluation/      open-loop、grounding 和 slice 评价
 ├── adapter/         Runtime/ROS/Safety 的稳定边界
-└── posttrain/       G6 DAgger/preference adapter
+└── posttrain/       G6 单轮监督 adapter/LoRA
 ```
 
 数据、模型、adapter 和 post-training 不得互相复制 schema；正式 schema 只能由版本化接口包定义。G3-03 之前不得实现 G6 posttrain，G6 不得改变 G3 冻结的 Regression split。
@@ -277,19 +275,17 @@ safedrive_foundry/driving_vla/
 ```text
 G3-01  冻结 scene/frame/candidate/actor identity
   ↓
-G4-04  可比起点与反事实分支
+G4A  top-1 vs oracle best-of-K 入口门禁
   ↓
-G5-01  expert/non-expert/unsafe action branch 数据 + 简单基线
+ENTER_WORLD 后：G5-01 K2 action branch + CV/CTRV/Reward 基线
   ↓
-G5-02  object/vector/BEV action-conditioned dynamics
+G5-02  K2/T10/N8/M1、4M～8M action-conditioned dynamics
   ↓
-G5-03  multimodal future、risk/reward、uncertainty、intervention/calibration
+G5-03  actor future、collision/TTC/off-road、action/no-action
   ↓
-G5-04  实时候选软排序 + 异步 Active CARLA verification queue
+G5-04  两候选软排序 + World异常退化VLA+Safety
   ↓
 G5-05  VLA+World+Safety 闭环净收益/负结果验收
-  ↓
-G6-01  World ranking error 与不确定样本进入 Hard Case 数据门禁
   ↓
 G8 统一回归、消融、模型卡和发布开关
 ```
