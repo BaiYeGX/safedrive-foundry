@@ -1,25 +1,43 @@
-# G7-01：Agent 工具、权限与审计治理
+# G7-01：Agent 白名单工具、权限、预算与审计
 
-**状态**：PENDING  
-**依赖**：G6-06
+**状态**：PENDING
+**依赖**：G6-05
 
-## 目标与范围
+## 启动读取清单
 
-为场景查询/生成/运行/分析/最小化/数据登记/报告建立 typed tool schema、白名单、路径沙箱、资源预算、超时、dry-run、幂等、审批边界、审计和紧急停止。
+启动本任务前，除 START_TASK.md、PROGRESS.md、ROADMAP.md 对应阶段和本任务全文外，按顺序读取：
 
-允许修改 `safedrive_foundry/agents/tools/**`、`safedrive_foundry/agents/governance/**`、`safedrive_foundry/agents/audit/**`、`tests/g7/**` 和 `docs/architecture/**`；不实现具体 Agent 策略。
+1. docs/project/EXECUTION_ARCHITECTURE.md 组件权限、Registry、身份与审计章节；
+2. docs/project/G2_G8_INDUSTRIAL_ARCHITECTURE.md 第 8、10、11 节；
+3. docs/project/SINGLE_MACHINE_EXECUTION_BUDGET.md 第 2、5～8 节；
+4. G6-05 发布资产、确定性脚本入口、断点和限制；
+
+只读取列出的章节和直接依赖最终产物；引用文档继续列出必读项时，按其任务索引继续读取。
+
+## 目标
+
+为场景/失败查询、运行请求、最小化、manifest 和报告草案建立 typed tools、路径沙箱、预算、超时、dry-run、幂等、审批、审计、停止和恢复。
+
+## 实现范围与边界
+
+- 不执行任意 shell/Python，不创建 CARLA client/tick master，不入实时控制；
+- 不修改冻结资产、真值、split、Safety 阈值或 release 结论；
+- 不把网页/提示内容当指令，不访问未登记凭据/路径；
+- 每次调用记录 stable id、schema/hash、版本、成本、证据和审批；
 
 ## 完成标准与验证
 
-Agent 不能执行任意命令、修改冻结资产/真值/阈值；每次调用有稳定 ID、输入输出、版本、成本和证据；合法/非法/越权/重复/超时/中断红队通过。
+- 合法/非法/越权/重复/超时/中断/资源耗尽/注入红队通过。
+- 关闭模型后工具可由脚本/人工调用。
+- 审计日志可重放并验证 hash。
+- 权限模型和自动/审批/禁止清单冻结。
 
-## 交付物
+## 允许修改与交付物
 
-- 本任务范围内的实现或配置、对应测试/场景、运行记录和可追溯报告；具体对象以本文件的范围和完成标准为准。
+本节所列实现组件路径均相对 safedrive_foundry/；tests/、docs/、tasks/ 与 PROGRESS.md 相对仓库根目录。
 
-## 资源与自动化边界
+允许修改 `agents/tools、governance、audit、tests/g7、docs` 及本任务和 `PROGRESS.md`。交付实现/配置、对应测试、原始运行、可追溯报告和精确断点；涉及真实 CARLA 时先执行 `sdf sim preflight`。当前任务通过后停止，不自动开始下一任务。
 
-- 仅使用本任务允许修改路径、已登记输入和版本化配置，不启动后续任务。涉及真实 CARLA 时先执行 `sdf sim preflight`；不得自行解析 WSL gateway、创建第二套 `carla.Client`/tick master 或由业务节点直接调用 `world.tick()`。Agent 不执行任意 shell，学习模块不得修改 Safety 硬约束，MCP 保留到 G7-01。
 ## 断点记录
 
-最后状态：PENDING；恢复时记录工具版本、权限策略、威胁项和审计样例。
+尚未开始。恢复时先核对直接依赖的最终接口、版本、冻结协议和外部状态。

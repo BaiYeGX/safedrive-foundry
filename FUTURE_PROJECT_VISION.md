@@ -1,8 +1,8 @@
 # SafeDrive Foundry v5.0：驾驶 VLA、世界模型与智能体安全闭环平台
 
-> **正式名称**：基于 CARLA–ROS 2 的驾驶 VLA、反事实世界模型与智能体安全闭环平台  
-> **English**: **SafeDrive Foundry: A CARLA–ROS 2 Platform for Driving VLA, Counterfactual World Models and Agentic Safety Loops**  
-> **项目形态**：纯软件在环（SIL）自主驾驶研发平台  
+> **正式名称**：基于 CARLA–ROS 2 的驾驶 VLA、反事实世界模型与智能体安全闭环平台
+> **English**: **SafeDrive Foundry: A CARLA–ROS 2 Platform for Driving VLA, Counterfactual World Models and Agentic Safety Loops**
+> **项目形态**：纯软件在环（SIL）自主驾驶研发平台
 > **文档定位**：项目唯一执行主方案；功能、实验、简历表述和演示口径均以本文为准
 
 ## 0. 最终定义
@@ -77,15 +77,15 @@ VLA 与世界模型后训练
 ```text
 安全要求 / 覆盖缺口 / 失败簇 / 世界模型不确定区
         ↓
-Scenario Scientist Agent 生成可证伪场景假设
+Scenario/Failure Research Assistant 生成可证伪场景假设
         ↓
 约束求解和 Schema 校验得到合法参数空间
         ↓
-Random / LHS / CMA-ES / Agent-guided 同预算搜索
+Random / LHS / MAP-Elites 同预算搜索
         ↓
 失败复现、聚类和最小反例
         ↓
-Failure Analyst 组织证据，确定性指标给出结论
+Research Assistant 组织证据草案，确定性指标给出结论
         ↓
 Release Gate 运行历史失败与正常能力回归
         ↓
@@ -147,7 +147,7 @@ Agent 负责提出假设和调用工具，不能自定义事实、修改安全�
 2. **交互式反事实世界模型**：显式学习 `P(other future | scene, ego action)`，与 CARLA 构成快慢双世界。
 3. **可审计安全数据飞轮**：覆盖缺口、模型不确定性和失败簇驱动搜索、回放、最小化与后训练；Agent 只提高研发效率，确定性门禁负责数据纳入和版本准出。
 
-RATO-SCP 是安全修复核心算法，LHS/CMA-ES 是失败主动发现方法，二者服务上述三项贡献，不单独包装成脱离系统的噱头。
+纵向 QP/受限 RATO-SCP 是两级安全修复，Random/LHS/MAP-Elites 是失败发现方法；它们服务 VLA、世界模型和安全闭环，不单独包装成脱离系统的噱头。
 
 ## 3. 六平面系统架构
 
@@ -532,11 +532,9 @@ Agent 不直接驾驶，只通过白名单工具参与研发闭环。
 
 ### 11.1 Agent 角色
 
-- **Scenario Scientist**：从事故描述、覆盖缺口、OOD 和失败簇生成逻辑场景假设。
-- **Counterexample Agent**：调用 LHS/CMA-ES、回放和 delta debugging 搜索并压缩失败。
-- **Failure Analyst**：基于视频、BEV、ROS trace、VLA、世界模型和 Shield 证据输出故障时间线。
-- **Data Curator**：决定样本进入 SFT、DAgger、Preference、World Model 或 Regression，检查泄漏与重复。
-- **Release Gate Agent**：汇总证据形成候选报告，确定性门禁做最终裁决。
+- **Scenario/Failure Research Assistant**：根据覆盖缺口、OOD、世界模型不确定性和失败簇提出逻辑场景，并基于视频、BEV、ROS trace、VLA、世界模型和 Safety 证据生成根因候选。
+- **Deterministic Data/Release Workflow**：查询、去重、泄漏检查、版本登记、统计和准出均由确定性程序完成；Agent 只能提出 manifest 和报告草案。
+- 关闭 LLM 后，场景执行、数据门禁、回归和版本准出仍必须完整可用。
 
 ### 11.2 白名单工具
 
@@ -577,13 +575,13 @@ Logical Scenario
 → LHS 初始采样
 → CARLA rollout
 → 多目标风险指标
-→ CMA-ES 更新
+→ MAP-Elites 覆盖 archive 更新
 → 重复验证
 → Failure Minimization
 → Clustering / Regression Registry
 ```
 
-与 Manual、Random 和 LHS 使用相同仿真预算比较。无效初始化、Actor 未进入冲突区、生成失败、路线不存在或仿真崩溃必须标为 INVALID，不得计作高风险发现。
+与 Random 和 LHS 使用相同仿真预算比较；Manual 仅作为人工设计场景套件。无效初始化、Actor 未进入冲突区、生成失败、路线不存在或仿真崩溃必须标为 INVALID，不得计作高风险发现。
 
 ### 12.2 反事实分支
 
@@ -702,10 +700,10 @@ Functional Scenario
 
 ### 15.7 核心实验矩阵
 
-策略：Classic、Raw VLA、VLA+Validator、VLA+RATO、VLA+World、Full Hybrid。  
-训练：SFT、+DAgger、+Risk Anticipation、+Preference、+World/RL Post-training。  
-搜索：Manual、Random、LHS、CMA-ES、Agent-guided Search。  
-安全：Hard Reject、RATO-Longitudinal、RATO-SCP、Classic Fallback。  
+发布配置：Classic、VLA+Safety、VLA+World+Safety、PostTrained-Full。
+训练：SFT、+DAgger、+Risk Anticipation、+CARLA-verified Preference。
+搜索：Engineered Suite、Random、LHS、MAP-Elites。
+安全：Hard Reject、RATO-Longitudinal、RATO-SCP、Classic Fallback。
 世界：无世界模型、Reward Only、Interactive World、Interactive World + Active CARLA Verification。
 
 所有关键实验采用多个随机种子，报告均值、标准差和置信区间；碰撞等稀有事件使用 bootstrap。安全、效率和舒适性采用 Pareto 分析，不用单一加权分数掩盖退化。
@@ -864,7 +862,7 @@ sdf sim run <config>       运行一个场景/策略
 sdf data collect <suite>   批量生成专家或失败数据
 sdf train vla <config>     VLA 训练、断点续训和评测
 sdf train world <config>   世界模型训练与校准
-sdf search <config>        Random/LHS/CMA-ES/Agent-guided 搜索
+sdf search <config>        Random/LHS/MAP-Elites 搜索
 sdf replay <run_id>        失败复现和反事实分支
 sdf regress <release>      全量回归
 sdf report <release>       生成静态报告与 Evidence Bundle
@@ -968,7 +966,7 @@ safedrive_foundry/
 
 - Classic、Raw VLA、World-selected、RATO 和 Expert 轨迹对比。
 - 世界模型预测与 CARLA 真实后果对比。
-- Agent-guided 与 Random/LHS/CMA-ES 搜索对比。
+- Research Assistant 与固定模板对比；MAP-Elites 与 Random/LHS 搜索对比。
 - 接管前风险时间线和反事实分支。
 - 后训练前后安全、效率、舒适性和回归对比。
 - 架构图、演示视频、技术报告和版本准出报告。

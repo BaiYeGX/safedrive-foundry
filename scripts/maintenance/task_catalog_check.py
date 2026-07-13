@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-EXPECTED_TASK_COUNT = 57
+EXPECTED_TASK_COUNT = 48
 PHASES = tuple(f"G{i}" for i in range(9))
 TASK_ID_RE = re.compile(r"(?<![A-Za-z0-9])G[0-8]-\d{2}(?!\d)")
 FILENAME_RE = re.compile(r"^(G[0-8]-\d{2})_[^/]+\.md$")
@@ -36,6 +36,11 @@ RANGE_RE = re.compile(
     r"(?:～|~|–|—|至|-)\s*"
     r"(?:(?P<end_phase>G[0-8])-)?(?P<end_num>\d{2})(?!\d)"
 )
+STARTUP_SECTION_RE = re.compile(
+    r"^## 启动读取清单\s*$\n(?P<body>.*?)(?=^##\s|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+DOC_PATH_RE = re.compile(r"(?<![A-Za-z0-9_./-])(docs/[A-Za-z0-9_./-]+\.md)")
 
 TASK_STATES = {
     "PENDING",
@@ -47,6 +52,7 @@ TASK_STATES = {
     "DECISION_REQUIRED",
     "VALIDATING",
     "COMPLETED",
+    "COMPLETED_WITH_LIMITS",
     "FAILED_FINAL",
 }
 
@@ -199,7 +205,10 @@ def _check_progress(root: Path, task_statuses: dict[str, str]) -> list[dict[str,
     status_match = re.search(r"\|\s*当前状态\s*\|([^|]+)\|", text)
     if not current_match or not status_match:
         return []
-    current_ids = TASK_ID_RE.findall(current_match.group(1))
+    current_cell = current_match.group(1).replace("*", "").replace("`", "").strip()
+    if re.match(r"^(?:无|none|n/a)\b", current_cell, re.IGNORECASE):
+        return []
+    current_ids = TASK_ID_RE.findall(current_cell)
     current_status_match = re.search(r"[A-Z][A-Z_]+", status_match.group(1))
     if not current_ids or not current_status_match:
         return []
@@ -231,6 +240,10 @@ def run_check(root: str | Path, expected_count: int = EXPECTED_TASK_COUNT) -> di
     errors.extend(roadmap_errors)
 
     files = _active_task_files(root_path)
+    start_task_path = root_path / "START_TASK.md"
+    start_task_text = start_task_path.read_text(encoding="utf-8") if start_task_path.exists() else ""
+    if not start_task_path.exists():
+        errors.append(_error("missing_start_task", "START_TASK.md does not exist"))
     files_by_id: dict[str, list[Path]] = defaultdict(list)
     parsed_tasks: list[dict[str, Any]] = []
     task_statuses: dict[str, str] = {}
@@ -254,6 +267,45 @@ def run_check(root: str | Path, expected_count: int = EXPECTED_TASK_COUNT) -> di
             "dependencies": dependencies,
         }
         parsed_tasks.append(task)
+
+        if relative.parts[1] in {f"G{i}" for i in range(2, 9)}:
+            startup_match = STARTUP_SECTION_RE.search(text)
+            if startup_match is None:
+                errors.append(
+                    _error(
+                        "missing_startup_reading_list",
+                        f"{relative.as_posix()} has no 启动读取清单",
+                        path=relative.as_posix(),
+                    )
+                )
+            else:
+                doc_paths = sorted(set(DOC_PATH_RE.findall(startup_match.group("body"))))
+                if not doc_paths:
+                    errors.append(
+                        _error(
+                            "empty_startup_document_route",
+                            f"{relative.as_posix()} startup list names no docs/*.md document",
+                            path=relative.as_posix(),
+                        )
+                    )
+                for doc_path in doc_paths:
+                    if not (root_path / doc_path).is_file():
+                        errors.append(
+                            _error(
+                                "missing_startup_document",
+                                f"{relative.as_posix()} routes missing document {doc_path}",
+                                path=relative.as_posix(),
+                                document=doc_path,
+                            )
+                        )
+        if start_task_text and relative.as_posix() not in start_task_text:
+            errors.append(
+                _error(
+                    "missing_start_route",
+                    f"START_TASK.md does not route {relative.as_posix()}",
+                    path=relative.as_posix(),
+                )
+            )
 
         if filename_id is None:
             errors.append(
