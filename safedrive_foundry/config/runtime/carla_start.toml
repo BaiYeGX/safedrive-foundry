@@ -1,6 +1,16 @@
 # This is the only startup specification consumed by `sdf sim ensure`.
 # The path and arguments were validated in docs/environment/CARLA_SERVER_BASELINE.md.
+#
+# Windows host path and WSL mount path refer to the same installation.
+# From WSL, ensure launches CarlaUE4.exe via powershell.exe interop.
+# A native Linux CarlaUE4.sh is used only when present next to the install.
+
 [carla_start]
 expected_version = "0.9.16"
 windows_executable = "E:\\CARLA_0.9.16\\CarlaUE4.exe"
-arguments = "/Game/Carla/Maps/Town10HD -windowed -ResX=800 -ResY=600 -quality-level=Low -nosound -carla-rpc-port=2000"
+wsl_path = "/mnt/e/CARLA_0.9.16/CarlaUE4.exe"
+# Prefer DX11 on Windows 11 to reduce UE "shader compilation failures are fatal".
+# Stay on one startup map; avoid client.load_world map switches that re-trigger shaders.
+# Prefer Town03 (urban loops / multi-junction) for complex classic-expert live.
+# If Windows start args ignore the map token, live runner may one-shot load_world once.
+arguments = "/Game/Carla/Maps/Town03 -windowed -ResX=800 -ResY=600 -quality-level=Low -nosound -dx11 -carla-rpc-port=2000"

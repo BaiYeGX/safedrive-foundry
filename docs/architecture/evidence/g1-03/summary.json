@@ -1,0 +1,40 @@
+{
+  "carla_source": "CARLA 0.9.16 Content/Carla/Maps/OpenDrive",
+  "maps": {
+    "Town01": {
+      "anomalies": 22,
+      "edges": 336,
+      "goal": "R1:S0:L-1",
+      "map_hash": "c1c71b0914e6ae5b97c740d2e186c7f8542f8d32e2787e48eff765d9f0e189e9",
+      "nodes": 422,
+      "route_id": "route-3f56f27ac848b408",
+      "route_ok": true,
+      "source_kind": "carla_packaged_opendrive",
+      "start": "R0:S0:L-1"
+    },
+    "Town03": {
+      "anomalies": 39,
+      "edges": 1669,
+      "goal": "R0:S0:L2",
+      "map_hash": "345f3317d1b2b9b36ba12a49c99c01768689d2bd658731ed92f8facc6691a4ae",
+      "nodes": 1960,
+      "route_id": "route-270011898d1b6e17",
+      "route_ok": true,
+      "source_kind": "carla_packaged_opendrive",
+      "start": "R0:S0:L3"
+    },
+    "Town10HD": {
+      "anomalies": 20,
+      "edges": 511,
+      "goal": "R0:S0:L1",
+      "map_hash": "9e146eca20dafd006509aae5d7a4df803695286306f10fc84a99ca2d4c747b7c",
+      "nodes": 509,
+      "route_id": "route-5f52355bf80b86a7",
+      "route_ok": true,
+      "source_kind": "carla_packaged_opendrive",
+      "start": "R0:S0:L2"
+    }
+  },
+  "schema": "safedrive.g1-03.evidence.v1",
+  "synthetic_regression": "retained_under_fixtures/"
+}

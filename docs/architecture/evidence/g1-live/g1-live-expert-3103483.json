@@ -1,0 +1,1094 @@
+{
+  "behavior_timeline_tail": [
+    {
+      "event": "TICK",
+      "from_state": "CRUISE",
+      "goal": {
+        "hold_seconds": null,
+        "metadata": {
+          "behavior_layer": "classic_g1_03",
+          "emits_controls": false,
+          "emits_local_trajectory": false
+        },
+        "observable_inputs": [
+          "detected_lead",
+          "perceived_signal",
+          "navigation_instruction",
+          "detected_obstacle",
+          "timeout_clock"
+        ],
+        "oracle_inputs": [
+          "signal_state",
+          "true_lead_vehicle",
+          "true_cross_traffic",
+          "route_maneuver",
+          "obstacle_polygon"
+        ],
+        "reason": "initial_enter",
+        "route_id": "live-3103483",
+        "state": "CRUISE",
+        "target_lane_id": null,
+        "target_speed_mps": 12.0
+      },
+      "phase": "hold",
+      "reason": "cruise_hold:tick",
+      "suppressed": false,
+      "timestamp_s": 17.8,
+      "to_state": "CRUISE"
+    },
+    {
+      "event": "TICK",
+      "from_state": "CRUISE",
+      "goal": {
+        "hold_seconds": null,
+        "metadata": {
+          "behavior_layer": "classic_g1_03",
+          "emits_controls": false,
+          "emits_local_trajectory": false
+        },
+        "observable_inputs": [
+          "detected_lead",
+          "perceived_signal",
+          "navigation_instruction",
+          "detected_obstacle",
+          "timeout_clock"
+        ],
+        "oracle_inputs": [
+          "signal_state",
+          "true_lead_vehicle",
+          "true_cross_traffic",
+          "route_maneuver",
+          "obstacle_polygon"
+        ],
+        "reason": "initial_enter",
+        "route_id": "live-3103483",
+        "state": "CRUISE",
+        "target_lane_id": null,
+        "target_speed_mps": 12.0
+      },
+      "phase": "hold",
+      "reason": "cruise_hold:tick",
+      "suppressed": false,
+      "timestamp_s": 17.82,
+      "to_state": "CRUISE"
+    },
+    {
+      "event": "TICK",
+      "from_state": "CRUISE",
+      "goal": {
+        "hold_seconds": null,
+        "metadata": {
+          "behavior_layer": "classic_g1_03",
+          "emits_controls": false,
+          "emits_local_trajectory": false
+        },
+        "observable_inputs": [
+          "detected_lead",
+          "perceived_signal",
+          "navigation_instruction",
+          "detected_obstacle",
+          "timeout_clock"
+        ],
+        "oracle_inputs": [
+          "signal_state",
+          "true_lead_vehicle",
+          "true_cross_traffic",
+          "route_maneuver",
+          "obstacle_polygon"
+        ],
+        "reason": "initial_enter",
+        "route_id": "live-3103483",
+        "state": "CRUISE",
+        "target_lane_id": null,
+        "target_speed_mps": 12.0
+      },
+      "phase": "hold",
+      "reason": "cruise_hold:tick",
+      "suppressed": false,
+      "timestamp_s": 17.84,
+      "to_state": "CRUISE"
+    },
+    {
+      "event": "TICK",
+      "from_state": "CRUISE",
+      "goal": {
+        "hold_seconds": null,
+        "metadata": {
+          "behavior_layer": "classic_g1_03",
+          "emits_controls": false,
+          "emits_local_trajectory": false
+        },
+        "observable_inputs": [
+          "detected_lead",
+          "perceived_signal",
+          "navigation_instruction",
+          "detected_obstacle",
+          "timeout_clock"
+        ],
+        "oracle_inputs": [
+          "signal_state",
+          "true_lead_vehicle",
+          "true_cross_traffic",
+          "route_maneuver",
+          "obstacle_polygon"
+        ],
+        "reason": "initial_enter",
+        "route_id": "live-3103483",
+        "state": "CRUISE",
+        "target_lane_id": null,
+        "target_speed_mps": 12.0
+      },
+      "phase": "hold",
+      "reason": "cruise_hold:tick",
+      "suppressed": false,
+      "timestamp_s": 17.86,
+      "to_state": "CRUISE"
+    },
+    {
+      "event": "TICK",
+      "from_state": "CRUISE",
+      "goal": {
+        "hold_seconds": null,
+        "metadata": {
+          "behavior_layer": "classic_g1_03",
+          "emits_controls": false,
+          "emits_local_trajectory": false
+        },
+        "observable_inputs": [
+          "detected_lead",
+          "perceived_signal",
+          "navigation_instruction",
+          "detected_obstacle",
+          "timeout_clock"
+        ],
+        "oracle_inputs": [
+          "signal_state",
+          "true_lead_vehicle",
+          "true_cross_traffic",
+          "route_maneuver",
+          "obstacle_polygon"
+        ],
+        "reason": "initial_enter",
+        "route_id": "live-3103483",
+        "state": "CRUISE",
+        "target_lane_id": null,
+        "target_speed_mps": 12.0
+      },
+      "phase": "hold",
+      "reason": "cruise_hold:tick",
+      "suppressed": false,
+      "timestamp_s": 17.88,
+      "to_state": "CRUISE"
+    },
+    {
+      "event": "TICK",
+      "from_state": "CRUISE",
+      "goal": {
+        "hold_seconds": null,
+        "metadata": {
+          "behavior_layer": "classic_g1_03",
+          "emits_controls": false,
+          "emits_local_trajectory": false
+        },
+        "observable_inputs": [
+          "detected_lead",
+          "perceived_signal",
+          "navigation_instruction",
+          "detected_obstacle",
+          "timeout_clock"
+        ],
+        "oracle_inputs": [
+          "signal_state",
+          "true_lead_vehicle",
+          "true_cross_traffic",
+          "route_maneuver",
+          "obstacle_polygon"
+        ],
+        "reason": "initial_enter",
+        "route_id": "live-3103483",
+        "state": "CRUISE",
+        "target_lane_id": null,
+        "target_speed_mps": 12.0
+      },
+      "phase": "hold",
+      "reason": "cruise_hold:tick",
+      "suppressed": false,
+      "timestamp_s": 17.900000000000002,
+      "to_state": "CRUISE"
+    },
+    {
+      "event": "TICK",
+      "from_state": "CRUISE",
+      "goal": {
+        "hold_seconds": null,
+        "metadata": {
+          "behavior_layer": "classic_g1_03",
+          "emits_controls": false,
+          "emits_local_trajectory": false
+        },
+        "observable_inputs": [
+          "detected_lead",
+          "perceived_signal",
+          "navigation_instruction",
+          "detected_obstacle",
+          "timeout_clock"
+        ],
+        "oracle_inputs": [
+          "signal_state",
+          "true_lead_vehicle",
+          "true_cross_traffic",
+          "route_maneuver",
+          "obstacle_polygon"
+        ],
+        "reason": "initial_enter",
+        "route_id": "live-3103483",
+        "state": "CRUISE",
+        "target_lane_id": null,
+        "target_speed_mps": 12.0
+      },
+      "phase": "hold",
+      "reason": "cruise_hold:tick",
+      "suppressed": false,
+      "timestamp_s": 17.92,
+      "to_state": "CRUISE"
+    },
+    {
+      "event": "TICK",
+      "from_state": "CRUISE",
+      "goal": {
+        "hold_seconds": null,
+        "metadata": {
+          "behavior_layer": "classic_g1_03",
+          "emits_controls": false,
+          "emits_local_trajectory": false
+        },
+        "observable_inputs": [
+          "detected_lead",
+          "perceived_signal",
+          "navigation_instruction",
+          "detected_obstacle",
+          "timeout_clock"
+        ],
+        "oracle_inputs": [
+          "signal_state",
+          "true_lead_vehicle",
+          "true_cross_traffic",
+          "route_maneuver",
+          "obstacle_polygon"
+        ],
+        "reason": "initial_enter",
+        "route_id": "live-3103483",
+        "state": "CRUISE",
+        "target_lane_id": null,
+        "target_speed_mps": 12.0
+      },
+      "phase": "hold",
+      "reason": "cruise_hold:tick",
+      "suppressed": false,
+      "timestamp_s": 17.94,
+      "to_state": "CRUISE"
+    },
+    {
+      "event": "TICK",
+      "from_state": "CRUISE",
+      "goal": {
+        "hold_seconds": null,
+        "metadata": {
+          "behavior_layer": "classic_g1_03",
+          "emits_controls": false,
+          "emits_local_trajectory": false
+        },
+        "observable_inputs": [
+          "detected_lead",
+          "perceived_signal",
+          "navigation_instruction",
+          "detected_obstacle",
+          "timeout_clock"
+        ],
+        "oracle_inputs": [
+          "signal_state",
+          "true_lead_vehicle",
+          "true_cross_traffic",
+          "route_maneuver",
+          "obstacle_polygon"
+        ],
+        "reason": "initial_enter",
+        "route_id": "live-3103483",
+        "state": "CRUISE",
+        "target_lane_id": null,
+        "target_speed_mps": 12.0
+      },
+      "phase": "hold",
+      "reason": "cruise_hold:tick",
+      "suppressed": false,
+      "timestamp_s": 17.96,
+      "to_state": "CRUISE"
+    },
+    {
+      "event": "TICK",
+      "from_state": "CRUISE",
+      "goal": {
+        "hold_seconds": null,
+        "metadata": {
+          "behavior_layer": "classic_g1_03",
+          "emits_controls": false,
+          "emits_local_trajectory": false
+        },
+        "observable_inputs": [
+          "detected_lead",
+          "perceived_signal",
+          "navigation_instruction",
+          "detected_obstacle",
+          "timeout_clock"
+        ],
+        "oracle_inputs": [
+          "signal_state",
+          "true_lead_vehicle",
+          "true_cross_traffic",
+          "route_maneuver",
+          "obstacle_polygon"
+        ],
+        "reason": "initial_enter",
+        "route_id": "live-3103483",
+        "state": "CRUISE",
+        "target_lane_id": null,
+        "target_speed_mps": 12.0
+      },
+      "phase": "hold",
+      "reason": "cruise_hold:tick",
+      "suppressed": false,
+      "timestamp_s": 17.98,
+      "to_state": "CRUISE"
+    }
+  ],
+  "connection": {
+    "client_version": "0.9.16",
+    "details": {
+      "world_settings": {
+        "fixed_delta_seconds": null,
+        "max_substep_delta_time": 0.01,
+        "max_substeps": 10,
+        "substepping": true,
+        "synchronous_mode": false
+      }
+    },
+    "error_code": null,
+    "error_message": null,
+    "fixed_delta_seconds": null,
+    "host": "127.0.0.1",
+    "host_source": "loopback_local",
+    "map": "Carla/Maps/Town10HD_Opt",
+    "needs_user_action": false,
+    "port": 2000,
+    "previous_host": null,
+    "process_state": "RUNNING",
+    "recovery_action": null,
+    "recovery_result": null,
+    "resolved_host": "127.0.0.1",
+    "retry_count": 0,
+    "rpc_reachable": true,
+    "server_version": "0.9.16",
+    "status": "READY",
+    "synchronous_mode": false,
+    "task_action": "IN_PROGRESS",
+    "tcp_reachable": true,
+    "tick_owner": "free (configured=sdf.g0-05.sync)"
+  },
+  "control_config_hash": "362f55bfeefad1123e4f967cfeaa7ec93c0e8fe30e81a7f1de275bd7d1c38bf2",
+  "control_profile": "control_50hz",
+  "failure": "PROGRESS_SUCCESS_NOT_ARRIVED",
+  "final_goal_dist_m": 10.760860443115234,
+  "frenet_config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+  "history_tail": [
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 12.349706649780273,
+      "e2e_ms": 0.10209899846813641,
+      "frame": 60579,
+      "k": 870,
+      "mode": "mpc",
+      "solver_ms": 0.0992640016193036,
+      "v": 2.7650824119195647,
+      "x": 82.88414001464844,
+      "y": 124.03313446044922
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 12.294997215270996,
+      "e2e_ms": 0.1096460000553634,
+      "frame": 60580,
+      "k": 871,
+      "mode": "mpc",
+      "solver_ms": 0.10705000022426248,
+      "v": 2.766714276899435,
+      "x": 82.83995056152344,
+      "y": 124.06647491455078
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 12.240262031555176,
+      "e2e_ms": 0.10711199865909293,
+      "frame": 60581,
+      "k": 872,
+      "mode": "mpc",
+      "solver_ms": 0.10449700130266137,
+      "v": 2.7683106583746935,
+      "x": 82.79570007324219,
+      "y": 124.09976959228516
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 12.18549633026123,
+      "e2e_ms": 0.11381000149413012,
+      "frame": 60582,
+      "k": 873,
+      "mode": "mpc",
+      "solver_ms": 0.09872000009636395,
+      "v": 2.769835334872953,
+      "x": 82.75139617919922,
+      "y": 124.13304138183594
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 12.130697250366211,
+      "e2e_ms": 0.0965309991443064,
+      "frame": 60583,
+      "k": 874,
+      "mode": "mpc",
+      "solver_ms": 0.0938159973884467,
+      "v": 2.7712573269866736,
+      "x": 82.70703125,
+      "y": 124.1662826538086
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 12.075860977172852,
+      "e2e_ms": 0.11688700033118948,
+      "frame": 60584,
+      "k": 875,
+      "mode": "mpc",
+      "solver_ms": 0.11439199806773104,
+      "v": 2.7725532732461025,
+      "x": 82.66260528564453,
+      "y": 124.19950103759766
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 12.021007537841797,
+      "e2e_ms": 0.0845889990159776,
+      "frame": 60585,
+      "k": 876,
+      "mode": "mpc",
+      "solver_ms": 0.08213199907913804,
+      "v": 2.773705215319756,
+      "x": 82.61813354492188,
+      "y": 124.23268127441406
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.966150283813477,
+      "e2e_ms": 0.15270200310624205,
+      "frame": 60586,
+      "k": 877,
+      "mode": "mpc",
+      "solver_ms": 0.14998500046203844,
+      "v": 2.7747090532500724,
+      "x": 82.57365417480469,
+      "y": 124.265869140625
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.91125774383545,
+      "e2e_ms": 0.08815300316200592,
+      "frame": 60587,
+      "k": 878,
+      "mode": "mpc",
+      "solver_ms": 0.08563200026401319,
+      "v": 2.775762401518543,
+      "x": 82.52912902832031,
+      "y": 124.29905700683594
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.856348991394043,
+      "e2e_ms": 0.08428200089838356,
+      "frame": 60588,
+      "k": 879,
+      "mode": "mpc",
+      "solver_ms": 0.08148399865604006,
+      "v": 2.7768572023251332,
+      "x": 82.48455810546875,
+      "y": 124.33220672607422
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.801398277282715,
+      "e2e_ms": 0.11783399895648472,
+      "frame": 60589,
+      "k": 880,
+      "mode": "mpc",
+      "solver_ms": 0.11568899935809895,
+      "v": 2.777978041839228,
+      "x": 82.43975067138672,
+      "y": 124.3650131225586
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.746430397033691,
+      "e2e_ms": 0.0800950001575984,
+      "frame": 60590,
+      "k": 881,
+      "mode": "mpc",
+      "solver_ms": 0.07796600039000623,
+      "v": 2.776817119779183,
+      "x": 82.3945083618164,
+      "y": 124.39704132080078
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.691529273986816,
+      "e2e_ms": 0.10332300007576123,
+      "frame": 60591,
+      "k": 882,
+      "mode": "mpc",
+      "solver_ms": 0.10093699893332087,
+      "v": 2.7716015520994493,
+      "x": 82.34877014160156,
+      "y": 124.4280014038086
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.63674259185791,
+      "e2e_ms": 0.13327399938134477,
+      "frame": 60592,
+      "k": 883,
+      "mode": "mpc",
+      "solver_ms": 0.13068599946564063,
+      "v": 2.762986553536878,
+      "x": 82.30252075195312,
+      "y": 124.45774841308594
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.582077980041504,
+      "e2e_ms": 0.12263800090295263,
+      "frame": 60593,
+      "k": 884,
+      "mode": "mpc",
+      "solver_ms": 0.11965800149482675,
+      "v": 2.751835723707875,
+      "x": 82.25592803955078,
+      "y": 124.48658752441406
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.527414321899414,
+      "e2e_ms": 0.1063109993992839,
+      "frame": 60594,
+      "k": 885,
+      "mode": "mpc",
+      "solver_ms": 0.10371200187364593,
+      "v": 2.7466403967782314,
+      "x": 82.2091293334961,
+      "y": 124.5150375366211
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.472732543945312,
+      "e2e_ms": 0.08185100159607828,
+      "frame": 60595,
+      "k": 886,
+      "mode": "mpc",
+      "solver_ms": 0.07937699774629436,
+      "v": 2.745663384473799,
+      "x": 82.16226196289062,
+      "y": 124.54339599609375
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.4180269241333,
+      "e2e_ms": 0.08580799840274267,
+      "frame": 60596,
+      "k": 887,
+      "mode": "mpc",
+      "solver_ms": 0.08323300062329508,
+      "v": 2.746195458563355,
+      "x": 82.11540222167969,
+      "y": 124.57182312011719
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.363288879394531,
+      "e2e_ms": 0.08484900172334164,
+      "frame": 60597,
+      "k": 888,
+      "mode": "mpc",
+      "solver_ms": 0.08239899761974812,
+      "v": 2.747149104046576,
+      "x": 82.0685806274414,
+      "y": 124.60039520263672
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.308533668518066,
+      "e2e_ms": 0.08252499901573174,
+      "frame": 60598,
+      "k": 889,
+      "mode": "mpc",
+      "solver_ms": 0.08013900151127018,
+      "v": 2.7481060403111512,
+      "x": 82.02183532714844,
+      "y": 124.629150390625
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.253768920898438,
+      "e2e_ms": 0.11630299923126586,
+      "frame": 60599,
+      "k": 890,
+      "mode": "mpc",
+      "solver_ms": 0.11337399701005779,
+      "v": 2.748923654155227,
+      "x": 81.97516632080078,
+      "y": 124.65807342529297
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.198986053466797,
+      "e2e_ms": 0.083127997640986,
+      "frame": 60600,
+      "k": 891,
+      "mode": "mpc",
+      "solver_ms": 0.08055900252657011,
+      "v": 2.7495630444053756,
+      "x": 81.92857360839844,
+      "y": 124.68718719482422
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.144207000732422,
+      "e2e_ms": 0.13275099991005845,
+      "frame": 60601,
+      "k": 892,
+      "mode": "mpc",
+      "solver_ms": 0.13018800018471666,
+      "v": 2.7500241207413834,
+      "x": 81.88206481933594,
+      "y": 124.7164535522461
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.089427947998047,
+      "e2e_ms": 0.08309899931191467,
+      "frame": 60602,
+      "k": 893,
+      "mode": "mpc",
+      "solver_ms": 0.08061200060183182,
+      "v": 2.750325350756537,
+      "x": 81.83562469482422,
+      "y": 124.74585723876953
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 11.03465747833252,
+      "e2e_ms": 0.08089800030575134,
+      "frame": 60603,
+      "k": 894,
+      "mode": "mpc",
+      "solver_ms": 0.07810700117261149,
+      "v": 2.750487639409981,
+      "x": 81.78926086425781,
+      "y": 124.775390625
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 10.979884147644043,
+      "e2e_ms": 0.07877900134189986,
+      "frame": 60604,
+      "k": 895,
+      "mode": "mpc",
+      "solver_ms": 0.07635799920535646,
+      "v": 2.750530914224624,
+      "x": 81.74295043945312,
+      "y": 124.80503845214844
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 10.925129890441895,
+      "e2e_ms": 0.12660300126299262,
+      "frame": 60605,
+      "k": 896,
+      "mode": "mpc",
+      "solver_ms": 0.12385299851302989,
+      "v": 2.750478377196488,
+      "x": 81.69674682617188,
+      "y": 124.83485412597656
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 10.870382308959961,
+      "e2e_ms": 0.07413500134134665,
+      "frame": 60606,
+      "k": 897,
+      "mode": "mpc",
+      "solver_ms": 0.07165900024119765,
+      "v": 2.7506429482574415,
+      "x": 81.6506118774414,
+      "y": 124.86479187011719
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 10.815625190734863,
+      "e2e_ms": 0.23266200150828809,
+      "frame": 60607,
+      "k": 898,
+      "mode": "mpc",
+      "solver_ms": 0.23018800129648298,
+      "v": 2.7510583655122427,
+      "x": 81.60450744628906,
+      "y": 124.89481353759766
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 10.760860443115234,
+      "e2e_ms": 0.08812400119495578,
+      "frame": 60608,
+      "k": 899,
+      "mode": "mpc",
+      "solver_ms": 0.0857660015753936,
+      "v": 2.7517134283538645,
+      "x": 81.55841827392578,
+      "y": 124.92488861083984
+    }
+  ],
+  "map": "Carla/Maps/Town10HD_Opt",
+  "map_choice": "Town10HD",
+  "min_goal_dist_m": 10.760860443115234,
+  "mode_counts": {
+    "mpc": 900
+  },
+  "no_load_world": true,
+  "ok": true,
+  "plan_meta": [
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 7.62939453125e-06,
+      "failure_code": null,
+      "k": 0,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.0,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 101.29572000005282
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 1.525843452846932e-05,
+      "failure_code": null,
+      "k": 40,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 1.0401705396929013e-07,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 96.52997899684124
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.0003203750790270751,
+      "failure_code": null,
+      "k": 80,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 9.8147975002364e-06,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 101.54281900031492
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.001800495226934743,
+      "failure_code": null,
+      "k": 120,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 1.2280880550536875e-05,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 96.18351199969766
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.009178364428161633,
+      "failure_code": null,
+      "k": 160,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 1.5675317238556388e-06,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 96.71707099914784
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.05737012607256548,
+      "failure_code": null,
+      "k": 200,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.0007722929032696271,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 101.7813530015701
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.14462463947056944,
+      "failure_code": null,
+      "k": 240,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.041361560348089306,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 106.3433540002734
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.22206560781128346,
+      "failure_code": null,
+      "k": 280,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.09043262488689462,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 103.42672799743013
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.28718688913427337,
+      "failure_code": null,
+      "k": 320,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.14087238787507272,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 103.74152900112676
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.3419527051491863,
+      "failure_code": null,
+      "k": 360,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.19240727707331107,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 96.47067900004913
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.39149324077753617,
+      "failure_code": null,
+      "k": 400,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.03976012434541233,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 96.41728199858335
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.4304849999452821,
+      "failure_code": null,
+      "k": 440,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.09147748051459662,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 99.16976200111094
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.46279789723766845,
+      "failure_code": null,
+      "k": 480,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.143898884969069,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 96.04154800035758
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.48980430545450504,
+      "failure_code": null,
+      "k": 520,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.19687489763031518,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 96.08490000027814
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.5160539480739473,
+      "failure_code": null,
+      "k": 560,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.04132810653738411,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 96.34111100240261
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.5352380970986621,
+      "failure_code": null,
+      "k": 600,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.09440419419693416,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 97.39659700062475
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.5508675080340125,
+      "failure_code": null,
+      "k": 640,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.14779820989540568,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 96.09789699970861
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.5654607632550976,
+      "failure_code": null,
+      "k": 680,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.20156624193246536,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 96.55869000198436
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.5928629854079283,
+      "failure_code": null,
+      "k": 720,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.0453098697279698,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 98.21198899953743
+    },
+    {
+      "behavior": "CRUISE",
+      "candidates": 120,
+      "config_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+      "d0": 0.6344397480609011,
+      "failure_code": null,
+      "k": 760,
+      "ok": true,
+      "planner": "frenet_st",
+      "s0": 0.1378926593831428,
+      "target_speed_mps": 7.0,
+      "wall_time_ms": 95.55167299913592
+    }
+  ],
+  "route_length_m": 26.694181775351534,
+  "route_waypoints": 34,
+  "schema": "safedrive.g1.live_classic_expert.v2",
+  "seed": 3103483,
+  "stack": [
+    "ConnectionResolver",
+    "ScenarioRuntime",
+    "BehaviorStateMachine",
+    "FrenetPlanner",
+    "RiskField",
+    "ControlLoop",
+    "spectator_follow"
+  ],
+  "ticks_run": 900,
+  "watchdog": {
+    "deadline_miss_rate": 0.0,
+    "deadline_misses": 0,
+    "e2e_ms": {
+      "p50": 0.09689699800219387,
+      "p95": 0.1561190001666546,
+      "p99": 0.22332699882099405
+    },
+    "jitter_e2e_ms": 0.05922200216446072,
+    "solver_ms": {
+      "p50": 0.09427499753655866,
+      "p95": 0.1522249986010138,
+      "p99": 0.22012900080881082
+    },
+    "steps": 900
+  }
+}

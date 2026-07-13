@@ -1,6 +1,6 @@
 # G1-08：鲁棒自适应与 Deadline-Aware MPC（RACE-Control）
 
-**状态**：PENDING  
+**状态**：`COMPLETED_WITH_LIMITS`
 **依赖**：G1-06、G1-07
 
 ## 目标与为什么现在做
@@ -34,10 +34,27 @@
 
 不训练模型；以 CPU deadline 为核心。中断保存参数估计状态、误差包络版本、OSQP warm-start、run_id、最后控制帧和未完成消融矩阵。
 
+---
+
+## 验收结果与证据映射（追加，不替代上文标准）
+
+| 完成标准条款 | 结果 | 权威证据 / 测试 |
+|---|---|---|
+| Fixed / Warm / Adaptive / Full 配对消融 | **通过（offline plant）** | `tests.g1.test_g1_08_race_control`；`docs/architecture/evidence/g1-08/repair-20260713/` |
+| 扰动表（delay / gain / noise） | **通过（plant 注入）** | disturbances 含 `raw_runs` 与实测 `lateral_err`（非硬编码 0.4/0.3） |
+| 稳定 seed | **通过** | `stable_seed` = SHA-256（非 Python `hash()`） |
+| Watchdog 真实墙钟 | **通过（offline）** | 与 G1-06 一致：每 tick 单次 `record`；`steps==ticks` |
+| 无净收益保留基线 | **通过（admission）** | evidence `default_admission` 相对 fixed 记录 |
+| Solver / warm-start 表述 | **有限制** | `solver_type=constrained_gradient_ltv_bicycle`（**非** OSQP/SQP-RTI） |
+| CARLA 50Hz A/B | **未 VERIFIED** | 验证方法要求项；本轮以 offline 消融 + live identify 样本为限，**不**声称 CARLA 控制 A/B 收益 |
+
+### 验证与断点
+
 | 字段 | 内容 |
 |---|---|
-| 最后状态 | PENDING |
-| 已完成/修改文件/验证 | 无 |
-| 阻塞 | 无 |
-| 恢复步骤 | 校验 G1-06 固定 MPC 与 G1-07 RiskField 版本，从最近 A/B run 继续 |
-| 下一条建议命令 | 待执行时填写 |
+| 时间 | 2026-07-13 |
+| 最后状态 | `COMPLETED_WITH_LIMITS` |
+| 验证 | `PYTHONPATH=safedrive_foundry python3 -m unittest tests.g1.test_g1_08_race_control -v` |
+| 权威证据 | `docs/architecture/evidence/g1-08/repair-20260713/`（含 `manifest.json`） |
+| 限制 | 非 OSQP；无 CARLA 50Hz A/B VERIFIED；自适应为轻量在线估计 + 消融矩阵 |
+| 停止 | **任务关闭**；阶段已 `COMPLETED_WITH_LIMITS`（见 `PROGRESS.md` / G1-09）；不自动 G2 |

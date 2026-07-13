@@ -126,7 +126,7 @@ Agent 负责提出假设和调用工具，不能自定义事实、修改安全�
 - Safety Kernel：Validator、RATO-SCP、降级和最小风险停车。
 - 参数化场景、风险搜索、反事实分支与最小反例。
 - DAgger、接管偏好和反事实安全后训练。
-- Agentic Test/Data Loop：工具调用、证据约束和自身评测。
+- 可关闭的 Agentic Research Assistant：工具调用、证据约束和自身评测；确定性工作流在关闭 Agent 后仍可运行。
 - 历史失败、正常能力、OOD 和实时性的统一准出。
 
 ### 2.2 明确不做
@@ -145,7 +145,7 @@ Agent 负责提出假设和调用工具，不能自定义事实、修改安全�
 
 1. **可验证驾驶 VLA**：将语义理解、语言条件、轨迹、风险和不确定性统一到端到端策略输出，并通过外部安全内核执行。
 2. **交互式反事实世界模型**：显式学习 `P(other future | scene, ego action)`，与 CARLA 构成快慢双世界。
-3. **Agentic Safety Data Flywheel**：Agent 根据覆盖缺口、模型不确定性和失败簇调用搜索、回放、最小化与数据构建工具，驱动策略后训练和版本准出。
+3. **可审计安全数据飞轮**：覆盖缺口、模型不确定性和失败簇驱动搜索、回放、最小化与后训练；Agent 只提高研发效率，确定性门禁负责数据纳入和版本准出。
 
 RATO-SCP 是安全修复核心算法，LHS/CMA-ES 是失败主动发现方法，二者服务上述三项贡献，不单独包装成脱离系统的噱头。
 
@@ -158,17 +158,19 @@ RATO-SCP 是安全修复核心算法，LHS/CMA-ES 是失败主动发现方法，
                     ↓
              共享视觉/时序编码
                     ↓
-        ┌───────────┴───────────┐
-        ↓                       ↓
-VLA 理解与多候选轨迹生成    经典专家候选轨迹
-场景/规则/关键Actor/行为      可解释基线与回退
-        └───────────┬───────────┘
+        ┌───────────┴────────────┐
+        ↓                        ↓
+Fast/Slow VLA 多候选轨迹      经典专家候选轨迹
+行为/关键Actor/风险/不确定性   可解释基线与回退
+        └───────────┬────────────┘
                     ↓
-    动作条件世界模型：分别推演每条候选的未来
+        Validator 硬约束快速预筛
                     ↓
-        策略仲裁：安全/进度/舒适/不确定性
+动作条件结构化世界模型：批量推演合法候选的交互未来
                     ↓
-        Validator + RATO-SCP + Safety Shield
+        策略仲裁：风险/进度/舒适/不确定性
+                    ↓
+      最终 Validator + 两级最小修复 + 回退
                     ↓
               MPC/PID 车辆控制
 ```
@@ -176,9 +178,9 @@ VLA 理解与多候选轨迹生成    经典专家候选轨迹
 在该链路中：
 
 - **感知**不是单独重建一套完整检测栈，而是由共享视觉编码器形成 VLA 所需表征；CARLA 真值只用于训练监督、安全检查和评价。
-- **理解**由 VLA 的 Scene、Behavior、Critical Actor 和 Evidence 头完成，语言结论必须与动作一致。
+- **理解**由 VLA 的 Behavior、Critical Actor、Risk Horizon 和 Intended Action 结构化头完成；不把自由文本推理当作安全证据。
 - **预测**由动作条件世界模型完成；它不是预测一个固定未来，而是比较“执行候选 A/B/C 后环境分别怎样响应”。
-- **决策**由 VLA 候选、经典候选、世界模型评分和不确定性共同仲裁。
+- **决策**只在硬约束预筛通过的候选中结合 VLA、经典候选、世界模型评分和不确定性仲裁，选中后再次执行最终安全检查。
 - **控制**始终由显式 MPC/PID 执行，学习模型不直接绕过车辆约束。
 
 项目首个正式输入组合限定为单前视 RGB、Ego 状态历史和导航/局部路线，以适配 RTX 4080 16GB。毫米波雷达、激光雷达和多相机保留在接口中，但不是核心系统成立的前置依赖。
@@ -212,31 +214,30 @@ VLA 理解与多候选轨迹生成    经典专家候选轨迹
 - 冻结或轻量微调的视觉编码器。
 - Ego History、Route 和 Language Encoder。
 - 多模态时序融合骨干。
-- Behavior、Trajectory、Risk、Uncertainty、Evidence 多任务头。
-- 5–10 Hz 输出 2–3 秒 action/trajectory chunk。
+- Fast 路径使用并行轨迹头在 10 Hz 目标频率输出 4～8 条、3～5 秒候选；目标频率必须实测，不是预先结果。
+- Slow 路径只在 OOD、候选分歧或复杂交互时以 1～2 Hz 目标频率触发，输出结构化行为依据，不阻塞控制。
+- Behavior、Critical Actor、Risk Horizon、Trajectory 和 Uncertainty 多任务头；自由文本 VQA 仅为非核心诊断能力。
 
 ### 3.4 Dual World Plane
 
 - **Executable World**：CARLA 权威短时 rollout。
-- **Learned World**：轻量 latent/vector world model，快速预测环境响应、风险和奖励。
+- **Learned World**：5～10 Hz 目标频率的轻量 object/vector/BEV latent world model，批量预测不同 Ego 候选下的 Actor 响应、占用、风险、奖励、终止和不确定性；不生成像素视频。
 - Active Verification：学习世界不确定时才调用 CARLA 高成本验证。
+- VLA 与 World 可缓存共享视觉特征以节省显存，但接口、checkpoint、可用性状态和消融开关必须独立。
 
 ### 3.5 Safety Plane
 
 - Output Monitor。
 - Trajectory Validator。
 - Risk and Uncertainty Gate。
-- RATO-SCP 风险约束轨迹修复。
+- 一级纵向 QP 默认最小修复；二级受限 RATO-SCP 仅在存在合法横向走廊时触发。
 - Classic Shadow Expert 与策略仲裁。
 - Minimal Risk / Emergency Filter。
 
 ### 3.6 Agent and Assurance Plane
 
-- Scenario Scientist Agent。
-- Counterexample Agent。
-- Failure Analyst Agent。
-- Data Curator Agent。
-- Release Gate Agent。
+- Scenario/Failure Research Assistant：提出覆盖假设、组织证据和根因候选，不修改真值。
+- Deterministic Data/Release Workflow：schema、hash、统计和冻结阈值作最终裁决。
 - Run/Model/Data/Evidence Registry。
 - Regression Suite 与静态准出报告。
 
@@ -760,18 +761,18 @@ verified_date
 
 ### G2：Safety Kernel
 
-- Validator、状态机、RATO 和回退可运行。
+- Validator、状态机、纵向 QP、受限 RATO 和回退可运行；学习模块全部不可用时仍能闭环。
 - 故障注入可以触发预期降级。
 
-### G3：VLA 基线
+### G3：轻量 VLA
 
 - 数据划分和特权信息审计通过。
-- VLA 完成 open-loop 与闭环基线。
+- VLA 完成非语言多候选、Fast/Slow、open-loop 与 VLA+Safety 闭环对照。
 - 正式推理不读取 CARLA 隐藏真值。
 
 ### G4：场景搜索与反事实
 
-- Random/LHS/CMA-ES 公平对照。
+- Random/LHS 与覆盖引导 MAP-Elites 公平对照。
 - 失败可复现、可最小化。
 - 分支状态一致性检查通过。
 
@@ -783,22 +784,22 @@ verified_date
 
 ### G6：安全后训练
 
-- DAgger、Preference 和 Risk 数据门禁通过。
+- Event/Hard Case、DAgger、CARLA 验证 Preference 和 Risk 数据门禁通过。
 - 新策略同时通过历史失败和正常能力回归。
 
 ### G7：Agentic Loop
 
-- Agent 仅调用白名单工具。
-- Agent 相比固定脚本有可量化净收益。
+- Agent 仅调用白名单工具且关闭 Agent 后确定性流程仍可运行。
+- Agent 相比固定脚本的净收益可以为负，但必须可量化并保留。
 - 诊断和场景输出有 grounding 与幻觉评测。
 
 ### G8：版本准出
 
-- Classic/VLA/World/Safety/Agent 消融完成。
+- Classic、VLA+Safety、VLA+World+Safety、PostTrained-Full 四发布配置及核心消融完成。
 - 未见 ODD、故障、实时性和资源评测完成。
 - 自动生成可追溯准出报告。
 
-停止规则：前置门禁不通过时，不以新增热点模块绕开基础问题；RATO 未优于简单基线、CMA-ES 未优于随机、世界模型未优于简单预测、Agent 未优于固定脚本时，均不得宣称对应方法有效。
+停止规则：前置门禁不通过时，不以新增热点模块绕开基础问题；RATO 未优于简单基线、MAP-Elites 未优于 Random/LHS、世界模型未优于简单预测、Agent 未优于固定脚本时，均保留实现和负结论，但不得默认启用或宣称有效。
 
 ## 18. 单机资源策略
 
@@ -819,11 +820,11 @@ Machine: single workstation, no cluster, no second GPU
 
 | Profile | GPU 主任务 | 显存控制原则 |
 |---|---|---|
-| Simulation | CARLA + 量化 VLA 推理 | CARLA Low/No Rendering；单前视低分辨率；不加载训练优化器 |
+| Simulation | CARLA + 量化 VLA/World 推理 | CARLA Low/No Rendering；单前视低分辨率；共享特征缓存；VLA/World 流水或串行调度 |
 | VLA Training | 冻结视觉/语言骨干 + LoRA/QLoRA | 4-bit/8-bit 权重、BF16/FP16、gradient checkpointing、梯度累积 |
 | World Training | Vector/BEV latent dynamics | 不生成像素视频；控制 rollout horizon 与 batch |
 | Agent | 本地量化小模型或受控 API | 不与 CARLA 高画质或训练任务并发 |
-| Regression | CARLA + 单策略版本 | 策略、世界模型和对照版本串行加载 |
+| Regression | CARLA + 单发布配置 | 四发布配置串行加载；控制与 Safety 不等待 GPU，GPU 超时走冻结回退 |
 
 VLA 第一版优先选择可在 16GB 显存内微调的视觉编码器 + 小型时序/语言骨干，不把 10B/32B 工业模型本体作为训练目标。大型公开模型只作为架构参考、离线教师或可选 API，不作为项目运行依赖。
 

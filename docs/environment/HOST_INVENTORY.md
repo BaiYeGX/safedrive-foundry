@@ -4,6 +4,12 @@
 任务：G0-01  
 方法：仅执行只读查询；未安装、升级、重启或修改系统设置。
 
+> **重要（2026-07-13 状态覆盖）**
+> 下表中 “WSL 未安装 / Ubuntu 未安装 / ROS 未发现 / CARLA 仅 0.9.15” 是 **G0-01 当日** 快照，**不是当前事实**。
+> 当前已验证：WSL2 Ubuntu 24.04、ROS 2 Jazzy、CARLA **0.9.16**（`E:\CARLA_0.9.16` / `/mnt/e/CARLA_0.9.16`）、工程在 `/mnt/e/autonomous driving`。
+> 以 `versions.lock`、`PROGRESS.md`、`WSL_ROS2_BASELINE.md`、`CARLA_SERVER_BASELINE.md` 与 `sdf doctor` / `sdf sim preflight` 为准。
+> **禁止**再把本文件的 “WSL 未安装” 复制进新任务断点。
+
 ## 主机与操作系统
 
 | 字段 | 实测值 | 证据/备注 |

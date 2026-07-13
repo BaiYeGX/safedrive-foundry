@@ -1,6 +1,6 @@
 # G1-05：Hybrid A*–Reeds–Shepp 复杂机动
 
-**状态**：PENDING  
+**状态**：`COMPLETED_WITH_LIMITS`
 **依赖**：G1-03
 
 ## 目标
@@ -30,12 +30,16 @@
 ## 资源与自动化边界
 
 - 仅使用本任务允许修改路径、已登记输入和版本化配置，不启动后续任务。涉及真实 CARLA 时先执行 `sdf sim preflight`；不得自行解析 WSL gateway、创建第二套 `carla.Client`/tick master 或由业务节点直接调用 `world.tick()`。Agent 不执行任意 shell，学习模块不得修改 Safety 硬约束，MCP 保留到 G7-01。
-## 验证与断点
 
-运行解析曲线、启发式可采纳性、碰撞属性和固定地图场景测试；中断保存 open/closed 摘要、最佳节点与 scenario ID。
+## 验证与断点
 
 | 字段 | 内容 |
 |---|---|
-| 最后状态 | PENDING |
-| 已完成/验证 | 无 |
-| 恢复步骤 | 从最近规划 checkpoint 和失败 case 继续 |
+| 时间 | 2026-07-13 |
+| 最后状态 | `COMPLETED_WITH_LIMITS` |
+| 已完成 | Hybrid A*（自行车原语 + RS 解析扩展 + 部分解）、grid A*+Dubins 基线、特征选择器、四类离线机动场景、配置冻结；partial ⇒ `ok=false` |
+| config_hash | 见 `docs/architecture/evidence/g1-05/config_hash.txt` |
+| 权威证据 | `docs/architecture/evidence/g1-05/repair-20260713/`（含 `manifest.json`） |
+| 已运行验证 | `unittest tests.g1.test_g1_05_hybrid_astar` PASS；阶段全量 `tests/g1` **78 OK** |
+| 限制 | 以离线机动为主；权威 G1 live **非** Hybrid/RS 进环证明（dense uturn） |
+| 停止 | **任务关闭**；阶段状态见 `PROGRESS.md` / G1-09 |

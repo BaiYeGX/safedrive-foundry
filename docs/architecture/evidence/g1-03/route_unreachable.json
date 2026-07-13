@@ -1,0 +1,8 @@
+{
+  "corridor": null,
+  "expansions": 10,
+  "failure_code": "UNREACHABLE",
+  "failure_node_id": "R20:S0:L-1",
+  "message": "no legal corridor to any goal",
+  "ok": false
+}

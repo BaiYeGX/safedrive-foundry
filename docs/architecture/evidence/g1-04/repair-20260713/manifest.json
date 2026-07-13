@@ -1,0 +1,12 @@
+{
+  "branch": "grok/g1-acceptance-repair",
+  "files_sha256": {
+    "config_hash.txt": "408d1390d7e36394ba1da1ce4612623cbece1a18775d297c96181c0aa6ef907f",
+    "raw_runs.json": "3303f0e436d2afb0c1fbbfeeeb7479332d6bbdd7b14a2acaeb4672761c30ec1f",
+    "summary.json": "f2534a6e6d98080e804afde791ddb1e88f2ca89374a82b0edfcb59efaafff410"
+  },
+  "generated_unix": 1783946825,
+  "generator": "manual manifest for repair-20260713 closeout",
+  "schema": "safedrive.evidence.manifest.v1",
+  "task": "g1-04"
+}

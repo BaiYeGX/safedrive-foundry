@@ -1,0 +1,337 @@
+{
+  "connection": {
+    "client_version": "0.9.16",
+    "details": {
+      "world_settings": {
+        "fixed_delta_seconds": null,
+        "max_substep_delta_time": 0.01,
+        "max_substeps": 10,
+        "substepping": true,
+        "synchronous_mode": false
+      }
+    },
+    "error_code": null,
+    "error_message": null,
+    "fixed_delta_seconds": null,
+    "host": "127.0.0.1",
+    "host_source": "loopback_local",
+    "map": "Carla/Maps/Town10HD_Opt",
+    "needs_user_action": false,
+    "port": 2000,
+    "previous_host": null,
+    "process_state": "RUNNING",
+    "recovery_action": null,
+    "recovery_result": null,
+    "resolved_host": "127.0.0.1",
+    "retry_count": 0,
+    "rpc_reachable": true,
+    "server_version": "0.9.16",
+    "status": "READY",
+    "synchronous_mode": false,
+    "task_action": "IN_PROGRESS",
+    "tcp_reachable": true,
+    "tick_owner": "free (configured=sdf.g0-05.sync)"
+  },
+  "control_period_ms": 20.0,
+  "control_profile": "control_50hz",
+  "failure": null,
+  "final_goal_dist_m": 154.20750427246094,
+  "goal": {
+    "x": -45.23593521118164,
+    "y": -36.50009536743164,
+    "yaw": -89.56768035888672
+  },
+  "history_tail": [
+    {
+      "deadline_miss": false,
+      "dist_goal": 152.42494201660156,
+      "e2e_ms": 0.17715399735607207,
+      "frame": 12731,
+      "k": 580,
+      "mode": "mpc",
+      "solver_ms": 0.17457299691159278,
+      "v": 4.745957833913334,
+      "x": -51.30857467651367,
+      "y": 115.80265045166016
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 152.51927185058594,
+      "e2e_ms": 0.20515399955911562,
+      "frame": 12732,
+      "k": 581,
+      "mode": "mpc",
+      "solver_ms": 0.20175499957986176,
+      "v": 4.744839887138963,
+      "x": -51.32132339477539,
+      "y": 115.89655303955078
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 152.61349487304688,
+      "e2e_ms": 0.18445699970470741,
+      "frame": 12733,
+      "k": 582,
+      "mode": "mpc",
+      "solver_ms": 0.18127400107914582,
+      "v": 4.743475680501257,
+      "x": -51.33490753173828,
+      "y": 115.99030303955078
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 152.70758056640625,
+      "e2e_ms": 0.2148650019080378,
+      "frame": 12734,
+      "k": 583,
+      "mode": "mpc",
+      "solver_ms": 0.21184300203458406,
+      "v": 4.7421884714415805,
+      "x": -51.34931564331055,
+      "y": 116.0838851928711
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 152.80154418945312,
+      "e2e_ms": 0.19093099763267674,
+      "frame": 12735,
+      "k": 584,
+      "mode": "mpc",
+      "solver_ms": 0.18780699974740855,
+      "v": 4.741178523984158,
+      "x": -51.36452865600586,
+      "y": 116.17731475830078
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 152.89561462402344,
+      "e2e_ms": 0.22291999994195066,
+      "frame": 12736,
+      "k": 585,
+      "mode": "mpc",
+      "solver_ms": 0.21973899856675416,
+      "v": 4.740544121256242,
+      "x": -51.3795166015625,
+      "y": 116.27086639404297
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 152.98983764648438,
+      "e2e_ms": 0.18296499911230057,
+      "frame": 12737,
+      "k": 586,
+      "mode": "mpc",
+      "solver_ms": 0.18013800217886455,
+      "v": 4.744298201566011,
+      "x": -51.39400100708008,
+      "y": 116.36459350585938
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 153.08413696289062,
+      "e2e_ms": 0.1865839985839557,
+      "frame": 12738,
+      "k": 587,
+      "mode": "mpc",
+      "solver_ms": 0.18309200095245615,
+      "v": 4.747390447504525,
+      "x": -51.40859603881836,
+      "y": 116.45836639404297
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 153.1783447265625,
+      "e2e_ms": 0.19496299864840694,
+      "frame": 12739,
+      "k": 588,
+      "mode": "mpc",
+      "solver_ms": 0.19175799752702005,
+      "v": 4.748977838921889,
+      "x": -51.42366409301758,
+      "y": 116.55205535888672
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 153.2724609375,
+      "e2e_ms": 0.18224499945063144,
+      "frame": 12740,
+      "k": 589,
+      "mode": "mpc",
+      "solver_ms": 0.17863399989437312,
+      "v": 4.748863199356698,
+      "x": -51.439422607421875,
+      "y": 116.64561462402344
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 153.36642456054688,
+      "e2e_ms": 0.18778799858409911,
+      "frame": 12741,
+      "k": 590,
+      "mode": "mpc",
+      "solver_ms": 0.1848760002758354,
+      "v": 4.747657612475091,
+      "x": -51.45596694946289,
+      "y": 116.73898315429688
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 153.46022033691406,
+      "e2e_ms": 0.19588700160966255,
+      "frame": 12742,
+      "k": 591,
+      "mode": "mpc",
+      "solver_ms": 0.19254399740020745,
+      "v": 4.745915794003641,
+      "x": -51.47335433959961,
+      "y": 116.83213806152344
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 153.55381774902344,
+      "e2e_ms": 0.20395699903019704,
+      "frame": 12743,
+      "k": 592,
+      "mode": "mpc",
+      "solver_ms": 0.20088499877601862,
+      "v": 4.744069238262125,
+      "x": -51.49158477783203,
+      "y": 116.9250717163086
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 153.64724731445312,
+      "e2e_ms": 0.18874099987442605,
+      "frame": 12744,
+      "k": 593,
+      "mode": "mpc",
+      "solver_ms": 0.1860919983300846,
+      "v": 4.742419488545817,
+      "x": -51.510643005371094,
+      "y": 117.017822265625
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 153.74078369140625,
+      "e2e_ms": 0.19947300097555853,
+      "frame": 12745,
+      "k": 594,
+      "mode": "mpc",
+      "solver_ms": 0.19640000027720816,
+      "v": 4.7411439376755915,
+      "x": -51.52967834472656,
+      "y": 117.11063385009766
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 153.8343505859375,
+      "e2e_ms": 0.18930800069938414,
+      "frame": 12746,
+      "k": 595,
+      "mode": "mpc",
+      "solver_ms": 0.1862479984993115,
+      "v": 4.744961017265673,
+      "x": -51.54876708984375,
+      "y": 117.2035140991211
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 153.92788696289062,
+      "e2e_ms": 0.1891350002551917,
+      "frame": 12747,
+      "k": 596,
+      "mode": "mpc",
+      "solver_ms": 0.18620199989527464,
+      "v": 4.747128851082911,
+      "x": -51.56830978393555,
+      "y": 117.29631805419922
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 154.02127075195312,
+      "e2e_ms": 0.2001959983317647,
+      "frame": 12748,
+      "k": 597,
+      "mode": "mpc",
+      "solver_ms": 0.19705000158865005,
+      "v": 4.7474547549902875,
+      "x": -51.5885009765625,
+      "y": 117.38895416259766
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 154.11448669433594,
+      "e2e_ms": 0.1894189990707673,
+      "frame": 12749,
+      "k": 598,
+      "mode": "mpc",
+      "solver_ms": 0.18573600027593784,
+      "v": 4.746602101996234,
+      "x": -51.60945129394531,
+      "y": 117.48138427734375
+    },
+    {
+      "deadline_miss": false,
+      "dist_goal": 154.20750427246094,
+      "e2e_ms": 0.1894310007628519,
+      "frame": 12750,
+      "k": 599,
+      "mode": "mpc",
+      "solver_ms": 0.1856660019257106,
+      "v": 4.74516684836059,
+      "x": -51.6312255859375,
+      "y": 117.57357788085938
+    }
+  ],
+  "limitations_update": {
+    "L1_live_control": "ATTEMPTED_NOT_PASSED",
+    "L2_race_proof": "MEASURED_OFFLINE_ABLATION_WITH_LIVE_CONTEXT_NOT_FULL_PARETO",
+    "L3_positive_opt": "DATA_DEPENDENT_SEE_ADMISSION"
+  },
+  "map": "Carla/Maps/Town10HD_Opt",
+  "map_choice": "Town10HD",
+  "min_goal_dist_m": 100.27162170410156,
+  "mode_counts": {
+    "mpc": 600
+  },
+  "modes": [
+    "mpc"
+  ],
+  "ok": false,
+  "race_control_admission": {
+    "promote_full_to_default": true,
+    "reason": "full miss rate not worse than fixed"
+  },
+  "race_plan_admission": {
+    "promote_full_to_default": true,
+    "reason": "full success rate not below basic"
+  },
+  "risk_monotonicity_ok": true,
+  "risk_sample_mean": -21445712511285.695,
+  "route_length_m": 755.358853196415,
+  "route_waypoints": 401,
+  "schema": "safedrive.g1.live_classic_expert.v1",
+  "seed": 4509693,
+  "start": {
+    "x": -52.07392120361328,
+    "y": 63.53809356689453,
+    "yaw": 89.83876037597656
+  },
+  "ticks_run": 600,
+  "watchdog": {
+    "deadline_miss_rate": 0.0,
+    "deadline_misses": 0,
+    "e2e_ms": {
+      "p50": 0.1824669998313766,
+      "p95": 0.2253379971079994,
+      "p99": 0.28428500081645325
+    },
+    "jitter_e2e_ms": 0.0428709972766228,
+    "solver_ms": {
+      "p50": 0.17959500110009685,
+      "p95": 0.22242100021685474,
+      "p99": 0.2805559997796081
+    },
+    "steps": 600
+  }
+}

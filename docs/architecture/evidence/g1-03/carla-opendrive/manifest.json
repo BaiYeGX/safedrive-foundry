@@ -1,0 +1,25 @@
+{
+  "maps": {
+    "Town01": {
+      "bytes": 973108,
+      "file": "Town01.xodr",
+      "sha256": "97a7f6ac67812567e5c8ee0599cd823b23f80f30f3f97c502212e38b72e2b709",
+      "source_path": "/mnt/e/CARLA_0.9.16/CarlaUE4/Content/Carla/Maps/OpenDrive/Town01.xodr"
+    },
+    "Town03": {
+      "bytes": 4589872,
+      "file": "Town03.xodr",
+      "sha256": "abf177bcd9b66cfefb7ac4919f6456815f1384f4229f1343c8a6a90bbb7713c9",
+      "source_path": "/mnt/e/CARLA_0.9.16/CarlaUE4/Content/Carla/Maps/OpenDrive/Town03.xodr"
+    },
+    "Town10HD": {
+      "bytes": 1857682,
+      "file": "Town10HD.xodr",
+      "sha256": "5d883b799f634030af92be1e9d79d107845540ba04338e8c60e095be1aef7be7",
+      "source_path": "/mnt/e/CARLA_0.9.16/CarlaUE4/Content/Carla/Maps/OpenDrive/Town10HD.xodr"
+    }
+  },
+  "note": "Taken from install tree; avoids load_world which can fatal on this host. API to_opendrive for Town01 previously matched size ~973KB.",
+  "source": "CARLA 0.9.16 packaged OpenDRIVE (Content/Carla/Maps/OpenDrive)",
+  "source_root": "/mnt/e/CARLA_0.9.16/CarlaUE4/Content/Carla/Maps/OpenDrive"
+}

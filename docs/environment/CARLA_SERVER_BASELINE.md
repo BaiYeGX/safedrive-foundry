@@ -6,14 +6,17 @@
 
 ## 已安装基线
 
-- Server：`E:\CARLA_0.9.16\CarlaUE4.exe`
-- Python API：`carla-0.9.16-cp312-cp312-win_amd64.whl`
-- 首选客户端运行时：Conda 环境 `carla0916`，Python 3.12.x
+- Server：`E:\CARLA_0.9.16\CarlaUE4.exe`（WSL：`/mnt/e/CARLA_0.9.16/CarlaUE4.exe`）
+- 官方 OpenDRIVE（离线地图真源）：`E:\CARLA_0.9.16\CarlaUE4\Content\Carla\Maps\OpenDrive\` ↔ `/mnt/e/CARLA_0.9.16/CarlaUE4/Content/Carla/Maps/OpenDrive/`
+- Python API（Windows smoke）：`carla-0.9.16-cp312-cp312-win_amd64.whl`；**WSL 客户端**使用 Linux `carla==0.9.16` + 系统/venv Python 3.12
 - 端口：RPC 2000、streaming 2001、Traffic Manager 2002
 - 启动模式：Low quality、800×600、无声；测试过离屏与窗口模式
+- 统一启动规格：`safedrive_foundry/config/runtime/carla_start.toml`（`sdf sim ensure`）
 - 日志/证据：`docs/environment/evidence/g0-03/`；四轮正式结果亦记录于本文件与任务断点
 
 现有 0.9.15 已由用户手动删除；0.9.16 位于 `E:\CARLA_0.9.16`。本任务未删除用户资产。
+
+**注意**：G0-03 正文偏 Windows 客户端 smoke。G1 及以后客户端权威环境是 **WSL**；连接用 `python3 scripts/sdf.py sim preflight`，不要写死 host。
 
 ## 可复现命令
 
@@ -21,9 +24,22 @@
 
 ```powershell
 Start-Process -FilePath 'E:\CARLA_0.9.16\CarlaUE4.exe' `
-  -ArgumentList '/Game/Carla/Maps/Town10HD','-windowed','-ResX=800','-ResY=600','-quality-level=Low','-nosound','-carla-rpc-port=2000'
+  -ArgumentList '/Game/Carla/Maps/Town10HD','-windowed','-ResX=800','-ResY=600','-quality-level=Low','-nosound','-dx11','-carla-rpc-port=2000'
 conda activate carla0916
 ```
+
+### Shader fatal（`shader compilation failures are fatal`）
+
+这是 **Unreal 在 Windows 上编译/加载着色器失败**，不是 ROS 或规划代码错误。常见诱因：首次启动、**运行中 `load_world` 切图**、显卡驱动/DX 后端不稳定。
+
+处理建议（按顺序）：
+
+1. 任务管理器结束所有 `CarlaUE4` / `CarlaUE4-Win64-Shipping` / `ShaderCompileWorker`。
+2. 用 **DX11 + Low** 启动（见上，或 `sdf sim ensure` 读 `carla_start.toml`）。
+3. **不要**在 live 脚本里频繁 `client.load_world`；要换图请改启动参数后重启 Server。
+4. 首次启动若卡住，多等几分钟（后台在编 shader）；不要反复强制结束再开。
+5. 仍失败：更新 NVIDIA 驱动；或清空 CARLA 安装目录下 `Engine/Saved` 中与 shader 缓存相关的目录后再冷启动（先备份）。
+6. 确认本机用的是 **独立显卡** 跑 `CarlaUE4.exe`（笔记本核显有时会炸）。
 
 独立客户端：
 

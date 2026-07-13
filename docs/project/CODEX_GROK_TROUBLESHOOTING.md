@@ -47,6 +47,30 @@ wsl -d Ubuntu-24.04 -- /usr/bin/bash -lic 'pwd; command -v git; command -v pytho
 
 自动化命令必须设置超时，不能无限等待 WSL。
 
+## 代理已在 WSL 内运行时，禁止报“未安装 WSL”
+
+当进程已在 WSL guest 中（`/proc/version` 含 Microsoft、`WSL_DISTRO_NAME` 存在，或 `/proc/sys/fs/binfmt_misc/WSLInterop` 存在）时：
+
+1. 不要用 Windows Python / Anaconda / embedded Python 跑 `scenario_runtime`（依赖 `fcntl`）；
+2. 不要因 PowerShell 找不到 `sdf` 就断言环境不存在——在仓库根执行 `python3 scripts/sdf.py …`；
+3. `sdf doctor` 应走本机 `/opt/ros/jazzy`，不要强制 `wsl.exe -d …` 套娃；
+4. `process_state=NOT_RUNNING` 或 `RPC_HANDSHAKE_FAILED` 只说明 **CARLA Server 未就绪**，不等于 WSL 未安装。
+
+## CARLA host / 代理路由 / 镜像网络
+
+- 默认路由若出现 `198.18.0.0/15`（常见透明代理），TCP:2000 可能“假连通”，握手仍失败；连接层将此类网关排在最后。
+- WSL 镜像网络下 Windows CARLA 常在 `127.0.0.1:2000` 可达；`sdf sim preflight` 会优先尝试 loopback。
+- Windows 路径 `E:\CARLA_0.9.16` 对应 WSL `/mnt/e/CARLA_0.9.16`。
+
+## `load_world` 连续切图导致 CARLA Fatal Error
+
+本机实测：在 RPC 已 READY 时连续 `client.load_world('Town01'→'Town03'→…)` 可能使 Server 超时或弹出 Fatal Error。处理：
+
+1. 用户关闭崩溃窗口后，确认无残留 `CarlaUE4` 进程再启动；
+2. **离线地图任务不要依赖切图导出**；直接使用安装包内官方 OpenDRIVE：
+   `/mnt/e/CARLA_0.9.16/CarlaUE4/Content/Carla/Maps/OpenDrive/<Town>.xodr`；
+3. 需要单图 live 时只加载一次目标地图，拉长 client timeout，避免连续 `load_world`。
+
 ## PowerShell 读取中文 Markdown 出现乱码
 
 Windows PowerShell 5.1 对无 BOM UTF-8 文件的默认解码可能不正确。文件通常没有损坏，只是读取方式错误。

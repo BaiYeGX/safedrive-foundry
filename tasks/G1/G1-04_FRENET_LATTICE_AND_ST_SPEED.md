@@ -1,6 +1,6 @@
 # G1-04：Frenet Lattice 与 S-T 速度规划
 
-**状态**：PENDING  
+**状态**：`COMPLETED_WITH_LIMITS`
 **依赖**：G1-03
 
 ## 目标
@@ -30,12 +30,16 @@
 ## 资源与自动化边界
 
 - 仅使用本任务允许修改路径、已登记输入和版本化配置，不启动后续任务。涉及真实 CARLA 时先执行 `sdf sim preflight`；不得自行解析 WSL gateway、创建第二套 `carla.Client`/tick master 或由业务节点直接调用 `world.tick()`。Agent 不执行任意 shell，学习模块不得修改 Safety 硬约束，MCP 保留到 G7-01。
-## 验证与断点
 
-固定场景多 seed 比较成功率、碰撞裕度、进度、舒适和耗时；中断记录场景 ID、候选摘要和 solver 状态。
+## 验证与断点
 
 | 字段 | 内容 |
 |---|---|
-| 最后状态 | PENDING |
-| 已完成/验证 | 无 |
-| 恢复步骤 | 校验 G1-03 Route Corridor 后从失败场景继续 |
+| 时间 | 2026-07-13 |
+| 最后状态 | `COMPLETED_WITH_LIMITS` |
+| 验收修复 | 将 greedy ST + 强制 v=0 终点改为 **time-layered DP (t,s)+连续 v**；不可行停车返回 `ST_INFEASIBLE_STOP`；平滑后重积分；加强单测（障碍/停车/运动学）。 |
+| config_hash | `cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee`（toml 未改；实现变更，见 repair evidence） |
+| 权威证据 | `docs/architecture/evidence/g1-04/repair-20260713/`（含 `manifest.json`）+ `SUPERSEDED.md` |
+| 已运行验证 | `unittest tests.g1.test_g1_04_frenet` PASS；阶段全量 `tests/g1` **78 OK** |
+| 限制 | 离线合成场景为主；非 CARLA live 门禁；DP 为 (t,s) 层而非全 (t,s,v) 三维箱（v 存于节点） |
+| 停止 | **任务关闭**；阶段状态见 `PROGRESS.md` / G1-09 |

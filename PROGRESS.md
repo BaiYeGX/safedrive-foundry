@@ -6,53 +6,85 @@
 
 | 字段 | 当前值 |
 |---|---|
-| 当前阶段 | G1：经典专家、风险自适应规划与鲁棒实时控制（进行中） |
-| 当前任务 | G1-02：Simulation Runtime 与场景生命周期 |
-| 当前状态 | `COMPLETED` |
-| 最近完成 | G1-02：Simulation Runtime 与场景生命周期 |
-| 推荐下一任务 | `G1-03 MAP_LANE_GRAPH_ROUTE_BEHAVIOR`（仅推荐，不自动开始） |
-| 最近更新 | 2026-07-12 |
+| 当前阶段 | G1：**已关闭**（`COMPLETED_WITH_LIMITS`） |
+| 当前任务 | **无**（G1-01～G1-09 全部关闭；不自动开始 G2） |
+| 当前状态 | **`COMPLETED_WITH_LIMITS`**（正式结束） |
+| 最近完成 | G1 阶段收口：算法验收修复 + 短 full dense live v4 + 任务标准治理 |
+| 推荐下一任务 | 仅当用户明确指令：`执行G2-01，读取START_TASK.md。` |
+| 最近更新 | 2026-07-13 |
+| 工作分支 | `grok/g1-acceptance-repair`（**未** commit / **未** push） |
 
 ## 阶段状态
 
 | 阶段 | 状态 | 说明 |
 |---|---|---|
-| G0 | `COMPLETED / FROZEN` | 6项完成，证据包已冻结 |
-| G1 | `IN_PROGRESS` | 9项，G1-01、G1-02已完成 |
-| G2 | `PENDING` | 6项 |
-| G3 | `PENDING` | 7项 |
-| G4 | `PENDING` | 6项 |
-| G5 | `PENDING` | 6项 |
-| G6 | `PENDING` | 6项 |
-| G7 | `PENDING` | 5项 |
-| G8 | `PENDING` | 6项 |
+| G0 | `COMPLETED / FROZEN` | 任务/代码/历史 evidence 冻结；工作区或有历史 env 文档 diff（不纳入 G1 关闭条件） |
+| G1 | **`COMPLETED_WITH_LIMITS`** | **正式关闭**；见下方限制与证据指针 |
+| G2 | `PENDING` | 6 项；**未**启动 |
+| G3 | `PENDING` | 7 项 |
+| G4 | `PENDING` | 6 项 |
+| G5 | `PENDING` | 6 项 |
+| G6 | `PENDING` | 6 项 |
+| G7 | `PENDING` | 5 项 |
+| G8 | `PENDING` | 6 项 |
+
+## G1 任务状态一览
+
+| 任务 | 状态 |
+|---|---|
+| G1-01 | `COMPLETED` |
+| G1-02 | `COMPLETED` |
+| G1-03 | `COMPLETED` |
+| G1-04 | `COMPLETED_WITH_LIMITS` |
+| G1-05 | `COMPLETED_WITH_LIMITS` |
+| G1-06 | `COMPLETED_WITH_LIMITS` |
+| G1-07 | `COMPLETED_WITH_LIMITS` |
+| G1-08 | `COMPLETED_WITH_LIMITS` |
+| G1-09 | `COMPLETED_WITH_LIMITS`（阶段验收） |
 
 ## 当前阻塞与决策
 
-- G1-02 原完成证据和本轮 connection hardening evidence 均已验证；真实 10/10 lifecycle 防回归、source-free status/preflight/ensure、27/27 测试和协议同步全部通过。
-- G0保持只读；G1-01、G1-02已按实际仓库完成正式消息、目录、连接和生命周期校准，不回写G0。
-- G0的0.05s smoke不是全链路20ms结论；G1-06/G1-08必须测量50Hz控制的P50/P95/P99和deadline miss。
-- 经典算法优化只保留RACE-Plan、RACE-Control与G2 RATO-SCP三项主贡献；未证明净收益的改进不进入默认配置。
-- 后续任务51项；连同冻结G0共57项。任务结构只在`ROADMAP.md`维护。
+**无阻塞。** G1 已正式结束。不自动 commit、不自动 push、不自动启动 G2。
+
+### G1 限制（诚实，关闭后仍有效）
+
+1. 控制 solver 为 **constrained gradient LTV bicycle**，**不是** OSQP/SQP-RTI。
+2. **无** live 50Hz P50/P95/P99 正式 VERIFIED 门禁。
+3. RACE admission **仅 offline**；无 CARLA A/B 收益证明。
+4. 长 600m full **零碰撞非 VERIFIED**（权威 live 为短 ~182m + dense uturn）。
+5. 权威 live **`hybrid_in_loop=false`**（dense uturn 默认；**不**作 Hybrid/RS live 证明）。
+6. 权威 live **`no_traffic` / `junctions=0`**；红灯/切入/路口让行等 **未 live VERIFIED**（见 G1-09 映射表）。
+7. 工作区含历史 `docs/environment/*` 等 diff → **披露、不纳入关闭条件**。
+
+### 证据指针
+
+| 轨 | 路径 |
+|---|---|
+| Offline repair | `docs/architecture/evidence/g1-0{4..9}/repair-20260713/`（含 manifest） |
+| Live 权威 v4 | `docs/architecture/evidence/g1-live/latest_success.json`（`g1-live-full-11-1783946091`） |
+| 阶段 Review | `docs/architecture/G1_DEVELOPMENT_AND_ACCEPTANCE_REVIEW.md` |
+| 阶段验收任务 | `tasks/G1/G1-09_CLASSIC_EXPERT_ACCEPTANCE.md` |
+
+### 实测摘要（关闭依据）
+
+| 项 | 结果 |
+|---|---|
+| `unittest discover -s tests/g1` | **78/78 OK** |
+| Live | `stack=full`，`uturn_planner=dense`，seed=11，route≈181.5m，**arrived**，schema **v4** |
+| 任务标准 | G1-07～09 原文保留；未达标项写入限制，非删标准 |
 
 ## 最近更新
 
 | 日期 | 变更 |
 |---|---|
-| 2026-07-12 | 完成任务目录与管理文档全量一致性修复：ROADMAP/活动任务 57/57、阶段数量与依赖检查通过；非 G0 任务结构和路径归一化，新增 `scripts/maintenance/task_catalog_check.py`、维护测试与 `docs/project/TASK_CATALOG_AUDIT.md`。未启动 G1-03；G0 任务、代码、配置和历史证据保持冻结。 |
-| 2026-07-12 | 完成统一 `safedrive_foundry/runtime/carla_connection.py`、现有 `sdf sim status/preflight/ensure` 路由、动态 endpoint 与错误/任务状态映射；新 shell 无环境变量、无 source 真实验证通过，ensure 前后 CARLA 进程数 2→2，连接层接入后 NPC+camera 10/10 仍通过。管理协议已按真实实现同步，G1-02 恢复 COMPLETED。 |
-| 2026-07-12 | 获得明确范围扩展授权，恢复 G1-02 为 `IN_PROGRESS`；先实现统一 CARLA connection 与现有 sdf sim 路由，真实验证通过后再更新 AGENTS/START_TASK/PROGRESS 协议。原 lifecycle 10/10 evidence 保持不变。 |
-| 2026-07-12 | 启动 G1-02 post-completion hardening 审计；发现请求修改 `AGENTS.md`/`START_TASK.md` 超出当时任务声明的允许范围，按协议标记 `DECISION_REQUIRED` 并停止。原 G1-02 10/10 evidence 保持不变；现行路径以 `tasks/G1/G1-02_SCENARIO_RUNTIME_AND_ACTOR_LIFECYCLE.md` 为准。 |
-| 2026-07-12 | 完成 G1-02：修复 cleanup 前错误登记 COMPLETED、补充 FINALIZING/CLEANUP_FAILED/CRASHED、线程安全幂等关闭、sensor callback drain、TM/NPC 销毁竞态；新增父子进程 supervisor。真实 crash injection 与 10 次 NPC+camera live acceptance 全部通过，证据见 `docs/runtime/evidence/g1-02/live-isolated-10-03/`。 |
-| 2026-07-12 | G1-02 live 验收部分通过：动态 CARLA 0.9.16 连接、唯一 lease、空场景、单 Ego control/tick 与清理已实测；修复真实 Transform config hash。NPC+camera cleanup 连续三次 native SIGABRT，任务标记 BLOCKED，现场保存于 `docs/runtime/evidence/g1-02/`。 |
-| 2026-07-12 | 恢复 G1-02 环境：动态解析 WSL 默认路由的 Windows host，TCP/RPC 2000 和 CARLA client/server `0.9.16` handshake 通过（Town10HD_Opt）。新增可 source 的运行环境入口，后续任务不再复制历史 gateway。 |
-| 2026-07-12 | G1-02 实现受控 Python Scenario Runtime、跨进程 tick lease、确定性 Actor/Sensor 生命周期、Traffic Manager 同步/seed、传感器 barrier 和 SQLite Run Registry；本地生命周期回归 10/10 PASS。真实 CARLA 诊断 `172.30.80.1:2000` 超时，任务暂停等待模拟器可用。 |
-| 2026-07-12 | 完成 G1-01：新增 `sdf_interfaces` 强类型 ROS 接口、稳定 runtime 身份、G0 JSON 兼容适配器和 20Hz/50Hz Profile；Python 测试4/4、接口构建和 CDR round-trip 通过，接口 hash 清单见 `docs/architecture/G1_01_INTERFACE_MANIFEST.md`。 |
-| 2026-07-12 | 新增固定启动入口`START_TASK.md`；用户以后只需给出任务ID并要求读取该文件，Codex自动定位任务、检查依赖、按需读取、验证、更新断点与进度后停止。 |
-| 2026-07-12 | 合并管理文档：执行规则与任务标准统一到`AGENTS.md`；任务列表只留在`ROADMAP.md`；本文件精简为动态指针；主张改为`docs/project/CLAIMS.md`；专项算法决策移入`docs/project/decisions/`。 |
-| 2026-07-12 | 完成经典算法优化选型，新增G1-07 RACE-Plan和G1-08 RACE-Control，经典专家验收顺延为G1-09；未启动G1。 |
-| 2026-07-12 | G0-01～G0-06全部完成；验收与SHA-256 manifest位于`docs/environment/evidence/g0-06/`。 |
+| 2026-07-13 | **G1 正式结束**：状态统一为 `COMPLETED_WITH_LIMITS`；指针清空；文档对齐。 |
+| 2026-07-13 | 任务标准治理：恢复 G1-07～09 原文 + 证据映射；Review 修正；g1-04 manifest。 |
+| 2026-07-13 | 短 full dense live v4 arrived；P0/P1 收口；78 tests 绿。 |
+| 2026-07-13 | G1-04～09 严格验收修复（分支 `grok/g1-acceptance-repair`）。 |
+| 2026-07-12 | G1-01/G1-02 完成；G0 冻结。 |
 
-## 恢复提示
+## 下一动作
 
-新对话固定读取本文件和当前任务文件。若当前任务不是“无”，按任务末尾断点验证外部状态后继续；完成后更新本文件并停止，不自动开始下一任务。
+- **G1 已关闭**，无进行中任务。
+- 入库：用户明确要求再 commit。
+- 下一阶段：仅当用户指令 `执行G2-01，读取START_TASK.md。`

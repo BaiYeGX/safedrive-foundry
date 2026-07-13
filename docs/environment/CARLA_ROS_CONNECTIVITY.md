@@ -1,15 +1,28 @@
 # G0-04 CARLA–ROS 2 跨系统连通证据
 
 日期：2026-07-12（Asia/Singapore）  
-状态：已完成验证
+状态：已完成验证（**下列正文为 G0 冻结现场记录**）
 
-## 实际环境
+## 现行连接方式（2026-07-13 起，覆盖正文中的固定 IP 指引）
+
+| 项 | 现行约定 |
+|---|---|
+| 入口 | WSL 内 `python3 scripts/sdf.py sim preflight` / `status` / `ensure` |
+| Host | **禁止写死**；`ConnectionResolver` 动态解析 |
+| 常见可达 | WSL **镜像网络**下 Windows CARLA 常在 `127.0.0.1:2000`；经典 NAT 模式则用 default gateway |
+| 代理干扰 | `198.18.0.0/15` 等透明代理可能 TCP 假连通，必须以 RPC handshake 为准 |
+| 路径 | `E:\CARLA_0.9.16` ↔ `/mnt/e/CARLA_0.9.16` |
+| 官方地图 | `/mnt/e/CARLA_0.9.16/CarlaUE4/Content/Carla/Maps/OpenDrive/*.xodr` |
+
+正文中的 `172.30.80.1` 与“`127.0.0.1` 不可达”是 **G0-04 当日 NAT 模式** 的测量结果，**不得**再当作永久真理复制到新任务。
+
+## 实际环境（G0-04 当日）
 
 - Windows CARLA Server：`E:\CARLA_0.9.16`，server `0.9.16`
 - WSL：`Ubuntu-24.04`，WSL2，Python `3.12.3`
 - ROS 2：Jazzy，`ROS_DOMAIN_ID=42`，`RMW_IMPLEMENTATION=rmw_fastrtps_cpp`
 - WSL CARLA API：Linux `carla==0.9.16`，位于 `/home/sdf/.venvs/carla_ros`
-- WSL 默认路由：`172.30.80.1`；`172.30.80.1:2000` TCP 探测成功
+- 当日 WSL 默认路由采样：`172.30.80.1`；`172.30.80.1:2000` TCP 探测成功（历史）
 - ROS package：`safedrive_carla_bridge`，`carla_status_bridge`
 - ROS topic：`/safedrive/carla/status`，类型 `std_msgs/msg/String`
 
@@ -41,7 +54,8 @@ map= Carla/Maps/Town10HD_Opt
 frame= 47426
 ```
 
-`127.0.0.1:2000` 在当前 WSL 网络模式不可达；使用路由表 default gateway `172.30.80.1` 后连接成功。配置和 README 已记录该地址以及动态获取方法。
+G0-04 当日：`127.0.0.1:2000` 在**当时的 NAT 模式**下不可达；使用路由表 default gateway `172.30.80.1` 后连接成功。
+**后续（含镜像网络）**：`127.0.0.1` 可能再次可达；请用 `sdf sim preflight` 记录实际 `host` / `host_source`，不要复制历史 IP。
 
 ## ROS 收发
 

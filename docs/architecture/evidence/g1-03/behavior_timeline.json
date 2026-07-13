@@ -1,0 +1,182 @@
+[
+  {
+    "timestamp_s": 0.0,
+    "event": "ROUTE_STRAIGHT",
+    "from_state": "CRUISE",
+    "to_state": "CRUISE",
+    "phase": "hold",
+    "reason": "cruise_hold:route_straight",
+    "suppressed": false,
+    "goal": {
+      "state": "CRUISE",
+      "reason": "initial_enter",
+      "route_id": "evidence",
+      "target_lane_id": null,
+      "target_speed_mps": 12.0,
+      "hold_seconds": null,
+      "oracle_inputs": [
+        "signal_state",
+        "true_lead_vehicle",
+        "true_cross_traffic",
+        "route_maneuver",
+        "obstacle_polygon"
+      ],
+      "observable_inputs": [
+        "detected_lead",
+        "perceived_signal",
+        "navigation_instruction",
+        "detected_obstacle",
+        "timeout_clock"
+      ],
+      "metadata": {
+        "behavior_layer": "classic_g1_03",
+        "emits_controls": false,
+        "emits_local_trajectory": false
+      }
+    }
+  },
+  {
+    "timestamp_s": 1.0,
+    "event": "RED_LIGHT",
+    "from_state": "CRUISE",
+    "to_state": "CRUISE",
+    "phase": "exit",
+    "reason": "exit_for:red_light",
+    "suppressed": false,
+    "goal": {
+      "state": "CRUISE",
+      "reason": "initial_enter",
+      "route_id": "evidence",
+      "target_lane_id": null,
+      "target_speed_mps": 12.0,
+      "hold_seconds": null,
+      "oracle_inputs": [
+        "signal_state",
+        "true_lead_vehicle",
+        "true_cross_traffic",
+        "route_maneuver",
+        "obstacle_polygon"
+      ],
+      "observable_inputs": [
+        "detected_lead",
+        "perceived_signal",
+        "navigation_instruction",
+        "detected_obstacle",
+        "timeout_clock"
+      ],
+      "metadata": {
+        "behavior_layer": "classic_g1_03",
+        "emits_controls": false,
+        "emits_local_trajectory": false
+      }
+    }
+  },
+  {
+    "timestamp_s": 1.0,
+    "event": "RED_LIGHT",
+    "from_state": "CRUISE",
+    "to_state": "STOP",
+    "phase": "enter",
+    "reason": "red_light",
+    "suppressed": false,
+    "goal": {
+      "state": "STOP",
+      "reason": "red_light",
+      "route_id": "evidence",
+      "target_lane_id": null,
+      "target_speed_mps": 0.0,
+      "hold_seconds": 60.0,
+      "oracle_inputs": [
+        "signal_state",
+        "true_lead_vehicle",
+        "true_cross_traffic",
+        "route_maneuver",
+        "obstacle_polygon"
+      ],
+      "observable_inputs": [
+        "detected_lead",
+        "perceived_signal",
+        "navigation_instruction",
+        "detected_obstacle",
+        "timeout_clock"
+      ],
+      "metadata": {
+        "behavior_layer": "classic_g1_03",
+        "emits_controls": false,
+        "emits_local_trajectory": false
+      }
+    }
+  },
+  {
+    "timestamp_s": 2.0,
+    "event": "GREEN_LIGHT",
+    "from_state": "STOP",
+    "to_state": "STOP",
+    "phase": "exit",
+    "reason": "exit_for:green_light",
+    "suppressed": false,
+    "goal": {
+      "state": "STOP",
+      "reason": "red_light",
+      "route_id": "evidence",
+      "target_lane_id": null,
+      "target_speed_mps": 0.0,
+      "hold_seconds": 60.0,
+      "oracle_inputs": [
+        "signal_state",
+        "true_lead_vehicle",
+        "true_cross_traffic",
+        "route_maneuver",
+        "obstacle_polygon"
+      ],
+      "observable_inputs": [
+        "detected_lead",
+        "perceived_signal",
+        "navigation_instruction",
+        "detected_obstacle",
+        "timeout_clock"
+      ],
+      "metadata": {
+        "behavior_layer": "classic_g1_03",
+        "emits_controls": false,
+        "emits_local_trajectory": false
+      }
+    }
+  },
+  {
+    "timestamp_s": 2.0,
+    "event": "GREEN_LIGHT",
+    "from_state": "STOP",
+    "to_state": "CRUISE",
+    "phase": "enter",
+    "reason": "green_light",
+    "suppressed": false,
+    "goal": {
+      "state": "CRUISE",
+      "reason": "green_light",
+      "route_id": "evidence",
+      "target_lane_id": null,
+      "target_speed_mps": 12.0,
+      "hold_seconds": null,
+      "oracle_inputs": [
+        "signal_state",
+        "true_lead_vehicle",
+        "true_cross_traffic",
+        "route_maneuver",
+        "obstacle_polygon"
+      ],
+      "observable_inputs": [
+        "detected_lead",
+        "perceived_signal",
+        "navigation_instruction",
+        "detected_obstacle",
+        "timeout_clock"
+      ],
+      "metadata": {
+        "behavior_layer": "classic_g1_03",
+        "emits_controls": false,
+        "emits_local_trajectory": false
+      }
+    }
+  }
+]

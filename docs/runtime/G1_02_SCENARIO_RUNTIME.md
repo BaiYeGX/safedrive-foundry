@@ -31,16 +31,28 @@ construction. The sensor barrier requires every declared sensor to report the
 same CARLA frame returned by the sole tick. The resulting `FrameHeader` is the
 identity carried by Camera, Ego, Actor, Control and `/clock` adapters.
 
-## WSL connection recovery
+## CARLA connection (current)
 
-Before every CARLA, ROS bridge, or runtime command, source the environment
-entrypoint rather than copying a previous Windows gateway:
+Do **not** hardcode a Windows gateway IP. Before every real-CARLA command use the
+unified resolver:
+
+```bash
+cd "/mnt/e/autonomous driving"
+python3 scripts/sdf.py sim preflight   # must print status=READY
+# optional one-shot start of the known Windows install:
+python3 scripts/sdf.py sim ensure
+```
+
+`runtime.carla_connection.ConnectionResolver` ranks candidates (explicit
+`CARLA_HOST`, loopback under WSL mirrored networking, non-proxy default
+gateways, proxy-like `198.18.0.0/15` last) and requires an RPC handshake.
+READY is never decided by TCP alone.
+
+Optional compatibility export (not a business prerequisite):
 
 ```bash
 source safedrive_foundry/config/runtime/carla_environment.sh
 ```
 
-It resolves `CARLA_HOST` from the current WSL default route and exports RPC
-port `2000`, expected version `0.9.16`, and a 10-second timeout.  A task must
-then record the resolved endpoint and verify the client/server versions before
-it creates a world or starts a tick owner.
+Historical G0 samples such as `172.30.80.1` are frozen evidence, not a permanent
+host. Windows install path: `E:\CARLA_0.9.16` ↔ `/mnt/e/CARLA_0.9.16`.

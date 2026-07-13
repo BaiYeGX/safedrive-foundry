@@ -1,0 +1,103 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<OpenDRIVE>
+  <header revMajor="1" revMinor="4" name="Town10HD" north="500" south="0" east="500" west="0"/>
+  <road name="HighwayIn" length="120.0" id="20" junction="-1">
+    <link>
+      <successor elementType="road" elementId="21" contactPoint="start"/>
+    </link>
+    <type s="0.0" type="town"><speed max="60" unit="km/h"/></type>
+    <lanes>
+      <laneSection s="0.0">
+        <center><lane id="0" type="none" level="true"/></center>
+        <right>
+          <lane id="-1" type="driving" level="true">
+            <link><successor id="-1"/></link>
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+            <speed sOffset="0.0" max="16.67"/>
+          </lane>
+          <lane id="-2" type="driving" level="true">
+            <link><successor id="-2"/></link>
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+            <speed sOffset="0.0" max="16.67"/>
+          </lane>
+          <lane id="-3" type="driving" level="true">
+            <link><successor id="-3"/></link>
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+            <speed sOffset="0.0" max="13.89"/>
+          </lane>
+        </right>
+      </laneSection>
+    </lanes>
+    <objects>
+      <object id="sl-10" s="110.0" name="stop_hd" type="stopline" orientation="+"/>
+    </objects>
+  </road>
+  <road name="HighwayMid" length="90.0" id="21" junction="-1">
+    <link>
+      <predecessor elementType="road" elementId="20" contactPoint="end"/>
+      <successor elementType="road" elementId="22" contactPoint="start"/>
+    </link>
+    <type s="0.0" type="town"><speed max="60" unit="km/h"/></type>
+    <lanes>
+      <laneSection s="0.0">
+        <center><lane id="0" type="none" level="true"/></center>
+        <right>
+          <lane id="-1" type="driving" level="true">
+            <link><predecessor id="-1"/><successor id="-1"/></link>
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+          </lane>
+          <lane id="-2" type="driving" level="true">
+            <link><predecessor id="-2"/><successor id="-2"/></link>
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+          </lane>
+          <lane id="-3" type="driving" level="true">
+            <link><predecessor id="-3"/><successor id="-3"/></link>
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+          </lane>
+        </right>
+      </laneSection>
+    </lanes>
+  </road>
+  <road name="HighwayOut" length="70.0" id="22" junction="-1">
+    <link>
+      <predecessor elementType="road" elementId="21" contactPoint="end"/>
+    </link>
+    <type s="0.0" type="town"><speed max="50" unit="km/h"/></type>
+    <lanes>
+      <laneSection s="0.0">
+        <center><lane id="0" type="none" level="true"/></center>
+        <right>
+          <lane id="-1" type="driving" level="true">
+            <link><predecessor id="-1"/></link>
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+          </lane>
+          <lane id="-2" type="driving" level="true">
+            <link><predecessor id="-2"/></link>
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+          </lane>
+          <lane id="-3" type="driving" level="true">
+            <link><predecessor id="-3"/></link>
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+          </lane>
+        </right>
+      </laneSection>
+    </lanes>
+  </road>
+  <!-- orphan road with successor declared but missing target creates anomaly -->
+  <road name="Orphan" length="30.0" id="99" junction="-1">
+    <link>
+      <successor elementType="road" elementId="404" contactPoint="start"/>
+    </link>
+    <type s="0.0" type="town"><speed max="30" unit="km/h"/></type>
+    <lanes>
+      <laneSection s="0.0">
+        <center><lane id="0" type="none" level="true"/></center>
+        <right>
+          <lane id="-1" type="driving" level="true">
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+          </lane>
+        </right>
+      </laneSection>
+    </lanes>
+  </road>
+</OpenDRIVE>

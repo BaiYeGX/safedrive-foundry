@@ -1,0 +1,56 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<OpenDRIVE>
+  <header revMajor="1" revMinor="4" name="Town01" north="200" south="0" east="400" west="0"/>
+  <road name="Road_A" length="100.0" id="1" junction="-1">
+    <link>
+      <successor elementType="road" elementId="2" contactPoint="start"/>
+    </link>
+    <type s="0.0" type="town">
+      <speed max="50" unit="km/h"/>
+    </type>
+    <lanes>
+      <laneSection s="0.0">
+        <center><lane id="0" type="none" level="true"/></center>
+        <right>
+          <lane id="-1" type="driving" level="true">
+            <link><successor id="-1"/></link>
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+          </lane>
+          <lane id="-2" type="driving" level="true">
+            <link><successor id="-2"/></link>
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+          </lane>
+        </right>
+      </laneSection>
+    </lanes>
+    <signals>
+      <signal id="sig-1" s="95.0" name="tl_main" dynamic="true" orientation="+" type="1000001" height="0.5" width="0.5"/>
+    </signals>
+    <objects>
+      <object id="sl-1" s="93.0" name="stop_main" type="stopline" orientation="+" length="0.3" width="3.5" height="0.0"/>
+    </objects>
+  </road>
+  <road name="Road_B" length="80.0" id="2" junction="-1">
+    <link>
+      <predecessor elementType="road" elementId="1" contactPoint="end"/>
+    </link>
+    <type s="0.0" type="town">
+      <speed max="50" unit="km/h"/>
+    </type>
+    <lanes>
+      <laneSection s="0.0">
+        <center><lane id="0" type="none" level="true"/></center>
+        <right>
+          <lane id="-1" type="driving" level="true">
+            <link><predecessor id="-1"/></link>
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+          </lane>
+          <lane id="-2" type="driving" level="true">
+            <link><predecessor id="-2"/></link>
+            <width sOffset="0.0" a="3.5" b="0" c="0" d="0"/>
+          </lane>
+        </right>
+      </laneSection>
+    </lanes>
+  </road>
+</OpenDRIVE>

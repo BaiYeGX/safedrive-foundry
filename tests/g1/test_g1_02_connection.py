@@ -29,7 +29,11 @@ from runtime.carla_connection import (  # noqa: E402
     STARTUP_TIMEOUT,
     TCP_UNREACHABLE,
     WORLD_SETTINGS_QUERY_FAILED,
+    _parse_default_routes,
+    _rank_host_candidates,
     exit_code,
+    windows_path_to_wsl,
+    wsl_path_to_windows,
 )
 
 
@@ -193,6 +197,31 @@ class G102ConnectionTests(unittest.TestCase):
         self.assertEqual(report.error_code, STARTUP_TIMEOUT)
         self.assertEqual(report.status, RETRYABLE_FAILURE)
         self.assertEqual(exit_code(report), EXIT_RETRYABLE_FAILURE)
+
+    def test_proxy_like_gateway_is_ranked_after_real_hosts(self) -> None:
+        routes = _parse_default_routes(
+            "default via 198.18.0.2 dev eth0 metric 1\n"
+            "default via 172.30.80.1 dev eth1 metric 20\n"
+        )
+        ranked = _rank_host_candidates(routes)
+        self.assertEqual([host for host, _ in ranked], ["172.30.80.1", "198.18.0.2"])
+        self.assertEqual(ranked[0][1], "wsl_default_gateway")
+        self.assertEqual(ranked[1][1], "wsl_default_gateway_proxy")
+
+    def test_windows_wsl_path_round_trip(self) -> None:
+        self.assertEqual(windows_path_to_wsl(r"E:\CARLA_0.9.16\CarlaUE4.exe"), Path("/mnt/e/CARLA_0.9.16/CarlaUE4.exe"))
+        self.assertEqual(wsl_path_to_windows("/mnt/e/CARLA_0.9.16/CarlaUE4.exe"), r"E:\CARLA_0.9.16\CarlaUE4.exe")
+
+    def test_start_paths_prefer_wsl_mount_for_existence(self) -> None:
+        resolver = self.resolver()
+        windows, wsl = resolver._resolve_start_paths(
+            {
+                "windows_executable": r"E:\CARLA_0.9.16\CarlaUE4.exe",
+                "wsl_path": "/mnt/e/CARLA_0.9.16/CarlaUE4.exe",
+            }
+        )
+        self.assertEqual(windows, r"E:\CARLA_0.9.16\CarlaUE4.exe")
+        self.assertEqual(wsl, Path("/mnt/e/CARLA_0.9.16/CarlaUE4.exe"))
 
 
 if __name__ == "__main__":

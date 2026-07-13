@@ -476,6 +476,11 @@ class ScenarioRuntime:
         self.world.apply_settings(settings)
 
     def _configure_traffic_manager(self, spec: ScenarioSpec) -> None:
+        # Skip TM when no actor uses autopilot. Creating a TM binds a Windows-side
+        # port and can fail with "bind error" after prior crashes even if unused.
+        if not any(actor.autopilot for actor in spec.actors):
+            self._traffic_manager = None
+            return
         self._traffic_manager = self.client.get_trafficmanager(spec.traffic_manager_port)
         self._traffic_manager.set_synchronous_mode(True)
         self._traffic_manager.set_random_device_seed(spec.traffic_manager_seed)

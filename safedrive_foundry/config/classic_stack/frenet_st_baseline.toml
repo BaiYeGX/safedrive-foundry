@@ -1,0 +1,59 @@
+# G1-04 frozen Frenet Lattice + S-T speed baseline.
+# G1-07 must not silently change this file to claim gains; compare via config hash.
+
+[baseline]
+name = "frenet_st_fixed_sampling_v1"
+schema_version = "safedrive.g1_04.frenet_st.v1"
+prediction_model = "cv_ctrv_idm"
+speed_solver = "st_dp"
+jerk_smoothing = "moving_average"
+
+[vehicle]
+wheelbase_m = 2.8
+max_speed_mps = 15.0
+max_accel_mps2 = 2.5
+max_decel_mps2 = 4.0
+max_jerk_mps3 = 4.0
+max_curvature_per_m = 0.25
+max_lateral_accel_mps2 = 2.0
+width_m = 1.9
+length_m = 4.5
+
+[sampling]
+# Fixed uniform grid — G1-07 may add adaptive budgets only via separate configs.
+ds_m = 2.0
+horizon_s = [3.0, 4.0, 5.0, 6.0]
+lateral_offsets_m = [-1.75, -0.9, 0.0, 0.9, 1.75]
+target_speeds_mps = [0.0, 3.0, 6.0, 9.0, 12.0]
+max_candidates = 120
+road_half_width_m = 3.5
+
+[cost]
+w_offset = 1.0
+w_speed = 0.4
+w_accel = 0.3
+w_jerk = 0.2
+w_curvature = 0.5
+w_collision = 50.0
+w_progress = 0.8
+
+[prediction]
+model = "cv_ctrv_idm"
+dt_s = 0.1
+horizon_s = 6.0
+idm_desired_time_gap_s = 1.2
+idm_min_gap_m = 3.0
+idm_max_accel_mps2 = 1.5
+idm_comfortable_decel_mps2 = 2.5
+default_actor_length_m = 4.5
+default_actor_width_m = 1.9
+
+[st_grid]
+ds_m = 1.0
+dt_s = 0.2
+s_horizon_m = 60.0
+t_horizon_s = 6.0
+inflation_m = 0.5
+
+[smoothing]
+window = 5

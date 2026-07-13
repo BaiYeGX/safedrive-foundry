@@ -8,9 +8,11 @@ path used by ``sdf sim``.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import platform
+import re
 import shutil
 import socket
 import subprocess
@@ -18,7 +20,7 @@ import time
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 
 EXPECTED_CARLA_VERSION = "0.9.16"
@@ -52,6 +54,127 @@ RETRYABLE_CODES = frozenset(
 BLOCKING_CODES = frozenset(
     {CLIENT_VERSION_MISMATCH, SERVER_VERSION_MISMATCH, MAP_QUERY_FAILED, WORLD_SETTINGS_QUERY_FAILED, TICK_OWNER_CONFLICT}
 )
+
+# Transparent proxy / TUN defaults (e.g. Mihomo 198.18.0.0/15) accept TCP and
+# look like gateways but are not the Windows CARLA host.
+_PROXY_LIKE_NETWORKS = (
+    ipaddress.ip_network("198.18.0.0/15"),
+)
+
+
+def running_in_wsl() -> bool:
+    """Return True when this process is already inside WSL (not on bare Windows)."""
+
+    if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
+        return True
+    try:
+        version = Path("/proc/version").read_text(encoding="utf-8", errors="ignore").lower()
+    except OSError:
+        version = ""
+    if "microsoft" in version or "wsl" in version:
+        return True
+    return Path("/proc/sys/fs/binfmt_misc/WSLInterop").exists()
+
+
+def _is_proxy_like_host(host: str) -> bool:
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(address in network for network in _PROXY_LIKE_NETWORKS)
+
+
+def _parse_default_routes(route_text: str) -> list[tuple[int, str]]:
+    """Parse ``ip route`` default lines into (metric, gateway) pairs."""
+
+    routes: list[tuple[int, str]] = []
+    for line in route_text.splitlines():
+        tokens = line.split()
+        if not tokens or tokens[0] != "default" or "via" not in tokens:
+            continue
+        try:
+            gateway = tokens[tokens.index("via") + 1]
+        except (ValueError, IndexError):
+            continue
+        if not gateway:
+            continue
+        metric = 1000
+        if "metric" in tokens:
+            try:
+                metric = int(tokens[tokens.index("metric") + 1])
+            except (ValueError, IndexError):
+                metric = 1000
+        routes.append((metric, gateway))
+    routes.sort(key=lambda item: item[0])
+    return routes
+
+
+def _rank_host_candidates(gateways: Sequence[tuple[int, str]]) -> list[tuple[str, str]]:
+    """Rank gateways: non-proxy preferred, then lower metric. Deduplicate hosts."""
+
+    preferred: list[tuple[int, int, str, str]] = []
+    for metric, gateway in gateways:
+        proxy = _is_proxy_like_host(gateway)
+        # proxy-like last (priority 1), real hosts first (priority 0)
+        preferred.append((1 if proxy else 0, metric, gateway, "wsl_default_gateway_proxy" if proxy else "wsl_default_gateway"))
+    preferred.sort(key=lambda item: (item[0], item[1]))
+    ordered: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for _, _, gateway, source in preferred:
+        if gateway in seen:
+            continue
+        seen.add(gateway)
+        ordered.append((gateway, source))
+    return ordered
+
+
+def discover_route_hosts() -> list[tuple[str, str]]:
+    """Discover WSL→Windows host candidates without embedding a single address."""
+
+    ip = shutil.which("ip")
+    if ip is None:
+        raise RuntimeError("ip command is unavailable")
+    completed = subprocess.run(
+        [ip, "route", "show", "default"],
+        capture_output=True,
+        text=True,
+        timeout=2.0,
+        check=False,
+    )
+    routes = _parse_default_routes(completed.stdout)
+    if not routes:
+        raise RuntimeError("WSL default gateway was not found")
+    ranked = _rank_host_candidates(routes)
+    if not ranked:
+        raise RuntimeError("WSL default gateway was not found")
+    return ranked
+
+
+def _default_route_host() -> str:
+    """Resolve a preferred WSL Windows gateway (first ranked non-proxy when possible)."""
+
+    return discover_route_hosts()[0][0]
+
+
+def windows_path_to_wsl(path: str) -> Path | None:
+    """Convert ``E:\\foo`` / ``E:/foo`` to ``/mnt/e/foo`` when running under WSL."""
+
+    match = re.match(r"^([A-Za-z]):[\\/](.*)$", path.strip())
+    if not match:
+        return None
+    drive, rest = match.group(1).lower(), match.group(2).replace("\\", "/")
+    return Path("/mnt") / drive / rest
+
+
+def wsl_path_to_windows(path: str | Path) -> str | None:
+    """Convert ``/mnt/e/foo`` to ``E:\\foo`` for PowerShell Start-Process."""
+
+    text = str(path).replace("\\", "/")
+    match = re.match(r"^/mnt/([a-zA-Z])/(.*)$", text)
+    if not match:
+        return None
+    drive, rest = match.group(1).upper(), match.group(2).replace("/", "\\")
+    return f"{drive}:\\{rest}"
 
 
 @dataclass(frozen=True)
@@ -153,10 +276,10 @@ def _default_client_factory(host: str, port: int) -> Any:
     return carla.Client(host, port)
 
 
-def _default_process_query() -> str:
+def _windows_carla_process_running() -> str | None:
     powershell = shutil.which("powershell.exe") or shutil.which("pwsh")
     if powershell is None:
-        return "UNKNOWN"
+        return None
     command = (
         "Get-Process -Name CarlaUE4,CarlaUE4-Win64-Shipping "
         "-ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Id"
@@ -170,8 +293,37 @@ def _default_process_query() -> str:
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return "UNKNOWN"
+        return None
+    if completed.returncode == 0 and completed.stdout.strip():
+        return "RUNNING"
+    return "NOT_RUNNING"
+
+
+def _linux_carla_process_running() -> str | None:
+    """Observe native Linux/WSL CARLA processes when present."""
+
+    try:
+        completed = subprocess.run(
+            ["pgrep", "-f", r"CarlaUE4(\.sh)?|CarlaUE4-Linux"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
     return "RUNNING" if completed.returncode == 0 and completed.stdout.strip() else "NOT_RUNNING"
+
+
+def _default_process_query() -> str:
+    """Return RUNNING if either Windows or Linux CARLA process is observed."""
+
+    observations = [state for state in (_windows_carla_process_running(), _linux_carla_process_running()) if state is not None]
+    if not observations:
+        return "UNKNOWN"
+    if any(state == "RUNNING" for state in observations):
+        return "RUNNING"
+    return "NOT_RUNNING"
 
 
 def _json_settings(settings: Any) -> dict[str, Any]:
@@ -217,19 +369,59 @@ class ConnectionResolver:
             raise ValueError(f"CARLA port out of range: {port}")
         return port
 
-    def resolve_host(self, explicit_host: str | None = None, *, force_dynamic: bool = False) -> Endpoint:
+    def discover_host_candidates(self, explicit_host: str | None = None, *, force_dynamic: bool = False) -> list[Endpoint]:
+        """Return ordered endpoints to try; READY is decided only by RPC handshake.
+
+        WSL mirrored networking often exposes Windows CARLA on 127.0.0.1; classic
+        NAT mode fails localhost quickly and falls through to ranked gateways.
+        Proxy-like gateways (198.18.0.0/15) are always last.
+        """
+
+        port = self.resolve_port()
         if explicit_host:
-            return Endpoint(explicit_host, self.resolve_port(), "explicit")
+            return [Endpoint(explicit_host, port, "explicit")]
+        endpoints: list[Endpoint] = []
+        seen: set[str] = set()
+
+        def add(host: str, source: str) -> None:
+            if host in seen:
+                return
+            seen.add(host)
+            endpoints.append(Endpoint(host, port, source))
+
         if not force_dynamic:
             configured = os.environ.get("CARLA_HOST")
             if configured:
-                return Endpoint(configured, self.resolve_port(), "environment")
+                add(configured, "environment")
+
+        in_wsl = running_in_wsl()
+        allow_local = os.environ.get("CARLA_ALLOW_LOCALHOST", "").lower() in {"1", "true", "yes"}
+        injected = self.host_discoverer is not _default_route_host and self.host_discoverer is not None
+
         try:
-            return Endpoint(self.host_discoverer(), self.resolve_port(), "wsl_default_gateway" if not force_dynamic else "wsl_default_gateway_retry")
-        except Exception as exc:
-            if platform.system() == "Windows" and os.environ.get("CARLA_ALLOW_LOCALHOST", "").lower() in {"1", "true", "yes"}:
-                return Endpoint("localhost", self.resolve_port(), "verified_localhost")
-            raise RuntimeError(str(exc)) from exc
+            if injected:
+                # Injected single-host discoverer (unit tests): keep one primary + retry label.
+                primary = self.host_discoverer()
+                source = "wsl_default_gateway_retry" if force_dynamic else "wsl_default_gateway"
+                add(primary, source)
+            else:
+                # Prefer localhost early inside WSL (mirrored networking) and on Windows.
+                if in_wsl or platform.system() == "Windows" or allow_local:
+                    add("127.0.0.1", "loopback_local")
+                for host, source in discover_route_hosts():
+                    labeled = source if not force_dynamic else f"{source}_retry"
+                    add(host, labeled)
+                if allow_local:
+                    add("localhost", "verified_localhost")
+        except Exception:
+            if not endpoints:
+                raise
+        if not endpoints:
+            raise RuntimeError("no CARLA host candidates available")
+        return endpoints
+
+    def resolve_host(self, explicit_host: str | None = None, *, force_dynamic: bool = False) -> Endpoint:
+        return self.discover_host_candidates(explicit_host, force_dynamic=force_dynamic)[0]
 
     def _tick_owner(self) -> tuple[str | None, str | None]:
         scenario_path = self.root / "safedrive_foundry" / "config" / "runtime" / "scenario_runtime.toml"
@@ -300,14 +492,16 @@ class ConnectionResolver:
             client = self.client_factory(endpoint.host, endpoint.port)
             if hasattr(client, "set_timeout"):
                 client.set_timeout(self.timeout_seconds)
+            # get_client_version() is local to the Python API; it does not prove
+            # the server is reachable. Only a successful server RPC sets READY.
             report.client_version = str(client.get_client_version())
-            report.rpc_reachable = True
             if report.client_version != self.expected_version:
                 report.error_code = CLIENT_VERSION_MISMATCH
                 report.error_message = f"client={report.client_version}, expected={self.expected_version}"
                 report.task_action = "BLOCKED"
                 return report
             report.server_version = str(client.get_server_version())
+            report.rpc_reachable = True
             if report.server_version != self.expected_version:
                 report.error_code = SERVER_VERSION_MISMATCH
                 report.error_message = f"server={report.server_version}, expected={self.expected_version}"
@@ -348,8 +542,10 @@ class ConnectionResolver:
 
     def preflight(self, *, host: str | None = None, port: int | None = None, retry_host: bool = True) -> ConnectionReport:
         try:
-            endpoint = self.resolve_host(host)
-            endpoint = Endpoint(endpoint.host, self.resolve_port(port), endpoint.source)
+            candidates = self.discover_host_candidates(host)
+            if port is not None:
+                resolved_port = self.resolve_port(port)
+                candidates = [Endpoint(item.host, resolved_port, item.source) for item in candidates]
         except Exception as exc:
             return ConnectionReport(
                 status=RETRYABLE_FAILURE,
@@ -360,19 +556,39 @@ class ConnectionResolver:
                 task_action="IN_PROGRESS",
             )
         process_state = self.process_query()
-        first = self._probe(endpoint, process_state=process_state)
-        if first.status == READY or not retry_host or host is not None:
-            return first
-        if first.error_code not in RETRYABLE_CODES:
-            return first
-        try:
-            refreshed = self.resolve_host(None, force_dynamic=True)
-        except Exception:
-            return first
-        if refreshed.host == endpoint.host:
-            return first
-        second = self._probe(refreshed, process_state=self.process_query(), retry_count=1, previous_host=endpoint.host)
-        return second
+        # Explicit host: single probe. Otherwise walk ranked candidates; READY
+        # requires RPC handshake (TCP alone is not sufficient under proxies).
+        if host is not None or not retry_host:
+            return self._probe(candidates[0], process_state=process_state)
+
+        last = self._probe(candidates[0], process_state=process_state)
+        if last.status == READY or last.error_code not in RETRYABLE_CODES:
+            return last
+        previous = candidates[0].host
+        remaining = list(candidates[1:])
+        # Injected single-host discoverers (tests) yield the next host only on a
+        # second force_dynamic discovery call.
+        if not remaining and self.host_discoverer is not _default_route_host:
+            try:
+                refreshed = self.resolve_host(None, force_dynamic=True)
+                if refreshed.host != previous:
+                    remaining.append(refreshed)
+            except Exception:
+                pass
+        for index, endpoint in enumerate(remaining, start=1):
+            if endpoint.host == previous:
+                continue
+            report = self._probe(
+                endpoint,
+                process_state=self.process_query(),
+                retry_count=index,
+                previous_host=previous,
+            )
+            last = report
+            if report.status == READY or report.error_code not in RETRYABLE_CODES:
+                return report
+            previous = endpoint.host
+        return last
 
     def status(self, *, host: str | None = None, port: int | None = None) -> ConnectionReport:
         return self.preflight(host=host, port=port, retry_host=True)
@@ -394,20 +610,65 @@ class ConnectionResolver:
             client.set_timeout(self.timeout_seconds)
         return client, checked
 
+    def _resolve_start_paths(self, spec: Mapping[str, Any]) -> tuple[str | None, Path | None]:
+        """Return (windows_executable, wsl_path) for existence checks and launch."""
+
+        windows_executable = str(spec.get("windows_executable", "") or "").strip() or None
+        wsl_raw = str(spec.get("wsl_path", "") or spec.get("linux_path", "") or "").strip()
+        wsl_path = Path(wsl_raw) if wsl_raw else None
+        if wsl_path is None and windows_executable:
+            wsl_path = windows_path_to_wsl(windows_executable)
+        if windows_executable is None and wsl_path is not None:
+            windows_executable = wsl_path_to_windows(wsl_path)
+        return windows_executable, wsl_path
+
     def _launch_known(self, spec: Mapping[str, Any]) -> bool:
         if self.start_process is not None:
             return bool(self.start_process(spec))
-        powershell = shutil.which("powershell.exe") or shutil.which("pwsh")
-        executable = str(spec.get("windows_executable", ""))
-        if powershell is None or not executable:
+        windows_executable, wsl_path = self._resolve_start_paths(spec)
+        if wsl_path is not None and not wsl_path.exists():
             return False
         arguments = str(spec.get("arguments", ""))
-        command = f"Start-Process -FilePath '{executable}' -ArgumentList '{arguments}'"
-        try:
-            subprocess.run([powershell, "-NoProfile", "-NonInteractive", "-Command", command], timeout=5.0, check=True)
-            return True
-        except (OSError, subprocess.SubprocessError):
-            return False
+        # Preferred: Windows CARLA via PowerShell (works from WSL interop).
+        # ArgumentList must be a comma-separated quoted list, not one giant string,
+        # or Unreal may ignore the map path and reopen the previous map.
+        powershell = shutil.which("powershell.exe") or shutil.which("pwsh")
+        if powershell is not None and windows_executable:
+            arg_parts = [p for p in arguments.split() if p]
+            if arg_parts:
+                ps_list = ",".join(f"'{p}'" for p in arg_parts)
+                command = f"Start-Process -FilePath '{windows_executable}' -ArgumentList {ps_list}"
+            else:
+                command = f"Start-Process -FilePath '{windows_executable}'"
+            try:
+                subprocess.run(
+                    [powershell, "-NoProfile", "-NonInteractive", "-Command", command],
+                    timeout=5.0,
+                    check=True,
+                )
+                return True
+            except (OSError, subprocess.SubprocessError):
+                pass
+        # Optional native Linux/WSL CARLA binary (CarlaUE4.sh) when present.
+        linux_launcher = str(spec.get("linux_executable", "") or "").strip()
+        if not linux_launcher and wsl_path is not None:
+            sibling = wsl_path.parent / "CarlaUE4.sh"
+            if sibling.exists():
+                linux_launcher = str(sibling)
+        if linux_launcher and Path(linux_launcher).exists():
+            try:
+                args = [linux_launcher, *arguments.split()] if arguments else [linux_launcher]
+                subprocess.Popen(
+                    args,
+                    cwd=str(Path(linux_launcher).parent),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                return True
+            except OSError:
+                return False
+        return False
 
     def ensure(
         self,

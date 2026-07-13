@@ -60,30 +60,24 @@
       "status": "PASS"
     },
     {
-      "code": "wsl_ready",
+      "code": "wsl_in_guest",
       "details": {
-        "distros": [
-          "Ubuntu-24.04"
-        ],
-        "version": {
-          "returncode": 0,
-          "stderr": "",
-          "stdout": "WSL Hr,g: 2.9.3.0\n\n�Q8hHr,g: 6.18.35.2-1\n\nWSLg Hr,g: 1.0.79\n\nMSRDC Hr,g: 1.2.7214\n\nDirect3D Hr,g: 1.611.1-81528511\n\nDXCore Hr,g: 10.0.26100.1-240331-1435.ge-release\n\nWindows Hr,g: 10.0.26200.8655"
-        }
+        "distro": "Ubuntu-24.04",
+        "mode": "in_guest"
       },
       "id": "wsl.available",
-      "message": "WSL has at least one registered distribution",
+      "message": "diagnostic process is already running inside WSL",
       "status": "PASS"
     },
     {
-      "code": "ros2_ready",
+      "code": "ros2_ready_in_guest",
       "details": {
         "returncode": 0,
         "stderr": "",
         "stdout": "/opt/ros/jazzy/bin/ros2\nusage: ros2 [-h] [--use-python-default-buffering]\n            Call `ros2 <command> -h` for more detailed usage. ...\n\nros2 is an extensible command-line tool for ROS 2.\n\noptions:\n  -h, --help            show this help message and exit\n  --use-python-default-buffering\n                        Do not force line buffering in stdout and instead use\n                        the python default buffering, which might be affected\n                        by PYTHONUNBUFFERED/-u and depends on whatever stdout\n                        is interactive or not\n\nCommands:\n  action     Various action related sub-commands\n  bag        Various rosbag related sub-commands\n  component  Various component related sub-commands\n  daemon     Various daemon related sub-commands\n  doctor     Check ROS setup and other potential issues\n  interface  Show information about ROS interfaces\n  launch     Run a launch file\n  lifecycle  Various lifecycle related sub-commands\n  multicast  Various multicast related sub-commands\n  node       Various node related sub-commands\n  param      Various param related sub-commands\n  pkg        Various package related sub-commands\n  plugin     Various plugin related sub-commands\n  run        Run a package specific executable\n  security   Various security related sub-commands\n  service    Various service related sub-commands\n  topic      Various topic related sub-commands\n  wtf        Use `wtf` as alias to `doctor`\n\n  Call `ros2 <command> -h` for more detailed usage."
       },
       "id": "ros2.available",
-      "message": "ROS 2 Jazzy command is available in WSL",
+      "message": "ROS 2 Jazzy command is available in current WSL",
       "status": "PASS"
     },
     {
@@ -98,7 +92,7 @@
     {
       "code": "disk_space_ok",
       "details": {
-        "free_gib": 112.011,
+        "free_gib": 89.741,
         "minimum_free_gib": 20.0
       },
       "id": "disk.free",
@@ -117,14 +111,13 @@
       "status": "PASS"
     },
     {
-      "code": "carla_ready",
+      "code": "port_conflict_or_non_carla_service",
       "details": {
-        "client": "0.9.16",
-        "server": "0.9.16"
+        "error": "RuntimeError: time-out of 3000ms while waiting for the simulator, make sure the simulator is ready and connected to 172.30.80.1:2000"
       },
       "id": "carla.handshake",
-      "message": "CARLA RPC, client/server version and world handshake passed",
-      "status": "PASS"
+      "message": "RPC port is open but the CARLA handshake failed; possible port conflict or protocol error",
+      "status": "FAIL"
     },
     {
       "code": "port_open",
@@ -151,9 +144,10 @@
     {
       "code": "clock_topic_not_observed",
       "details": {
-        "returncode": 0,
+        "error": "timeout",
+        "returncode": 124,
         "stderr": "",
-        "stdout": "/parameter_events\n/rosout"
+        "stdout": ""
       },
       "id": "ros.clock",
       "message": "ROS 2 is available but /clock is not currently observable; start the sync driver",
@@ -169,7 +163,7 @@
       "status": "PASS"
     }
   ],
-  "generated_at_utc": "2026-07-11T18:57:29.735628+00:00",
+  "generated_at_utc": "2026-07-13T12:34:13.537612+00:00",
   "invocation": [
     "scripts/sdf.py",
     "doctor"
@@ -179,10 +173,10 @@
   "summary": {
     "counts": {
       "BLOCKED": 0,
-      "FAIL": 0,
-      "PASS": 14,
+      "FAIL": 1,
+      "PASS": 13,
       "WARN": 1
     },
-    "status": "WARN"
+    "status": "FAIL"
   }
 }

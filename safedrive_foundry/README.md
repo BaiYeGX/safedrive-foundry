@@ -1,62 +1,80 @@
-# SafeDrive Foundry：G0-04/G0-05 工程骨架与确定性同步
+# SafeDrive Foundry：工程骨架与确定性同步
 
-本目录提供 Windows CARLA → WSL2 Python client → ROS 2 的最小状态链路，以及 G0-05 的固定步长同步契约。
-它不包含规划、控制、VLA、世界模型或 Safety Kernel。
+本目录提供 CARLA → WSL2 Python client → ROS 2 的最小状态链路、G0 确定性同步契约，以及 G1 起的 runtime / classic_stack 扩展。
+
+它不包含 VLA、世界模型或 Safety Kernel。
 
 ## 固定约定
 
-- CARLA Server：Windows `E:\CARLA_0.9.16\CarlaUE4.exe`
+- CARLA Server 安装：Windows `E:\CARLA_0.9.16\CarlaUE4.exe`（WSL 路径 `/mnt/e/CARLA_0.9.16/CarlaUE4.exe`）
+- 官方 OpenDRIVE：`/mnt/e/CARLA_0.9.16/CarlaUE4/Content/Carla/Maps/OpenDrive/*.xodr`
 - CARLA RPC：`2000`；streaming：`2001`；Traffic Manager：`2002`
-- 当前 WSL NAT host gateway：`172.30.80.1`（以 `ip route` 的 default gateway 为准）
-- WSL2：Ubuntu 24.04 + ROS 2 Jazzy
+- **Host 不得写死**：由 `sdf sim preflight|status|ensure` → `runtime.carla_connection` 动态解析
+- WSL2：Ubuntu 24.04 + ROS 2 Jazzy；项目代码权威环境为 **WSL 内原生 bash/python3**
 - ROS domain：`42`
-- 状态 topic：`/safedrive/carla/status`，类型 `std_msgs/msg/String`
-- 每条 JSON 消息包含 `episode_id`、`carla_frame`、仿真时间戳、地图和 endpoint
+- 状态 topic（G0 兼容）：`/safedrive/carla/status`，类型 `std_msgs/msg/String`
 - G0-05 固定步长：`fixed_delta_seconds=0.05`、`max_substep_delta_time=0.01`、`max_substeps=5`
-- 唯一 tick master：`sdf.g0-05.sync`；只允许它调用 `world.tick()`
-- `/clock`、snapshot 和同步状态消息共享 `episode_id + carla_frame`，消息还记录 `snapshot_frame`、`message_frame`、`clock_frame` 以及 command 生成/计划/执行帧
+- 唯一 tick master（业务）：只允许已登记 owner 调用 `world.tick()`（G1 为 ScenarioRuntime）
 
-## Windows 启动
+## 统一连接入口（现行）
+
+在仓库根、**WSL** 中：
+
+```bash
+cd "/mnt/e/autonomous driving"
+python3 scripts/sdf.py sim status
+python3 scripts/sdf.py sim preflight   # READY 才能继续真实 CARLA 任务
+# 可选一次启动（Windows CarlaUE4.exe，经 PowerShell 互操作）：
+python3 scripts/sdf.py sim ensure
+```
+
+解析顺序（摘要）：
+
+1. 显式 `CARLA_HOST` / CLI host
+2. WSL 镜像网络下的 `127.0.0.1`（本机实测 Windows CARLA 常在此可达）
+3. 非代理风格 default gateway
+4. 代理段 `198.18.0.0/15` 等殿后（TCP 可能假连通，以 RPC handshake 为准）
+
+兼容：`source safedrive_foundry/config/runtime/carla_environment.sh` 仅导出环境变量，**不是**业务前置；正式路径用 `sdf sim`。
+
+历史 G0 文档里出现的 `172.30.80.1` 只是当时 NAT 网关采样，**不是**永久固定地址。
+
+## 启动 CARLA Server
+
+**推荐（Windows 安装包，从 WSL 也可 ensure）：**
 
 ```powershell
+# Windows PowerShell
 Start-Process -FilePath 'E:\CARLA_0.9.16\CarlaUE4.exe' `
   -ArgumentList '/Game/Carla/Maps/Town10HD','-windowed','-ResX=800','-ResY=600','-quality-level=Low','-nosound','-carla-rpc-port=2000'
 ```
 
-不要在 WSL 中启动 Windows Server。防火墙只需允许用户明确选择的 CARLA TCP 端口；本骨架不自动修改防火墙规则。
+或在 WSL：`python3 scripts/sdf.py sim ensure`（读取 `config/runtime/carla_start.toml`）。
 
-## WSL 安装与启动
+说明：当前安装为 **Windows 构建**（`CarlaUE4.exe`），不是 Linux `CarlaUE4.sh`。Server 进程跑在 Windows；客户端在 WSL。
+若将来提供 Linux 构建，同一 `ensure` 路径可选用 `linux_executable` / 旁路 `CarlaUE4.sh`。
 
-先确认发行版存在：
+防火墙只需放行用户选择的 CARLA TCP 端口；本仓库不自动改防火墙。
 
-```bash
-wsl -l -v
-```
-
-在 Ubuntu 24.04 中：
+## WSL 客户端与 ROS
 
 ```bash
+# 已在 Ubuntu-24.04 WSL 内
 source /opt/ros/jazzy/setup.bash
 export ROS_DOMAIN_ID=42
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-python3 -m pip install --user 'carla==0.9.16'
-cd /mnt/e/autonomous\ driving/safedrive_foundry/ros_ws
+# carla Python API 需已安装到当前 python3（0.9.16）
+cd "/mnt/e/autonomous driving"
+python3 scripts/sdf.py sim preflight
+cd safedrive_foundry/ros_ws
 colcon build --symlink-install
 source install/setup.bash
 ros2 run safedrive_carla_bridge carla_status_bridge
 ```
 
-WSL 使用 `172.30.80.1` 这一当前 host gateway。WSL 重启后若 gateway 变化，使用路由表中的 default gateway 覆盖：
-
-```bash
-export CARLA_HOST="$(ip route | awk '/default/{print $3; exit}')"
-```
-
-可通过 `CARLA_HOST`、`CARLA_PORT`、`CARLA_EXPECTED_VERSION`、`CARLA_STATUS_TOPIC` 和 `CARLA_STATUS_HZ` 覆盖配置。默认期望版本为 `0.9.16`。
+**禁止**：用 Windows Anaconda / embedded Python 跑依赖 `fcntl` 的 runtime，再据此断言“未安装 WSL”。
 
 ## ROS 验证
-
-另一个 WSL shell 中：
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -64,45 +82,27 @@ export ROS_DOMAIN_ID=42
 ros2 topic echo /safedrive/carla/status --once
 ```
 
-消息中的 `carla_frame` 必须存在且为非负整数；只读 bridge 不调用 `world.tick()`。固定步长和唯一 tick master 由 G0-05 sync driver 管理。
+只读 bridge 不调用 `world.tick()`。固定步长与唯一 tick master 由 sync driver / ScenarioRuntime 管理。
 
-## G0-05 确定性同步与诊断
-
-在项目根目录可使用 `sdf doctor`（Windows 使用 `sdf.cmd`，WSL 源码树可使用 `sdf`）：
-
-```powershell
-.\sdf.cmd doctor
-.\sdf.cmd validate-g0
-```
-
-`doctor` 会输出 `PASS/WARN/FAIL/BLOCKED`，并默认写入 `docs/environment/evidence/g0-05/doctor.json` 和 `doctor.md`。它检查版本锁、路径、GPU、WSL、ROS 2、CARLA RPC/版本/端口、`/clock`、同步参数和磁盘余量。
-
-离线烟雾测试支持双跑比较和安全断点恢复：
-
-```powershell
-.\sdf.cmd sync-smoke --seed 2026 --steps 16 --run-id repeat-1
-.\sdf.cmd sync-smoke --seed 2026 --steps 16 --run-id repeat-2
-.\sdf.cmd compare docs/environment/evidence/g0-05/smoke/repeat-1/trace.json docs/environment/evidence/g0-05/smoke/repeat-2/trace.json
-
-.\sdf.cmd sync-smoke --seed 303 --steps 10 --run-id recover --interrupt-after 4
-.\sdf.cmd sync-smoke --seed 303 --steps 10 --run-id recover --resume
-```
-
-真实 CARLA/ROS 运行时，先确保没有其他 tick owner，再启动唯一 driver：
+## 诊断与 G0 工具
 
 ```bash
-source /opt/ros/jazzy/setup.bash
-source ros_ws/install/setup.bash
-ros2 run safedrive_carla_bridge carla_sync_driver --steps 20
-```
+# WSL 仓库根（推荐）
+python3 scripts/sdf.py doctor
+python3 scripts/sdf.py validate-g0
+python3 scripts/sdf.py sim preflight
 
-该 driver 设置同步模式和子步参数，每次 `world.tick()` 后读取同一 snapshot，同时发布 `/clock` 与带 frame 契约的状态消息；退出时恢复原 CARLA WorldSettings。
+# Windows 仅作辅助
+.\sdf.cmd doctor
+```
 
 ## 故障诊断
 
-- `ModuleNotFoundError: carla`：使用了错误 Python，确认 `python3 -m pip show carla` 与 `python3 --version`。
-- `CARLA client timeout ...:2000`：确认 Windows Server 已启动、端口和 `CARLA_HOST`；不要把端口错误当成 ROS 故障。
-- `server/client version mismatch`：检查 WSL `carla` 包必须是 0.9.16，禁止混用 0.9.15 API。
-- 版本诊断：可临时设置错误的 `CARLA_EXPECTED_VERSION`（例如字符串 `0.9.15`）验证 mismatch 分支；这只是负向测试，不需要安装或保留 0.9.15 文件，正常运行应保持 `0.9.16`。
-- `ros2 topic list` 无 topic：确认两个 shell 的 `ROS_DOMAIN_ID=42`、ROS Jazzy setup 和 bridge 进程仍在运行。
-- Server 未启动测试：停止 CARLA 后运行 bridge，预期在连接超时内给出 endpoint/端口错误并退出。
+| 现象 | 正确结论 |
+|---|---|
+| `IN_WSL=1` 且 `import fcntl, carla` 成功 | 工具链可用，不是“没装 WSL” |
+| `process_state=NOT_RUNNING` | 启动 CARLA Server |
+| `RPC_HANDSHAKE_FAILED` 且 TCP 通 | 代理假连通、Server 未就绪或 host 错；看 `sdf sim status` 的 host_source |
+| `server/client version mismatch` | 统一到 0.9.16 |
+| 连续 `load_world` 后 Fatal Error | 关闭残留进程；离线地图用官方 `.xodr`，勿为导出连切图 |
+| `ModuleNotFoundError: carla` | 当前解释器未装 `carla==0.9.16` |

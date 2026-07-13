@@ -4,8 +4,9 @@ Date: 2026-07-12 (Asia/Singapore)
 
 ## Environment
 
-- Connection entrypoint: `source safedrive_foundry/config/runtime/carla_environment.sh`
-- Host source: current WSL default gateway (no copied IP)
+- Connection entrypoint (historical for this run): `source safedrive_foundry/config/runtime/carla_environment.sh`
+- **Current project entrypoint**: `python3 scripts/sdf.py sim preflight` / `ConnectionResolver` (do not treat the shell adapter as the only path)
+- Host source (this run): current WSL default gateway (no copied IP); later hosts may be `127.0.0.1` under mirrored networking
 - CARLA client/server: `0.9.16` / `0.9.16`
 - Map: `Carla/Maps/Town10HD_Opt`
 - Runtime profile: `throughput_20hz`

@@ -7,12 +7,12 @@
 | Claim | 要回答的问题 | 必须对照 | 主要证据阶段 |
 |---|---|---|---|
 | C0 | RACE 是否比公开基础专家在同安全/计算预算下改善规划效率、可跟踪性和扰动鲁棒性 | 固定 Frenet、基础 Hybrid A*、固定 MPC、各单项消融 | G1、G8 |
-| C1 | 轻量 VLA 是否比非语言模仿基线产生更好的可执行候选 | Classic-Observable、视觉轨迹基线、无语言 VLA | G3、G8 |
-| C2 | 世界模型是否改善候选排序并减少昂贵 CARLA 分支 | CV/CTRV/IDM、Reward MLP、无动作条件模型 | G5、G8 |
-| C3 | RATO 是否优于 Hard Reject/Rule Slowdown 且不过度保守 | Raw、Validator、Hard Fallback、Longitudinal QP | G2、G8 |
-| C4 | 主动搜索是否在同预算下发现更多独立可复现失败 | Manual、Random、LHS、CMA-ES | G4、G8 |
-| C5 | 失败驱动后训练是否降低重复失败且保持旧能力 | 训练前模型、随机采样后训练 | G6、G8 |
-| C6 | Agent 是否相对固定脚本产生可量化净收益 | 固定模板、人工脚本、无 Agent | G7、G8 |
+| C1 | 轻量 Fast/Slow VLA 是否比非语言多候选基线产生更可执行、可校准的候选 | Classic-Observable、单轨迹视觉基线、非语言多候选、无 Slow 分支 | G3、G8 |
+| C2 | 动作条件结构化世界模型是否改善 VLA 候选排序并减少昂贵 CARLA 分支 | CV/CTRV/IDM、Reward MLP、无动作条件、无 World | G5、G8 |
+| C3 | 两级 Safety 修复是否优于 Hard Reject/Rule Slowdown 且不过度停车 | Raw、Validator、Hard Fallback、Longitudinal QP、受限 RATO-SCP | G2、G8 |
+| C4 | 覆盖引导搜索是否在同预算下发现更多独立可复现失败 | Random、LHS、无 archive 搜索 | G4、G8 |
+| C5 | CARLA 验证的失败驱动后训练是否降低重复失败且保持旧能力 | 训练前模型、随机/周期采样后训练 | G6、G8 |
+| C6 | 受控研发助手是否相对确定性脚本提高场景提议或诊断效率且不破坏治理 | 固定模板、确定性脚本、无 Agent | G7、G8 |
 
 ## 统一指标维度
 
@@ -23,6 +23,17 @@
 - 实时性：P50/P95/P99、deadline miss、降级率；
 - 资源：CPU、内存、GPU、显存、磁盘和 wall time；
 - 可追溯：run/model/data/scenario/evidence ID。
+
+## 核心发布配置
+
+最终矩阵只冻结四个可解释配置，避免模块笛卡尔积：
+
+1. `Classic`：经典专家与控制；
+2. `VLA+Safety`：轻量 VLA、多候选轨迹与独立 Safety；
+3. `VLA+World+Safety`：加入动作条件世界模型排序；
+4. `PostTrained-Full`：加入一轮失败驱动后训练。
+
+Agent、Active CARLA 和单个算法增强以消融开关评价，不新增不可维护的发布栈。
 
 ## C0专项证据
 

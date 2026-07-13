@@ -1,7 +1,7 @@
 # SafeDrive G0-05 environment doctor
 
-- Overall status: **WARN**
-- Generated (UTC): `2026-07-11T18:57:29.735628+00:00`
+- Overall status: **FAIL**
+- Generated (UTC): `2026-07-13T12:34:13.537612+00:00`
 - Project root: `/mnt/e/autonomous driving`
 
 | Check | Status | Code | Message |
@@ -11,12 +11,12 @@
 | `versions.lock` | **PASS** | `versions_lock_ok` | authoritative version lock is readable |
 | `python.version` | **PASS** | `python_version_ok` | Python major/minor matches the preferred frozen interpreter |
 | `gpu.visible` | **PASS** | `gpu_visible` | NVIDIA GPU is visible to the diagnostic process |
-| `wsl.available` | **PASS** | `wsl_ready` | WSL has at least one registered distribution |
-| `ros2.available` | **PASS** | `ros2_ready` | ROS 2 Jazzy command is available in WSL |
+| `wsl.available` | **PASS** | `wsl_in_guest` | diagnostic process is already running inside WSL |
+| `ros2.available` | **PASS** | `ros2_ready_in_guest` | ROS 2 Jazzy command is available in current WSL |
 | `paths.carla` | **PASS** | `carla_path_ok` | configured CARLA installation path exists |
 | `disk.free` | **PASS** | `disk_space_ok` | free disk space is above the configured G0 safety floor |
 | `carla.port` | **PASS** | `port_open` | CARLA RPC TCP endpoint 172.30.80.1:2000 is reachable |
-| `carla.handshake` | **PASS** | `carla_ready` | CARLA RPC, client/server version and world handshake passed |
+| `carla.handshake` | **FAIL** | `port_conflict_or_non_carla_service` | RPC port is open but the CARLA handshake failed; possible port conflict or protocol error |
 | `carla.port.streaming` | **PASS** | `port_open` | CARLA streaming endpoint 172.30.80.1:2001 is reachable |
 | `carla.port.traffic_manager` | **PASS** | `port_open` | CARLA traffic_manager endpoint 172.30.80.1:2002 is reachable |
 | `ros.clock` | **WARN** | `clock_topic_not_observed` | ROS 2 is available but /clock is not currently observable; start the sync driver |
@@ -82,14 +82,8 @@
 
 ```json
 {
-  "distros": [
-    "Ubuntu-24.04"
-  ],
-  "version": {
-    "returncode": 0,
-    "stderr": "",
-    "stdout": "WSL Hr,g: 2.9.3.0\n\n�Q8hHr,g: 6.18.35.2-1\n\nWSLg Hr,g: 1.0.79\n\nMSRDC Hr,g: 1.2.7214\n\nDirect3D Hr,g: 1.611.1-81528511\n\nDXCore Hr,g: 10.0.26100.1-240331-1435.ge-release\n\nWindows Hr,g: 10.0.26200.8655"
-  }
+  "distro": "Ubuntu-24.04",
+  "mode": "in_guest"
 }
 ```
 
@@ -115,7 +109,7 @@
 
 ```json
 {
-  "free_gib": 112.011,
+  "free_gib": 89.741,
   "minimum_free_gib": 20.0
 }
 ```
@@ -134,8 +128,7 @@
 
 ```json
 {
-  "client": "0.9.16",
-  "server": "0.9.16"
+  "error": "RuntimeError: time-out of 3000ms while waiting for the simulator, make sure the simulator is ready and connected to 172.30.80.1:2000"
 }
 ```
 
@@ -163,9 +156,10 @@
 
 ```json
 {
-  "returncode": 0,
+  "error": "timeout",
+  "returncode": 124,
   "stderr": "",
-  "stdout": "/parameter_events\n/rosout"
+  "stdout": ""
 }
 ```
 

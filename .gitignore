@@ -33,3 +33,6 @@ Thumbs.db
 # Codex + Grok collaboration runtime artifacts
 .collab/runs/
 .collab/local.json
+
+# Local runtime leases/locks
+.runtime/

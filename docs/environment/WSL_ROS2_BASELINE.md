@@ -14,7 +14,8 @@
 - PyTorch：`2.12.1+cu126`；torchvision `0.27.1+cu126`
 - ROS 2：Jazzy Desktop；`ros-jazzy-desktop 0.11.0-1noble.20260616.084553`
 - 开发工具：`ros-dev-tools 1.0.1`，`python3-colcon-common-extensions 0.3.0-100`
-- 工作区：`/home/sdf/safedrive_ws`
+- 工作区（G0-02 烟雾）：`/home/sdf/safedrive_ws`
+- **SafeDrive Foundry 工程根（现行）**：`/mnt/e/autonomous driving`（Windows `E:\autonomous driving`）
 
 `torchaudio 2.12.1` 没有官方 `cu126` wheel，且当前项目不需要音频能力，因此未安装；不得将不存在的构建写成已冻结依赖。
 

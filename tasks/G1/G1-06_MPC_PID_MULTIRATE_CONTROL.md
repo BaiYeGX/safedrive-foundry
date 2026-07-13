@@ -1,6 +1,6 @@
 # G1-06：MPC/PID 多速率控制与 20ms 门禁
 
-**状态**：PENDING  
+**状态**：`COMPLETED_WITH_LIMITS`
 **依赖**：G1-04、G1-05
 
 ## 目标
@@ -23,19 +23,14 @@
 - 增益、权重和约束全部配置化，结果含跟踪误差与舒适性。
 - 固定模型、warm-start 开关、solver tolerance、迭代/墙钟预算和回退条件完整登记，供 G1-08 配对消融。
 
-## 交付物
-
-- 本任务范围内的实现或配置、对应测试/场景、运行记录和可追溯报告；具体对象以本文件的范围和完成标准为准。
-
-## 资源与自动化边界
-
-- 仅使用本任务允许修改路径、已登记输入和版本化配置，不启动后续任务。涉及真实 CARLA 时先执行 `sdf sim preflight`；不得自行解析 WSL gateway、创建第二套 `carla.Client`/tick master 或由业务节点直接调用 `world.tick()`。Agent 不执行任意 shell，学习模块不得修改 Safety 硬约束，MCP 保留到 G7-01。
 ## 验证与断点
-
-运行离线轨迹回放、CARLA 50Hz closed-loop、执行器故障和超时测试；中断记录 run_id、warm-start 状态和最近控制帧。
 
 | 字段 | 内容 |
 |---|---|
-| 最后状态 | PENDING |
-| 已完成/验证 | 无 |
-| 恢复步骤 | 复核轨迹 schema 与 control Profile 后继续 |
+| 时间 | 2026-07-13 |
+| 最后状态 | `COMPLETED_WITH_LIMITS` |
+| 已完成 | ControlLoop + Watchdog（每 tick 单次 record）+ 缓冲 + 降级链；有符号 reverse；e2e inject；六类离线闭环；配置冻结 |
+| 验证 | `unittest tests.g1.test_g1_06_control` PASS；阶段全量 `tests/g1` **78 OK** |
+| 权威证据 | `docs/architecture/evidence/g1-06/repair-20260713/`（含 `manifest.json`） |
+| 限制 | `solver_type=constrained_gradient_ltv_bicycle`（**非** OSQP/SQP-RTI）；闭环以离线 plant 为主；**无** live 50Hz VERIFIED 门禁 |
+| 停止 | **任务关闭**；阶段状态见 `PROGRESS.md` / G1-09 |

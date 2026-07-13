@@ -1,0 +1,40 @@
+# G1-05 frozen Hybrid A* + Reeds-Shepp baseline.
+# G1-07 must not silently change this file; compare via config hash.
+
+[baseline]
+name = "hybrid_astar_rs_basic_v1"
+schema_version = "safedrive.g1_05.hybrid_astar.v1"
+analytic_expansion = "reeds_shepp"
+heuristic = "nonholonomic_rs_plus_obstacle"
+
+[vehicle]
+wheelbase_m = 2.8
+max_steer_rad = 0.6
+max_curvature_per_m = 0.25
+width_m = 1.9
+length_m = 4.5
+min_turning_radius_m = 4.0
+
+[discretization]
+xy_resolution_m = 0.5
+yaw_bins = 16
+step_m = 0.7
+steer_set = [-0.6, -0.3, 0.0, 0.3, 0.6]
+allow_reverse = true
+gear_switch_penalty = 2.0
+steer_switch_penalty = 0.3
+
+[search]
+max_expansions = 8000
+goal_xy_tol_m = 0.6
+goal_yaw_tol_rad = 0.35
+analytic_expansion_every = 20
+analytic_when_dist_m = 8.0
+time_budget_ms = 800.0
+partial_solution = true
+
+[cost]
+w_length = 1.0
+w_reverse = 1.5
+w_gear = 2.0
+w_steer = 0.2

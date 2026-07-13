@@ -1,0 +1,60 @@
+{
+  "comparison": [
+    {
+      "analytic": 0,
+      "failure": "PARTIAL_SOLUTION",
+      "gears": 0,
+      "grid_ok": true,
+      "hybrid_ok": false,
+      "length": 10.499999999999998,
+      "ms": 14.852923995931633,
+      "nodes": 34,
+      "partial": true,
+      "scenario": "blocked_detour"
+    },
+    {
+      "analytic": 1,
+      "failure": null,
+      "gears": 3,
+      "grid_ok": true,
+      "hybrid_ok": true,
+      "length": 20.550424234729988,
+      "ms": 0.4046709946123883,
+      "nodes": 1,
+      "partial": false,
+      "scenario": "three_point_turn"
+    },
+    {
+      "analytic": 1,
+      "failure": null,
+      "gears": 1,
+      "grid_ok": true,
+      "hybrid_ok": true,
+      "length": 14.607270807109309,
+      "ms": 25.695532996905968,
+      "nodes": 42,
+      "partial": false,
+      "scenario": "reverse_park"
+    },
+    {
+      "analytic": 1,
+      "failure": null,
+      "gears": 4,
+      "grid_ok": true,
+      "hybrid_ok": true,
+      "length": 23.64834351805396,
+      "ms": 220.6859979996807,
+      "nodes": 284,
+      "partial": false,
+      "scenario": "dead_end_escape"
+    }
+  ],
+  "config_hash": "d2a62ba60e24af67b217e218201f89a56315d617bab09f05e6c4cb9ce770d90a",
+  "notes": [
+    "partial => hybrid_ok false",
+    "RS endpoint validated",
+    "regenerated after ok=false fix"
+  ],
+  "pointer": "repair-20260713",
+  "schema": "safedrive.g1_05.evidence.repair.v2"
+}

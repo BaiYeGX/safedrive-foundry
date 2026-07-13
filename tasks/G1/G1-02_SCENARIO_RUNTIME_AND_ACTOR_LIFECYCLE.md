@@ -1,6 +1,6 @@
 # G1-02：Simulation Runtime 与场景生命周期
 
-**状态**：COMPLETED  
+**状态**：COMPLETED
 **依赖**：G1-01
 
 ## 目标与原因

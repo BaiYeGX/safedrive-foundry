@@ -1,0 +1,124 @@
+{
+  "corridor": {
+    "goal_node_id": "R2:S0:L-2",
+    "junction_count": 0,
+    "lane_change_count": 1,
+    "map_hash": "b402ad1ba1ca4c68236efc1dd64bc586bda2952cbcee1a863a37479380140ae9",
+    "map_name": "Town01",
+    "road_sequence": [
+      "1",
+      "2"
+    ],
+    "route_id": "route-81cbe64a44b4d448",
+    "seed": 42,
+    "semantics": {
+      "contains_junction": false,
+      "contains_lane_change": true,
+      "contains_road": true,
+      "maneuvers": [
+        "FOLLOW",
+        "LEFT",
+        "FOLLOW"
+      ],
+      "observable_inputs": [
+        "start_node",
+        "goal_nodes",
+        "forbidden_nodes",
+        "route_progress"
+      ],
+      "oracle_inputs": [
+        "lane_graph",
+        "signal_topology",
+        "speed_limits",
+        "multi_goal_set"
+      ]
+    },
+    "start_node_id": "R1:S0:L-1",
+    "steps": [
+      {
+        "cost_from_start": 0.0,
+        "edge_id": null,
+        "junction_id": null,
+        "lane_id": -1,
+        "maneuver": "FOLLOW",
+        "node_id": "R1:S0:L-1",
+        "observable_fields": [
+          "node_id",
+          "road_id",
+          "lane_id",
+          "maneuver",
+          "semantic"
+        ],
+        "oracle_fields": [
+          "node_id",
+          "edge_id",
+          "maneuver",
+          "semantic",
+          "cost_from_start",
+          "junction_id"
+        ],
+        "road_id": "1",
+        "semantic": "regulated_road",
+        "speed_limit_mps": 13.88888888888889
+      },
+      {
+        "cost_from_start": 8.916666666666666,
+        "edge_id": "R1:S0:L-1->R1:S0:L-2:lane_change_left",
+        "junction_id": null,
+        "lane_id": -2,
+        "maneuver": "LEFT",
+        "node_id": "R1:S0:L-2",
+        "observable_fields": [
+          "node_id",
+          "road_id",
+          "lane_id",
+          "maneuver",
+          "semantic"
+        ],
+        "oracle_fields": [
+          "node_id",
+          "edge_id",
+          "maneuver",
+          "semantic",
+          "cost_from_start",
+          "junction_id"
+        ],
+        "road_id": "1",
+        "semantic": "lane_change",
+        "speed_limit_mps": 13.88888888888889
+      },
+      {
+        "cost_from_start": 109.83333333333334,
+        "edge_id": "R1:S0:L-2->R2:S0:L-2:successor",
+        "junction_id": null,
+        "lane_id": -2,
+        "maneuver": "FOLLOW",
+        "node_id": "R2:S0:L-2",
+        "observable_fields": [
+          "node_id",
+          "road_id",
+          "lane_id",
+          "maneuver",
+          "semantic"
+        ],
+        "oracle_fields": [
+          "node_id",
+          "edge_id",
+          "maneuver",
+          "semantic",
+          "cost_from_start",
+          "junction_id"
+        ],
+        "road_id": "2",
+        "semantic": "road",
+        "speed_limit_mps": 13.88888888888889
+      }
+    ],
+    "total_cost": 109.83333333333334
+  },
+  "expansions": 4,
+  "failure_code": null,
+  "failure_node_id": null,
+  "message": "",
+  "ok": true
+}

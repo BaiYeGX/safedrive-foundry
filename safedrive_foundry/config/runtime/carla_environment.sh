@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Compatibility shell adapter only.  Business commands use
-# ``runtime.carla_connection.ConnectionResolver`` directly; this adapter calls
-# that same resolver for users who still source the historical entrypoint.
+# Compatibility shell adapter only.
+# Prefer:  python3 scripts/sdf.py sim preflight|status|ensure
+# Business code must use runtime.carla_connection.ConnectionResolver, not a
+# copied IP. This script only exports CARLA_* for interactive shells.
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   echo "Source this file: source safedrive_foundry/config/runtime/carla_environment.sh" >&2

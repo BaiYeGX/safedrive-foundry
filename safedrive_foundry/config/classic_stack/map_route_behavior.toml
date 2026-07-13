@@ -1,0 +1,53 @@
+﻿# Classic stack map / route / behavior configuration (G1-03)
+
+[map]
+# Offline fixtures ship with the package; live CARLA OpenDRIVE can replace them later.
+fixture_maps = ["Town01", "Town03", "Town10HD"]
+cache_enabled = true
+cache_dir = "docs/architecture/evidence/g1-03/map-cache"
+lane_change_enabled = true
+default_speed_limit_mps = 13.89
+
+[map.anomaly]
+# error anomalies fail graph validation consumers; warning/info are reported only.
+fail_on_severity = ["error"]
+
+[route]
+seed = 7
+allow_lane_change = true
+allow_junction = true
+max_expansions = 10000
+lane_change_penalty = 4.0
+junction_penalty = 2.0
+speed_weight = 0.15
+
+[behavior]
+default_cruise_speed_mps = 12.0
+follow_timeout_s = 8.0
+stop_timeout_s = 60.0
+yield_timeout_s = 10.0
+lane_change_timeout_s = 6.0
+avoid_timeout_s = 5.0
+min_risk_hold_s = 2.0
+
+[oracle]
+# Privileged simulation inputs used only by Classic-Oracle adapters / teachers.
+inputs = [
+  "lane_graph_topology",
+  "signal_true_state",
+  "true_lead_vehicle",
+  "true_cross_traffic",
+  "obstacle_polygon",
+  "route_corridor_full",
+]
+
+[observable]
+# Fair runtime comparison inputs; no privileged CARLA truth.
+inputs = [
+  "navigation_node",
+  "perceived_signal",
+  "detected_lead",
+  "detected_obstacle",
+  "route_progress",
+  "timeout_clock",
+]

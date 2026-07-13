@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>safedrive_classic_stack</name>
+  <version>0.1.0</version>
+  <description>Classic map, route corridor and behavior adapters for SafeDrive Foundry.</description>
+  <maintainer email="safedrive@example.invalid">SafeDrive Foundry</maintainer>
+  <license>MIT</license>
+  <depend>rclpy</depend>
+  <depend>sdf_interfaces</depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -1,6 +1,6 @@
 # G1-07：风险自适应规划搜索优化（RACE-Plan）
 
-**状态**：PENDING  
+**状态**：`COMPLETED_WITH_LIMITS`
 **依赖**：G1-04、G1-05
 
 ## 目标与为什么现在做
@@ -34,10 +34,28 @@
 
 纯 CPU/少量 CARLA 验证，不训练模型。中断时保存 config hash、场景/seed、Baseline 与消融完成矩阵、最近失败候选和 profiler 输出。
 
+---
+
+## 验收结果与证据映射（追加，不替代上文标准）
+
+| 完成标准条款 | 结果 | 权威证据 / 测试 |
+|---|---|---|
+| Baseline / 单项 / Full 消融 | **通过（offline）** | `tests.g1.test_g1_07_race_plan`；`docs/architecture/evidence/g1-07/repair-20260713/summary.json` schema `safedrive.g1_07.ablation.repair.v2` |
+| 候选数 / 尾延迟诚实 | **通过** | `candidates_raw` / `nodes_raw`；已删除 `*0.7`/`*0.85` 事后缩放 |
+| 风险单调性 / Oracle 分轨 | **通过（属性）** | `risk_monotonicity_ok`；`evaluate_risk_field` oracle/observable 分轨 |
+| 无稳定收益不进默认 | **通过（负结论）** | `default_admission.promote_full_to_default=false`，`recommended_default=p1`，`work_ratio_full_over_basic≈1.24` |
+| coarse_to_fine / multi_heuristic 等 | **有限制** | flags 标为 `experimental_partial_*`（独立重跑/预算/stats）；**非**完整算法交付 |
+| CARLA 动态 Pareto 全场景 | **未 VERIFIED** | 本任务以 offline 消融为准；live 见 G1-09 限制清单 |
+| 基线 hash 保护 | **通过** | evidence 记录 frenet/hybrid config SHA-256 |
+
+### 验证与断点
+
 | 字段 | 内容 |
 |---|---|
-| 最后状态 | PENDING |
-| 已完成/修改文件/验证 | 无 |
-| 阻塞 | 无 |
-| 恢复步骤 | 核对 G1-04/G1-05 基线冻结版本，从缺失消融单元继续 |
-| 下一条建议命令 | 待执行时填写 |
+| 时间 | 2026-07-13 |
+| 最后状态 | `COMPLETED_WITH_LIMITS` |
+| 验证 | `PYTHONPATH=safedrive_foundry python3 -m unittest tests.g1.test_g1_07_race_plan -v`（2/2 PASS） |
+| 权威证据 | `docs/architecture/evidence/g1-07/repair-20260713/`（含 `manifest.json`） |
+| 旧证据 | 根目录 `summary.json` 可为 pointer；以 `repair-20260713` 为准；见 `SUPERSEDED.md` |
+| 限制 | full 无净收益不 promote；部分 RACE flags 为 experimental/partial；无 CARLA A/B 收益证明 |
+| 停止 | **任务关闭**；阶段已 `COMPLETED_WITH_LIMITS`（见 `PROGRESS.md` / G1-09）；不自动 G2 |

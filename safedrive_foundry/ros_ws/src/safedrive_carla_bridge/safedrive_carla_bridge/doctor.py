@@ -357,7 +357,32 @@ def _parse_wsl_distros(output: str) -> list[str]:
     return distros
 
 
+def _running_in_wsl() -> bool:
+    if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
+        return True
+    try:
+        version = Path("/proc/version").read_text(encoding="utf-8", errors="ignore").lower()
+    except OSError:
+        version = ""
+    if "microsoft" in version or "wsl" in version:
+        return True
+    return Path("/proc/sys/fs/binfmt_misc/WSLInterop").exists()
+
+
 def _check_wsl() -> tuple[DoctorCheck, str | None]:
+    # Already inside WSL: do not require wsl.exe or nested distro lookup.
+    if _running_in_wsl():
+        distro = os.environ.get("WSL_DISTRO_NAME") or platform.uname().node or "wsl-local"
+        return (
+            DoctorCheck(
+                "wsl.available",
+                PASS,
+                "diagnostic process is already running inside WSL",
+                "wsl_in_guest",
+                {"distro": distro, "mode": "in_guest"},
+            ),
+            distro,
+        )
     version = _run_command(["wsl.exe", "--version"])
     if version.get("returncode") == 127:
         return DoctorCheck("wsl.available", BLOCKED, "wsl.exe is not available; WSL installation needs external action", "wsl_not_available", version), None
@@ -398,6 +423,17 @@ def _check_ros(distro: str | None, wsl_check: DoctorCheck) -> tuple[DoctorCheck,
             ),
             {},
         )
+    if _running_in_wsl():
+        result = _run_command(
+            [
+                "bash",
+                "-lc",
+                "source /opt/ros/jazzy/setup.bash && command -v ros2 && ros2 --help",
+            ]
+        )
+        if result.get("returncode") == 0 and "ros2" in result.get("stdout", ""):
+            return DoctorCheck("ros2.available", PASS, "ROS 2 Jazzy command is available in current WSL", "ros2_ready_in_guest", result), result
+        return DoctorCheck("ros2.available", FAIL, "ROS 2 Jazzy command is not available in current WSL", "ros2_unavailable", result), result
     result = _run_command(
         [
             "wsl.exe",
@@ -425,17 +461,26 @@ def _check_clock(distro: str | None, ros_check: DoctorCheck, clock_topic: str) -
             "clock_observation_blocked",
             {"ros_status": ros_check.status},
         )
-    result = _run_command(
-        [
-            "wsl.exe",
-            "-d",
-            distro,
-            "--",
-            "bash",
-            "-lc",
-            f"source /opt/ros/jazzy/setup.bash && ros2 topic list",
-        ]
-    )
+    if _running_in_wsl():
+        result = _run_command(
+            [
+                "bash",
+                "-lc",
+                "source /opt/ros/jazzy/setup.bash && ros2 topic list",
+            ]
+        )
+    else:
+        result = _run_command(
+            [
+                "wsl.exe",
+                "-d",
+                distro,
+                "--",
+                "bash",
+                "-lc",
+                "source /opt/ros/jazzy/setup.bash && ros2 topic list",
+            ]
+        )
     if result.get("returncode") == 0 and clock_topic in result.get("stdout", "").splitlines():
         return DoctorCheck("ros.clock", PASS, f"ROS clock topic {clock_topic} is discoverable", "clock_topic_visible", result)
     return DoctorCheck(
@@ -544,11 +589,20 @@ def run_doctor(
     ros_check, ros_details = _check_ros(distro, wsl_check)
     checks.append(ros_check)
 
-    carla_root = Path(os.environ.get("CARLA_ROOT", "E:/CARLA_0.9.16"))
+    default_carla = "/mnt/e/CARLA_0.9.16" if _running_in_wsl() else "E:/CARLA_0.9.16"
+    carla_root = Path(os.environ.get("CARLA_ROOT", default_carla))
+    if not carla_root.exists() and _running_in_wsl():
+        # Accept Windows-style CARLA_ROOT by mapping to /mnt/<drive>/...
+        env_root = os.environ.get("CARLA_ROOT", "E:/CARLA_0.9.16")
+        match = re.match(r"^([A-Za-z]):[\\/](.*)$", env_root.replace("\\", "/"))
+        if match:
+            mapped = Path("/mnt") / match.group(1).lower() / match.group(2)
+            if mapped.exists():
+                carla_root = mapped
     if carla_root.exists():
-        checks.append(DoctorCheck("paths.carla", PASS, "configured CARLA installation path exists", "carla_path_ok", {"path": carla_root}))
+        checks.append(DoctorCheck("paths.carla", PASS, "configured CARLA installation path exists", "carla_path_ok", {"path": str(carla_root)}))
     else:
-        checks.append(DoctorCheck("paths.carla", FAIL, "configured CARLA installation path does not exist", "carla_installation_missing", {"path": carla_root}))
+        checks.append(DoctorCheck("paths.carla", FAIL, "configured CARLA installation path does not exist", "carla_installation_missing", {"path": str(carla_root)}))
 
     try:
         usage = shutil.disk_usage(root)

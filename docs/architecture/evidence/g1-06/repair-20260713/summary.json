@@ -1,0 +1,277 @@
+{
+  "schema": "safedrive.g1_06.evidence.repair.v2",
+  "config_hash": "362f55bfeefad1123e4f967cfeaa7ec93c0e8fe30e81a7f1de275bd7d1c38bf2",
+  "solver_type": "constrained_gradient_ltv_bicycle",
+  "watchdog_policy": "one_record_per_control_tick",
+  "inject_e2e_check": {
+    "steps": 10,
+    "misses": 5
+  },
+  "results": [
+    {
+      "scenario": "straight",
+      "profile": "control_50hz",
+      "control_period_ms": 20.0,
+      "config_hash": "362f55bfeefad1123e4f967cfeaa7ec93c0e8fe30e81a7f1de275bd7d1c38bf2",
+      "config_name": "mpc_pid_fixed_v1",
+      "steps": 80,
+      "modes": {
+        "mpc": 80
+      },
+      "tracking_cte_mean": 0.0,
+      "tracking_cte_max": 0.0,
+      "final_speed": 5.0,
+      "final_x": 7.999999999999988,
+      "final_y": 0.0,
+      "progress_m": 7.999999999999988,
+      "signed_progress_x": 7.999999999999988,
+      "watchdog": {
+        "steps": 80,
+        "deadline_misses": 0,
+        "deadline_miss_rate": 0.0,
+        "solver_ms": {
+          "p50": 0.023485998099204153,
+          "p95": 0.02975800452986732,
+          "p99": 0.054231000831350684
+        },
+        "e2e_ms": {
+          "p50": 0.03495399869279936,
+          "p95": 0.04457600152818486,
+          "p99": 0.07841600017854944
+        },
+        "jitter_e2e_ms": 0.009622002835385501
+      },
+      "watchdog_steps_match": true,
+      "warm_start": true,
+      "fallback_chain": [
+        "mpc",
+        "lqr",
+        "pure_pursuit",
+        "pid",
+        "brake"
+      ],
+      "solver_type": "constrained_gradient_ltv_bicycle"
+    },
+    {
+      "scenario": "curve",
+      "profile": "control_50hz",
+      "control_period_ms": 20.0,
+      "config_hash": "362f55bfeefad1123e4f967cfeaa7ec93c0e8fe30e81a7f1de275bd7d1c38bf2",
+      "config_name": "mpc_pid_fixed_v1",
+      "steps": 80,
+      "modes": {
+        "mpc": 80
+      },
+      "tracking_cte_mean": 0.029230332979034573,
+      "tracking_cte_max": 0.05976748361577995,
+      "final_speed": 4.0,
+      "final_x": 6.280996575713115,
+      "final_y": 1.0752564736103545,
+      "progress_m": 6.372369611703394,
+      "signed_progress_x": 6.280996575713115,
+      "watchdog": {
+        "steps": 80,
+        "deadline_misses": 0,
+        "deadline_miss_rate": 0.0,
+        "solver_ms": {
+          "p50": 0.07714499952271581,
+          "p95": 0.09460499859414995,
+          "p99": 0.11153299419675022
+        },
+        "e2e_ms": {
+          "p50": 0.09231000149156898,
+          "p95": 0.11288400128250942,
+          "p99": 0.14065499999560416
+        },
+        "jitter_e2e_ms": 0.020573999790940434
+      },
+      "watchdog_steps_match": true,
+      "warm_start": true,
+      "fallback_chain": [
+        "mpc",
+        "lqr",
+        "pure_pursuit",
+        "pid",
+        "brake"
+      ],
+      "solver_type": "constrained_gradient_ltv_bicycle"
+    },
+    {
+      "scenario": "stop",
+      "profile": "control_50hz",
+      "control_period_ms": 20.0,
+      "config_hash": "362f55bfeefad1123e4f967cfeaa7ec93c0e8fe30e81a7f1de275bd7d1c38bf2",
+      "config_name": "mpc_pid_fixed_v1",
+      "steps": 80,
+      "modes": {
+        "mpc": 80
+      },
+      "tracking_cte_mean": 0.0,
+      "tracking_cte_max": 0.0,
+      "final_speed": 4.370783389560807,
+      "final_x": 8.257378428006895,
+      "final_y": 0.0,
+      "progress_m": 8.257378428006895,
+      "signed_progress_x": 8.257378428006895,
+      "watchdog": {
+        "steps": 80,
+        "deadline_misses": 0,
+        "deadline_miss_rate": 0.0,
+        "solver_ms": {
+          "p50": 0.10441299673402682,
+          "p95": 0.12645099923247471,
+          "p99": 0.13783000031253323
+        },
+        "e2e_ms": {
+          "p50": 0.11401899973861873,
+          "p95": 0.13578000653069466,
+          "p99": 0.15092099783942103
+        },
+        "jitter_e2e_ms": 0.021761006792075932
+      },
+      "watchdog_steps_match": true,
+      "warm_start": true,
+      "fallback_chain": [
+        "mpc",
+        "lqr",
+        "pure_pursuit",
+        "pid",
+        "brake"
+      ],
+      "solver_type": "constrained_gradient_ltv_bicycle"
+    },
+    {
+      "scenario": "follow_brake",
+      "profile": "control_50hz",
+      "control_period_ms": 20.0,
+      "config_hash": "362f55bfeefad1123e4f967cfeaa7ec93c0e8fe30e81a7f1de275bd7d1c38bf2",
+      "config_name": "mpc_pid_fixed_v1",
+      "steps": 80,
+      "modes": {
+        "mpc": 80
+      },
+      "tracking_cte_mean": 0.0,
+      "tracking_cte_max": 0.0,
+      "final_speed": 5.48233356910496,
+      "final_x": 11.909060007158468,
+      "final_y": 0.0,
+      "progress_m": 11.909060007158468,
+      "signed_progress_x": 11.909060007158468,
+      "watchdog": {
+        "steps": 80,
+        "deadline_misses": 0,
+        "deadline_miss_rate": 0.0,
+        "solver_ms": {
+          "p50": 0.06888200005050749,
+          "p95": 0.13489899720298126,
+          "p99": 0.140436997753568
+        },
+        "e2e_ms": {
+          "p50": 0.08068400347838178,
+          "p95": 0.1472549993195571,
+          "p99": 0.1532280002720654
+        },
+        "jitter_e2e_ms": 0.06657099584117532
+      },
+      "watchdog_steps_match": true,
+      "warm_start": true,
+      "fallback_chain": [
+        "mpc",
+        "lqr",
+        "pure_pursuit",
+        "pid",
+        "brake"
+      ],
+      "solver_type": "constrained_gradient_ltv_bicycle"
+    },
+    {
+      "scenario": "lane_change",
+      "profile": "control_50hz",
+      "control_period_ms": 20.0,
+      "config_hash": "362f55bfeefad1123e4f967cfeaa7ec93c0e8fe30e81a7f1de275bd7d1c38bf2",
+      "config_name": "mpc_pid_fixed_v1",
+      "steps": 80,
+      "modes": {
+        "mpc": 80
+      },
+      "tracking_cte_mean": 0.017565794683341074,
+      "tracking_cte_max": 0.04993541290361972,
+      "final_speed": 5.0,
+      "final_x": 7.999008424569809,
+      "final_y": 0.10988255950444024,
+      "progress_m": 7.99961081172444,
+      "signed_progress_x": 7.999008424569809,
+      "watchdog": {
+        "steps": 80,
+        "deadline_misses": 0,
+        "deadline_miss_rate": 0.0,
+        "solver_ms": {
+          "p50": 0.07282599835889414,
+          "p95": 0.10116000339621678,
+          "p99": 0.11771899880841374
+        },
+        "e2e_ms": {
+          "p50": 0.08543900185031816,
+          "p95": 0.1134389967774041,
+          "p99": 0.1309569997829385
+        },
+        "jitter_e2e_ms": 0.027999994927085936
+      },
+      "watchdog_steps_match": true,
+      "warm_start": true,
+      "fallback_chain": [
+        "mpc",
+        "lqr",
+        "pure_pursuit",
+        "pid",
+        "brake"
+      ],
+      "solver_type": "constrained_gradient_ltv_bicycle"
+    },
+    {
+      "scenario": "reverse",
+      "profile": "control_50hz",
+      "control_period_ms": 20.0,
+      "config_hash": "362f55bfeefad1123e4f967cfeaa7ec93c0e8fe30e81a7f1de275bd7d1c38bf2",
+      "config_name": "mpc_pid_fixed_v1",
+      "steps": 80,
+      "modes": {
+        "mpc": 80
+      },
+      "tracking_cte_mean": 0.0,
+      "tracking_cte_max": 0.0,
+      "final_speed": -1.7425000000000033,
+      "final_x": -2.8325000000000022,
+      "final_y": 0.0,
+      "progress_m": 2.8325000000000022,
+      "signed_progress_x": -2.8325000000000022,
+      "watchdog": {
+        "steps": 80,
+        "deadline_misses": 0,
+        "deadline_miss_rate": 0.0,
+        "solver_ms": {
+          "p50": 0.01991400495171547,
+          "p95": 0.027715002943295985,
+          "p99": 0.046465997002087533
+        },
+        "e2e_ms": {
+          "p50": 0.027795998903457075,
+          "p95": 0.03924700286006555,
+          "p99": 0.056648001191206276
+        },
+        "jitter_e2e_ms": 0.011451003956608474
+      },
+      "watchdog_steps_match": true,
+      "warm_start": true,
+      "fallback_chain": [
+        "mpc",
+        "lqr",
+        "pure_pursuit",
+        "pid",
+        "brake"
+      ],
+      "solver_type": "constrained_gradient_ltv_bicycle"
+    }
+  ],
+  "note": "Offline plant; not CARLA live 20ms VERIFIED"
+}

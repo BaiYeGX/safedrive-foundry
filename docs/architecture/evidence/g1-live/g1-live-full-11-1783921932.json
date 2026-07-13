@@ -1,0 +1,1339 @@
+{
+  "arrived": true,
+  "complexity": {
+    "junctions": 17,
+    "length_m": 602.9964652602089,
+    "max_segment_dyaw": 10.655319213867188,
+    "net_yaw_change": 89.3343276977539,
+    "segments": {
+      "approach": 30,
+      "longtail": 142,
+      "uturn": 102
+    },
+    "tags": [
+      "U_TURN",
+      "TURN",
+      "LONG",
+      "LONGTAIL",
+      "APPROACH"
+    ],
+    "turn_deg_sum": 633.8430719077589,
+    "waypoints": 274
+  },
+  "connection": {
+    "client_version": "0.9.16",
+    "details": {
+      "world_settings": {
+        "fixed_delta_seconds": null,
+        "max_substep_delta_time": 0.01,
+        "max_substeps": 10,
+        "substepping": true,
+        "synchronous_mode": false
+      }
+    },
+    "error_code": null,
+    "error_message": null,
+    "fixed_delta_seconds": null,
+    "host": "127.0.0.1",
+    "host_source": "loopback_local",
+    "map": "Carla/Maps/Town10HD_Opt",
+    "needs_user_action": false,
+    "port": 2000,
+    "previous_host": null,
+    "process_state": "RUNNING",
+    "recovery_action": null,
+    "recovery_result": null,
+    "resolved_host": "127.0.0.1",
+    "retry_count": 0,
+    "rpc_reachable": true,
+    "server_version": "0.9.16",
+    "status": "READY",
+    "synchronous_mode": false,
+    "task_action": "IN_PROGRESS",
+    "tcp_reachable": true,
+    "tick_owner": "free (configured=sdf.g0-05.sync)"
+  },
+  "control_hash": "362f55bfeefad1123e4f967cfeaa7ec93c0e8fe30e81a7f1de275bd7d1c38bf2",
+  "failure": null,
+  "final_goal_dist_m": 6.385786551051556,
+  "frenet_hash": "cd31014def5f566d8be3beb99ea9d25620c46a2a688299d6fcd7b0604429f1ee",
+  "history_tail": [
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20733,
+      "k": 6054,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20734,
+      "k": 6055,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20735,
+      "k": 6056,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20736,
+      "k": 6057,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20737,
+      "k": 6058,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20738,
+      "k": 6059,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20739,
+      "k": 6060,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20740,
+      "k": 6061,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20741,
+      "k": 6062,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20742,
+      "k": 6063,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20743,
+      "k": 6064,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20744,
+      "k": 6065,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20745,
+      "k": 6066,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20746,
+      "k": 6067,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20747,
+      "k": 6068,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20748,
+      "k": 6069,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20749,
+      "k": 6070,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20750,
+      "k": 6071,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20751,
+      "k": 6072,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20752,
+      "k": 6073,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20753,
+      "k": 6074,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20754,
+      "k": 6075,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20755,
+      "k": 6076,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20756,
+      "k": 6077,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20757,
+      "k": 6078,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20758,
+      "k": 6079,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20759,
+      "k": 6080,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20760,
+      "k": 6081,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20761,
+      "k": 6082,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20762,
+      "k": 6083,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20763,
+      "k": 6084,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20764,
+      "k": 6085,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20765,
+      "k": 6086,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20766,
+      "k": 6087,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20767,
+      "k": 6088,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20768,
+      "k": 6089,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20769,
+      "k": 6090,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20770,
+      "k": 6091,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20771,
+      "k": 6092,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20772,
+      "k": 6093,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20773,
+      "k": 6094,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20774,
+      "k": 6095,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20775,
+      "k": 6096,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20776,
+      "k": 6097,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20777,
+      "k": 6098,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20778,
+      "k": 6099,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20779,
+      "k": 6100,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20780,
+      "k": 6101,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20781,
+      "k": 6102,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    },
+    {
+      "behavior": "CRUISE",
+      "deadline_miss": false,
+      "dist_goal": 6.385786551051556,
+      "frame": 20782,
+      "k": 6103,
+      "mode": "hold",
+      "route_i": 271,
+      "route_progress_m": 597.2976656518276,
+      "segment": "longtail",
+      "uturn_seen": true,
+      "v": 0.0,
+      "x": 37.66993713378906,
+      "y": -60.929988861083984
+    }
+  ],
+  "hybrid_hash": "d2a62ba60e24af67b217e218201f89a56315d617bab09f05e6c4cb9ce770d90a",
+  "map": "Carla/Maps/Town10HD_Opt",
+  "max_route_index": 271,
+  "max_route_progress_m": 597.2976656518276,
+  "min_goal_dist_m": 6.385786551051556,
+  "mode_counts": {
+    "hold": 300,
+    "mpc": 5804
+  },
+  "ok": true,
+  "plan_log": [
+    {
+      "k": 0,
+      "nodes": 274,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segments": {
+        "approach": 30,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 40,
+      "nodes": 274,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 30,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 80,
+      "nodes": 272,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 28,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 120,
+      "nodes": 270,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 26,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 160,
+      "nodes": 268,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 24,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 200,
+      "nodes": 267,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 23,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 240,
+      "nodes": 265,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 21,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 280,
+      "nodes": 263,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 19,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 320,
+      "nodes": 261,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 17,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 360,
+      "nodes": 259,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 15,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 400,
+      "nodes": 257,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 13,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 440,
+      "nodes": 255,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 11,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 480,
+      "nodes": 253,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 9,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 520,
+      "nodes": 252,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 8,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 560,
+      "nodes": 250,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 6,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 600,
+      "nodes": 248,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 4,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 640,
+      "nodes": 246,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "approach",
+      "segments": {
+        "approach": 2,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 680,
+      "nodes": 244,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 102
+      }
+    },
+    {
+      "k": 720,
+      "nodes": 242,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 100
+      }
+    },
+    {
+      "k": 760,
+      "nodes": 240,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 98
+      }
+    },
+    {
+      "k": 800,
+      "nodes": 237,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 95
+      }
+    },
+    {
+      "k": 840,
+      "nodes": 235,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 93
+      }
+    },
+    {
+      "k": 880,
+      "nodes": 232,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 90
+      }
+    },
+    {
+      "k": 920,
+      "nodes": 230,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 88
+      }
+    },
+    {
+      "k": 960,
+      "nodes": 228,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 86
+      }
+    },
+    {
+      "k": 1000,
+      "nodes": 226,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 84
+      }
+    },
+    {
+      "k": 1040,
+      "nodes": 224,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 82
+      }
+    },
+    {
+      "k": 1080,
+      "nodes": 222,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 80
+      }
+    },
+    {
+      "k": 1120,
+      "nodes": 220,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 78
+      }
+    },
+    {
+      "k": 1160,
+      "nodes": 218,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 76
+      }
+    },
+    {
+      "k": 1200,
+      "nodes": 216,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 74
+      }
+    },
+    {
+      "k": 1240,
+      "nodes": 214,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 72
+      }
+    },
+    {
+      "k": 1280,
+      "nodes": 212,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 70
+      }
+    },
+    {
+      "k": 1320,
+      "nodes": 210,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 68
+      }
+    },
+    {
+      "k": 1360,
+      "nodes": 208,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 66
+      }
+    },
+    {
+      "k": 1400,
+      "nodes": 206,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 64
+      }
+    },
+    {
+      "k": 1440,
+      "nodes": 204,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 62
+      }
+    },
+    {
+      "k": 1480,
+      "nodes": 202,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 60
+      }
+    },
+    {
+      "k": 1520,
+      "nodes": 200,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 58
+      }
+    },
+    {
+      "k": 1560,
+      "nodes": 198,
+      "ok": true,
+      "planner": "full_demo_dense",
+      "segment": "uturn",
+      "segments": {
+        "approach": 0,
+        "longtail": 142,
+        "uturn": 56
+      }
+    }
+  ],
+  "route_nodes": 274,
+  "schema": "safedrive.g1.live_full.v2",
+  "seed": 11,
+  "segment_ticks": {
+    "approach": 673,
+    "longtail": 3492,
+    "uturn": 1939
+  },
+  "stack": [
+    "ScenarioRuntime",
+    "BehaviorStateMachine",
+    "full_demo_route(approach+uturn+longtail)",
+    "ControlLoop",
+    "spectator_follow",
+    "segmented_debug_path"
+  ],
+  "start_goal_dist_m": 154.3022206516471,
+  "ticks_budget": 9044,
+  "ticks_run": 6104,
+  "uturn_seen": true,
+  "watchdog": {
+    "deadline_miss_rate": 0.0,
+    "deadline_misses": 0,
+    "e2e_ms": {
+      "p50": 0.14358499902300537,
+      "p95": 0.20972000129404478,
+      "p99": 0.2555999999458436
+    },
+    "jitter_e2e_ms": 0.06613500227103941,
+    "solver_ms": {
+      "p50": 0.14031200043973513,
+      "p95": 0.20596100148395635,
+      "p99": 0.2514829975552857
+    },
+    "steps": 5804
+  }
+}

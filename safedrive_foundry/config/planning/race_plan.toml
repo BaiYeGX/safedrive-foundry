@@ -1,0 +1,38 @@
+# G1-07 RACE-Plan ablation flags. Baseline hashes reference G1-04/G1-05 frozen files.
+
+[race_plan]
+name = "race_plan_v1"
+schema_version = "safedrive.g1_07.race_plan.v1"
+frenet_baseline_config = "safedrive_foundry/config/classic_stack/frenet_st_baseline.toml"
+hybrid_baseline_config = "safedrive_foundry/config/classic_stack/hybrid_astar_baseline.toml"
+prediction_model = "cv_ctrv_idm"
+
+[ablation.basic]
+adaptive_sampling = false
+coarse_to_fine = false
+multi_heuristic = false
+risk_trackability = false
+
+[ablation.p1]
+adaptive_sampling = true
+coarse_to_fine = false
+multi_heuristic = false
+risk_trackability = false
+
+[ablation.p2]
+adaptive_sampling = true
+coarse_to_fine = true
+multi_heuristic = false
+risk_trackability = true
+
+[ablation.full]
+adaptive_sampling = true
+coarse_to_fine = true
+multi_heuristic = true
+risk_trackability = true
+
+[budgets]
+candidate_budget_basic = 40
+candidate_budget_full = 40
+node_budget_basic = 2000
+node_budget_full = 2000

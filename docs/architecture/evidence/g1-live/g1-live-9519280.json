@@ -1,0 +1,92 @@
+{
+  "connection": {
+    "client_version": "0.9.16",
+    "details": {
+      "world_settings": {
+        "fixed_delta_seconds": null,
+        "max_substep_delta_time": 0.01,
+        "max_substeps": 10,
+        "substepping": true,
+        "synchronous_mode": false
+      }
+    },
+    "error_code": null,
+    "error_message": null,
+    "fixed_delta_seconds": null,
+    "host": "127.0.0.1",
+    "host_source": "loopback_local",
+    "map": "Carla/Maps/Town10HD_Opt",
+    "needs_user_action": false,
+    "port": 2000,
+    "previous_host": null,
+    "process_state": "RUNNING",
+    "recovery_action": null,
+    "recovery_result": null,
+    "resolved_host": "127.0.0.1",
+    "retry_count": 0,
+    "rpc_reachable": true,
+    "server_version": "0.9.16",
+    "status": "READY",
+    "synchronous_mode": false,
+    "task_action": "IN_PROGRESS",
+    "tcp_reachable": true,
+    "tick_owner": "free (configured=sdf.g0-05.sync)"
+  },
+  "control_period_ms": 20.0,
+  "control_profile": "control_50hz",
+  "failure": "RuntimeError: trying to create rpc server for traffic manager; but the system failed to create because of bind error.",
+  "final_goal_dist_m": null,
+  "goal": {
+    "x": -52.330810546875,
+    "y": -14.039613723754883,
+    "yaw": 90.43232727050781
+  },
+  "history_tail": [],
+  "limitations_update": {
+    "L1_live_control": "ATTEMPTED_NOT_PASSED",
+    "L2_race_proof": "MEASURED_OFFLINE_ABLATION_WITH_LIVE_CONTEXT_NOT_FULL_PARETO",
+    "L3_positive_opt": "DATA_DEPENDENT_SEE_ADMISSION"
+  },
+  "map": "Carla/Maps/Town10HD_Opt",
+  "map_choice": "Town10HD",
+  "min_goal_dist_m": 1000000000.0,
+  "mode_counts": {},
+  "modes": [],
+  "ok": false,
+  "race_control_admission": {
+    "promote_full_to_default": true,
+    "reason": "full miss rate not worse than fixed"
+  },
+  "race_plan_admission": {
+    "promote_full_to_default": true,
+    "reason": "full success rate not below basic"
+  },
+  "risk_monotonicity_ok": true,
+  "risk_sample_mean": -21445712511285.695,
+  "route_length_m": 166.40495646556167,
+  "route_waypoints": 91,
+  "schema": "safedrive.g1.live_classic_expert.v1",
+  "seed": 9519280,
+  "start": {
+    "x": -78.03414916992188,
+    "y": 12.967159271240234,
+    "yaw": -179.84078979492188
+  },
+  "ticks_run": 0,
+  "watchdog": {
+    "deadline_miss_rate": 0.0,
+    "deadline_misses": 0,
+    "e2e_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "jitter_e2e_ms": 0.0,
+    "solver_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "steps": 0
+  }
+}
