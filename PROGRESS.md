@@ -86,4 +86,5 @@
 ## 下一动作
 
 - **G1 已关闭**，无进行中任务。
-- GitHub：`origin/grok/g1-acceptance-repair`（commit `63ca992`）；开 PR：https://github.com/BaiYeGX/safedrive-fo
+- GitHub：`origin/grok/g1-acceptance-repair`（commit `63ca992`）；开 PR：https://github.com/BaiYeGX/safedrive-foundry/pull/new/grok/g1-acceptance-repair
+- 下一阶段：仅当用户指令 `执行G2-01，读取START_TASK.md。`
