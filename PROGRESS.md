@@ -12,7 +12,7 @@
 | 最近完成 | G1 阶段收口：算法验收修复 + 短 full dense live v4 + 任务标准治理 |
 | 推荐下一任务 | 仅当用户明确指令：`执行G2-01，读取START_TASK.md。` |
 | 最近更新 | 2026-07-13 |
-| 工作分支 | `grok/g1-acceptance-repair`（**未** commit / **未** push） |
+| 工作分支 | `grok/g1-acceptance-repair`（已 commit `63ca992`，已 push 至 origin） |
 
 ## 阶段状态
 
@@ -44,7 +44,7 @@
 
 ## 当前阻塞与决策
 
-**无阻塞。** G1 已正式结束。不自动 commit、不自动 push、不自动启动 G2。
+**无阻塞。** G1 已正式结束。本轮已 commit 并 push 至 GitHub；**不**自动启动 G2、**不**自动 merge `main`。
 
 ### G1 限制（诚实，关闭后仍有效）
 
@@ -86,5 +86,4 @@
 ## 下一动作
 
 - **G1 已关闭**，无进行中任务。
-- 入库：用户明确要求再 commit。
-- 下一阶段：仅当用户指令 `执行G2-01，读取START_TASK.md。`
+- GitHub：`origin/grok/g1-acceptance-repair`（commit `63ca992`）；开 PR：https://github.com/BaiYeGX/safedrive-fo
