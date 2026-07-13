@@ -1,30 +1,63 @@
-# G2-04：Shadow 仲裁、回退与最小风险
+# G2-04：候选预筛、仲裁、Shadow 与回退链
 
-**状态**：PENDING  
+**状态**：COMPLETED
 **依赖**：G2-03
 
-## 目标与范围
+## 启动读取清单
 
-统一 Raw/修复/Classic 候选，建立可审计仲裁、风险门控、Classic Shadow、Minimal Risk 与 Emergency Brake 链。首版只使用确定性风险和 Validator 结果，为后续学习风险保留接口。
+启动本任务前，除 START_TASK.md、PROGRESS.md、ROADMAP.md 对应阶段和本任务全文外，按顺序读取：
 
-## 不做与允许修改
+1. docs/project/EXECUTION_ARCHITECTURE.md 第 2～8 节；
+2. docs/project/G2_G8_INDUSTRIAL_ARCHITECTURE.md 第 1～4、7 节；
+3. docs/project/SINGLE_MACHINE_EXECUTION_BUDGET.md 第 1、2、4、5、7、8 节；
+4. G2-01～G2-03 最终接口、配置和断点；
 
-不接入 VLA 或世界模型。允许修改 `safedrive_foundry/safety_kernel/arbitration/**`、`safedrive_foundry/safety_kernel/fallback/**`、`safedrive_foundry/runtime/**`、`safedrive_foundry/ros_ws/src/**`、`safedrive_foundry/config/**`、`tests/g2/**` 和 `docs/architecture/**`。
+只读取列出的章节和直接依赖最终产物；引用文档继续列出必读项时，按其任务索引继续读取。
+
+## 目标
+
+冻结 hard precheck→soft score→deterministic arbitration→final Validator→QP/RATO→Classic/Minimal Risk/Emergency→MPC 的执行顺序。
+
+## 实现范围与边界
+
+- Raw、Classic、Repaired 与未来 VLA/World 候选统一 adapter；
+- 候选来源、版本、风险、拒绝、修复和最终动作审计；
+- Classic Shadow 不争夺控制权或 tick ownership；
+- 冻结模型 unavailable/timeout/OOD/overconfident 的降级接口；
 
 ## 完成标准与验证
 
-- 每次选择记录候选集、拒绝原因、风险、修改量与最终动作。
-- 连续异常进入 Minimal Risk，迫近碰撞进入 Emergency，恢复有滞回。
-- Shadow 不争夺控制权；Classic 回退使用明确版本。
-- 在正常/边界/无解/超时 case 核对状态与动作时间线。
+- 正常、全拒绝、修复成败、超时和紧急时间线确定性一致。
+- 学习模块关闭时 Classic+Safety 不依赖 GPU。
+- Emergency 不被分数、语言或热配置覆盖。
+- 报告仲裁时延、切换、停车、进度损失和回退成功率。
 
-## 交付物
+## 允许修改与交付物
 
-- 本任务范围内的实现或配置、对应测试/场景、运行记录和可追溯报告；具体对象以本文件的范围和完成标准为准。
+实现组件路径均相对 safedrive_foundry/；tests/、docs/、tasks/ 与 PROGRESS.md 相对仓库根。允许修改当前能力直接需要的实现、配置、测试、验证、Registry、Evidence、本任务和 PROGRESS.md；不得提前实现下一任务。涉及真实 CARLA 时先执行 sdf sim preflight。
 
-## 资源与自动化边界
-
-- 仅使用本任务允许修改路径、已登记输入和版本化配置，不启动后续任务。涉及真实 CARLA 时先执行 `sdf sim preflight`；不得自行解析 WSL gateway、创建第二套 `carla.Client`/tick master 或由业务节点直接调用 `world.tick()`。Agent 不执行任意 shell，学习模块不得修改 Safety 硬约束，MCP 保留到 G7-01。
 ## 断点记录
 
-最后状态：PENDING；恢复时从最近 SafetyEvent 时间线、候选 ID 和未通过状态转移继续。
+**COMPLETED**（2026-07-13，offline CPU regression）
+
+### 交付摘要
+
+- 冻结流水线：hard precheck → soft score → rank → final Validator → QP/RATO → fallback → Shadow
+- Classic Shadow 仅对比，不争夺控制权 / tick ownership
+- 降级门控：unavailable / timeout / OOD / overconfident / soft-stale
+- 审计：`ArbitrationRecord`（stages、ranked_ids、audits、fallback、shadow）
+- Evidence：`docs/architecture/evidence/g2-04/`
+
+### 验证
+
+```text
+PYTHONPATH=safedrive_foundry python3 -m unittest discover -s tests/g2 -t . -v
+# 含 G2-04 用例；全量 g2 见 PROGRESS
+```
+
+### 限制
+
+- offline CPU，非 live CARLA
+- 故障矩阵与阶段 C3 属 G2-05
+
+恢复时先复核启动读取清单、直接依赖接口、版本、冻结协议和外部状态。

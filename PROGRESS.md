@@ -6,85 +6,87 @@
 
 | 字段 | 当前值 |
 |---|---|
-| 当前阶段 | G1：**已关闭**（`COMPLETED_WITH_LIMITS`） |
-| 当前任务 | **无**（G1-01～G1-09 全部关闭；不自动开始 G2） |
-| 当前状态 | **`COMPLETED_WITH_LIMITS`**（正式结束） |
-| 最近完成 | G1 阶段收口：算法验收修复 + 短 full dense live v4 + 任务标准治理 |
-| 推荐下一任务 | 仅当用户明确指令：`执行G2-01，读取START_TASK.md。` |
+| 当前阶段 | G2：**COMPLETED_WITH_LIMITS（offline）** |
+| 当前任务 | **G2-05 COMPLETED_WITH_LIMITS**；G2 离线阶段关闭 |
+| 当前状态 | **G2-01～G2-04 COMPLETED**；**G2-05 COMPLETED_WITH_LIMITS**（无 live CARLA 短闭环） |
+| 最近完成 | Codex G2 复核修复（NaN actor / identity / deadline / RATO timeout / 故障矩阵 / evidence 门控）；`tests/g2` **111/111** |
+| 推荐下一任务 | 仅当用户明确指令：`读取 START_TASK.md，启动 G3-01。`（或授权 live 补验 G2-05） |
 | 最近更新 | 2026-07-13 |
-| 工作分支 | `main`（已 fast-forward 合并 `grok/g1-acceptance-repair`，tip `f711b8b`，已 push `origin/main`） |
+| 工作分支 | `grok/g2-01-safety-contracts`（未 merge main；未 push） |
 
 ## 阶段状态
 
 | 阶段 | 状态 | 说明 |
 |---|---|---|
-| G0 | `COMPLETED / FROZEN` | 任务/代码/历史 evidence 冻结；工作区或有历史 env 文档 diff（不纳入 G1 关闭条件） |
-| G1 | **`COMPLETED_WITH_LIMITS`** | **正式关闭**；见下方限制与证据指针 |
-| G2 | `PENDING` | 6 项；**未**启动 |
-| G3 | `PENDING` | 7 项 |
-| G4 | `PENDING` | 6 项 |
-| G5 | `PENDING` | 6 项 |
-| G6 | `PENDING` | 6 项 |
-| G7 | `PENDING` | 5 项 |
-| G8 | `PENDING` | 6 项 |
+| G0 | `COMPLETED / FROZEN` | 任务/代码/历史 evidence 冻结 |
+| G1 | **`COMPLETED_WITH_LIMITS`** | 正式关闭 |
+| G2 | **`COMPLETED_WITH_LIMITS`** | 离线 Safety Kernel 全链路完成；无 live 50Hz/短闭环 VERIFIED |
+| G3 | `PENDING` | 5 项；统一数据、非语言多候选、轻量 Fast/Slow VLA 与闭环 |
+| G4 | `PENDING` | 5 项 |
+| G5 | `PENDING` | 5 项 |
+| G6 | `PENDING` | 5 项 |
+| G7 | `PENDING` | 3 项 |
+| G8 | `PENDING` | 5 项 |
 
-## G1 任务状态一览
+## G2 任务状态一览
 
 | 任务 | 状态 |
 |---|---|
-| G1-01 | `COMPLETED` |
-| G1-02 | `COMPLETED` |
-| G1-03 | `COMPLETED` |
-| G1-04 | `COMPLETED_WITH_LIMITS` |
-| G1-05 | `COMPLETED_WITH_LIMITS` |
-| G1-06 | `COMPLETED_WITH_LIMITS` |
-| G1-07 | `COMPLETED_WITH_LIMITS` |
-| G1-08 | `COMPLETED_WITH_LIMITS` |
-| G1-09 | `COMPLETED_WITH_LIMITS`（阶段验收） |
+| G2-01 | **`COMPLETED`** |
+| G2-02 | **`COMPLETED`** |
+| G2-03 | **`COMPLETED`** |
+| G2-04 | **`COMPLETED`** |
+| G2-05 | **`COMPLETED_WITH_LIMITS`**（offline fault matrix；无 live 短闭环） |
 
 ## 当前阻塞与决策
 
-**无阻塞。** G1 已正式结束。本轮已 commit 并 push 至 GitHub；**不**自动启动 G2、**不**自动 merge `main`。
+**无阻塞（offline 范围）。** Live CARLA 短闭环未跑 → G2-05 限制保留。
 
-### G1 限制（诚实，关闭后仍有效）
+**不**自动启动 G3、**不**自动 merge/push main。
 
-1. 控制 solver 为 **constrained gradient LTV bicycle**，**不是** OSQP/SQP-RTI。
-2. **无** live 50Hz P50/P95/P99 正式 VERIFIED 门禁。
-3. RACE admission **仅 offline**；无 CARLA A/B 收益证明。
-4. 长 600m full **零碰撞非 VERIFIED**（权威 live 为短 ~182m + dense uturn）。
-5. 权威 live **`hybrid_in_loop=false`**（dense uturn 默认；**不**作 Hybrid/RS live 证明）。
-6. 权威 live **`no_traffic` / `junctions=0`**；红灯/切入/路口让行等 **未 live VERIFIED**（见 G1-09 映射表）。
-7. 工作区含历史 `docs/environment/*` 等 diff → **披露、不纳入关闭条件**。
+### G2 阶段限制（诚实）
+
+1. 全阶段验收为 **offline CPU regression**，**不是** CARLA live 50Hz / 短闭环 VERIFIED。
+2. G2-05 CLAIMS C3 为 offline MEASURED；live 补验需用户授权 + `sdf sim preflight`。
+3. Missed-actor Observable 漏检为已登记负结果。
+4. Shadow 仅对比，不控制车辆、不占 tick。
+5. 碰撞为 CV+圆包络；红灯为近距速度门（非完整停线规划器）。
+6. 状态硬故障 **state lock**：不得在不可信观测上 ACCEPT/QP/RATO。
 
 ### 证据指针
 
 | 轨 | 路径 |
 |---|---|
-| Offline repair | `docs/architecture/evidence/g1-0{4..9}/repair-20260713/`（含 manifest） |
-| Live 权威 v4 | `docs/architecture/evidence/g1-live/latest_success.json`（`g1-live-full-11-1783946091`） |
-| 阶段 Review | `docs/architecture/G1_DEVELOPMENT_AND_ACCEPTANCE_REVIEW.md` |
-| 阶段验收任务 | `tasks/G1/G1-09_CLASSIC_EXPERT_ACCEPTANCE.md` |
+| G2-01 | `docs/architecture/evidence/g2-01/` |
+| G2-02 | `docs/architecture/evidence/g2-02/` |
+| G2-03 | `docs/architecture/evidence/g2-03/` |
+| G2-04 | `docs/architecture/evidence/g2-04/` |
+| G2-05 | `docs/architecture/evidence/g2-05/` |
 
-### 实测摘要（关闭依据）
+### 实测摘要
 
 | 项 | 结果 |
 |---|---|
-| `unittest discover -s tests/g1` | **78/78 OK** |
-| Live | `stack=full`，`uturn_planner=dense`，seed=11，route≈181.5m，**arrived**，schema **v4** |
-| 任务标准 | G1-07～09 原文保留；未达标项写入限制，非删标准 |
+| **`unittest discover -s tests/g2`** | **111/111 OK** |
+| G2-02 QP latency | P50/P95 ≈ **8.41 / 10.20 ms**（n=24，deadline 50ms，miss=0） |
+| G2-03 RATO latency | P50/P95 ≈ **40.90 / 73.91 ms**（n=8，deadline 100ms，miss=0） |
+| G2-04 arbitration | P50/P95 ≈ **3.12 / 12.50 ms**（n=5；fresh kernel/场景；degradation audit） |
+| G2-05 fault matrix | **13** 类故障 + expected_action 校验；tick P50/P95 ≈ 14.0 / 51.5 ms（n=13）；live `NOT_RUN` |
 
 ## 最近更新
 
 | 日期 | 变更 |
 |---|---|
-| 2026-07-13 | **G1 正式结束**：状态统一为 `COMPLETED_WITH_LIMITS`；指针清空；文档对齐。 |
-| 2026-07-13 | 任务标准治理：恢复 G1-07～09 原文 + 证据映射；Review 修正；g1-04 manifest。 |
-| 2026-07-13 | 短 full dense live v4 arrived；P0/P1 收口；78 tests 绿。 |
-| 2026-07-13 | G1-04～09 严格验收修复（分支 `grok/g1-acceptance-repair`）。 |
-| 2026-07-12 | G1-01/G1-02 完成；G0 冻结。 |
+| 2026-07-13 | **Codex G2 复核修复**：P0 NaN actor state-lock、identity 契约硬校验、QP deadline→TIMEOUT；P1 RATO timeout 不执行、故障矩阵补齐、g2-04 场景隔离；P2 evidence 资源/hash/git/门控；`tests/g2` **111/111**；G2-05 仍 `COMPLETED_WITH_LIMITS`。 |
+| 2026-07-13 | **G2 语义修复**：state floor lock、soft_stale 仅 VLA、final 扫全 ranked、ROS conf、公开 event/latency API、VISION_SOFT_DEGRADE 入矩阵。 |
+| 2026-07-13 | **G2 离线收口**：G2-04 仲裁/Shadow/回退 + G2-05 故障矩阵；阶段 `COMPLETED_WITH_LIMITS`。 |
+| 2026-07-13 | **G2-03 COMPLETED**：受限 RATO-SCP + Frenet 走廊 + Kernel 级联；evidence `g2-03/`。 |
+| 2026-07-13 | **G2-02 COMPLETED**：纵向 QP 修复；evidence `g2-02/`。 |
+| 2026-07-13 | **G2-01 COMPLETED**：契约/Validator/状态机；分支 `grok/g2-01-safety-contracts`。 |
+| 2026-07-13 | **G1 正式结束**：`COMPLETED_WITH_LIMITS`。 |
 
 ## 下一动作
 
-- **G1 已关闭**，无进行中任务。
-- GitHub：`origin/main` @ `f711b8b`（G1 已合入 main）；功能分支 `origin/grok/g1-acceptance-repair` 仍保留。
-- 下一阶段：仅当用户指令 `执行G2-01，读取START_TASK.md。`
+- G2 offline 停止点已到。
+- 下一任务口令：`读取 START_TASK.md，启动 G3-01。`
+- 若需 G2-05 live 短闭环补验：先启动 CARLA，再 `sdf sim preflight` 后明确授权。
