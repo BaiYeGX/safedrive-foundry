@@ -1,0 +1,70 @@
+{
+  "mode": "VLA_SAFETY",
+  "version": "v0",
+  "seeds": [
+    11,
+    13
+  ],
+  "results": [
+    {
+      "status": "COMPLETED",
+      "steps": 200,
+      "seed": 11,
+      "mode": "VLA_SAFETY",
+      "version": "v0",
+      "fault": "",
+      "distance_m": 147.67496109351003,
+      "latency_n": 21,
+      "latency_p95_ms": 0.21772800391772762,
+      "decision_tail": [
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT"
+      ],
+      "run_id": "run-fdd2a4f20e6919dc99e7"
+    },
+    {
+      "status": "COMPLETED",
+      "steps": 200,
+      "seed": 13,
+      "mode": "VLA_SAFETY",
+      "version": "v0",
+      "fault": "",
+      "distance_m": 147.6606632237294,
+      "latency_n": 21,
+      "latency_p95_ms": 0.2059780017589219,
+      "decision_tail": [
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT"
+      ],
+      "run_id": "run-8688dad32b1a5be628f7"
+    }
+  ],
+  "all_ok": true,
+  "map": "Carla/Maps/Town10HD_Opt"
+}

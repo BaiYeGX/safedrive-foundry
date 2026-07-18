@@ -1,0 +1,1562 @@
+[
+  {
+    "sim_s": 3.732715405523777,
+    "camera_frame": 51,
+    "latency_ms": 921.5936390000934,
+    "target_ego_1": [
+      13.533917533271428,
+      -5.409861171605525
+    ],
+    "target_ego_2": [
+      19.300725560725752,
+      -18.70071573761668
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.20148399588029092,
+      "length_m": 18.800758481499173,
+      "switch_lateral_5m": 0.0,
+      "switch_heading_5m_deg": 0.0
+    }
+  },
+  {
+    "sim_s": 4.232715412974358,
+    "camera_frame": 61,
+    "latency_ms": 126.92131200003587,
+    "target_ego_1": [
+      13.533954617053778,
+      -5.409843102168306
+    ],
+    "target_ego_2": [
+      19.300759889589784,
+      -18.700698863518742
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.2295856025413303,
+      "length_m": 18.89922656624707,
+      "switch_lateral_5m": 0.09142146362575376,
+      "switch_heading_5m_deg": 0.2524941719039158
+    }
+  },
+  {
+    "sim_s": 4.732715420424938,
+    "camera_frame": 71,
+    "latency_ms": 142.04452100000253,
+    "target_ego_1": [
+      13.444651085688049,
+      -5.621599127668509
+    ],
+    "target_ego_2": [
+      18.96436405257002,
+      -19.02016735913096
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.31667610665923873,
+      "length_m": 18.852326392191582,
+      "switch_lateral_5m": 0.018088496984423597,
+      "switch_heading_5m_deg": 2.2553684008119403
+    }
+  },
+  {
+    "sim_s": 5.232715427875519,
+    "camera_frame": 81,
+    "latency_ms": 124.32558299997254,
+    "target_ego_1": [
+      13.276503471383991,
+      -6.030457983890653
+    ],
+    "target_ego_2": [
+      18.368279381336553,
+      -19.623664644788708
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.39316033492137686,
+      "length_m": 18.70402597492553,
+      "switch_lateral_5m": 0.5002691755280138,
+      "switch_heading_5m_deg": 5.218608608181415
+    }
+  },
+  {
+    "sim_s": 5.732715435326099,
+    "camera_frame": 91,
+    "latency_ms": 122.98886600001424,
+    "target_ego_1": [
+      13.285476415277193,
+      -6.067820543712527
+    ],
+    "target_ego_2": [
+      18.31317540300033,
+      -19.748428882847417
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.3186147831566753,
+      "length_m": 18.76576594875744,
+      "switch_lateral_5m": 0.5965227383808224,
+      "switch_heading_5m_deg": 3.9926396692412562
+    }
+  },
+  {
+    "sim_s": 6.23271544277668,
+    "camera_frame": 101,
+    "latency_ms": 124.93047800001023,
+    "target_ego_1": [
+      13.204377295372558,
+      -6.252545544187314
+    ],
+    "target_ego_2": [
+      18.148267096901208,
+      -20.018563740907226
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.27873889363048265,
+      "length_m": 18.906621893959638,
+      "switch_lateral_5m": 0.8181443827734843,
+      "switch_heading_5m_deg": 3.62485973418846
+    }
+  },
+  {
+    "sim_s": 6.732715450227261,
+    "camera_frame": 111,
+    "latency_ms": 123.38258399995539,
+    "target_ego_1": [
+      13.029049908958275,
+      -6.7012991132937865
+    ],
+    "target_ego_2": [
+      17.616238593161427,
+      -20.657491704317547
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.27631352710837576,
+      "length_m": 18.917218673380443,
+      "switch_lateral_5m": 0.7494616114600423,
+      "switch_heading_5m_deg": 2.9620837645557403
+    }
+  },
+  {
+    "sim_s": 7.232715457677841,
+    "camera_frame": 121,
+    "latency_ms": 140.94688199998018,
+    "target_ego_1": [
+      12.967344712782031,
+      -6.848088491728715
+    ],
+    "target_ego_2": [
+      17.50320136080486,
+      -20.855548779776385
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.6284689210178133,
+      "length_m": 18.81009882208553,
+      "switch_lateral_5m": 0.13166121409543707,
+      "switch_heading_5m_deg": 3.393558530145709
+    }
+  },
+  {
+    "sim_s": 7.732715465128422,
+    "camera_frame": 131,
+    "latency_ms": 128.86653500004286,
+    "target_ego_1": [
+      13.090424966930184,
+      -6.591023250803083
+    ],
+    "target_ego_2": [
+      18.008637374908503,
+      -20.49146716059096
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.46525518998034243,
+      "length_m": 18.784353906114738,
+      "switch_lateral_5m": 0.22267299571375176,
+      "switch_heading_5m_deg": 0.8835836248029102
+    }
+  },
+  {
+    "sim_s": 8.232715472579002,
+    "camera_frame": 141,
+    "latency_ms": 142.2941629999741,
+    "target_ego_1": [
+      13.534141304785798,
+      -5.519431341607666
+    ],
+    "target_ego_2": [
+      19.606272569989997,
+      -18.995227782983573
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.4938710013128157,
+      "length_m": 18.90855734985861,
+      "switch_lateral_5m": 0.7333647686322563,
+      "switch_heading_5m_deg": 2.8591623703835003
+    }
+  },
+  {
+    "sim_s": 8.732715480029583,
+    "camera_frame": 151,
+    "latency_ms": 127.44022000003952,
+    "target_ego_1": [
+      13.923299468483316,
+      -4.347710003807469
+    ],
+    "target_ego_2": [
+      21.145306876065675,
+      -17.306790112992672
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.622626346662182,
+      "length_m": 18.801141247582795,
+      "switch_lateral_5m": 0.4102015418142153,
+      "switch_heading_5m_deg": 0.25105550858169406
+    }
+  },
+  {
+    "sim_s": 9.232715487480164,
+    "camera_frame": 161,
+    "latency_ms": 125.01632900000459,
+    "target_ego_1": [
+      14.066804993816579,
+      -3.338607276477365
+    ],
+    "target_ego_2": [
+      22.39596141356781,
+      -15.67746336602771
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.2321561239875738,
+      "length_m": 18.795593462261518,
+      "switch_lateral_5m": 0.468037456516877,
+      "switch_heading_5m_deg": 3.7332345311608868
+    }
+  },
+  {
+    "sim_s": 9.732715494930744,
+    "camera_frame": 171,
+    "latency_ms": 124.52620600004138,
+    "target_ego_1": [
+      14.00471341658003,
+      -3.525015221963887
+    ],
+    "target_ego_2": [
+      22.430812222677773,
+      -15.866379869546869
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.20693754776571494,
+      "length_m": 18.975620782941565,
+      "switch_lateral_5m": 0.2014390581819015,
+      "switch_heading_5m_deg": 5.6412150031086234
+    }
+  },
+  {
+    "sim_s": 10.232715502381325,
+    "camera_frame": 181,
+    "latency_ms": 128.12689700001556,
+    "target_ego_1": [
+      13.877422228665608,
+      -3.597080990989136
+    ],
+    "target_ego_2": [
+      22.598129575908892,
+      -15.754210522410649
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.2519537007329511,
+      "length_m": 18.813367137037567,
+      "switch_lateral_5m": 0.27527753256391574,
+      "switch_heading_5m_deg": 1.8693154167780022
+    }
+  },
+  {
+    "sim_s": 10.732715509831905,
+    "camera_frame": 191,
+    "latency_ms": 124.03720999998313,
+    "target_ego_1": [
+      13.943863794756734,
+      -3.3419543661032405
+    ],
+    "target_ego_2": [
+      23.206053652814937,
+      -15.11922981486483
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.2892729651845811,
+      "length_m": 18.888225089083086,
+      "switch_lateral_5m": 0.2010765055382459,
+      "switch_heading_5m_deg": 0.32472872109159
+    }
+  },
+  {
+    "sim_s": 11.232715517282486,
+    "camera_frame": 201,
+    "latency_ms": 150.75135200004297,
+    "target_ego_1": [
+      13.712833675551444,
+      -3.753000582339344
+    ],
+    "target_ego_2": [
+      23.129435551315,
+      -15.421052170116223
+    ],
+    "desired_speed_mps": 3.8321168600273987,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.30984275526189986,
+      "length_m": 18.784721856001692,
+      "switch_lateral_5m": 0.12120221888389465,
+      "switch_heading_5m_deg": 1.0606376616391724
+    }
+  },
+  {
+    "sim_s": 11.732715524733067,
+    "camera_frame": 211,
+    "latency_ms": 136.0907869999437,
+    "target_ego_1": [
+      13.728047080868016,
+      -3.538690119484026
+    ],
+    "target_ego_2": [
+      24.012106458270537,
+      -14.458303162874348
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.2072000752590677,
+      "length_m": 18.937029349170654,
+      "switch_lateral_5m": 0.5929750732692685,
+      "switch_heading_5m_deg": 3.952164372902139
+    }
+  },
+  {
+    "sim_s": 12.232715532183647,
+    "camera_frame": 221,
+    "latency_ms": 128.29917099998056,
+    "target_ego_1": [
+      13.574160552372641,
+      -3.4875907378441617
+    ],
+    "target_ego_2": [
+      24.546921573302356,
+      -13.714925309882096
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.15304459552846605,
+      "length_m": 18.893976947161654,
+      "switch_lateral_5m": 0.5104231755932436,
+      "switch_heading_5m_deg": 4.789558673526565
+    }
+  },
+  {
+    "sim_s": 12.732715539634228,
+    "camera_frame": 231,
+    "latency_ms": 122.66889600005015,
+    "target_ego_1": [
+      13.558420844597428,
+      -3.3383330803129008
+    ],
+    "target_ego_2": [
+      25.116495856195844,
+      -12.8992287261198
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.2934698096457833,
+      "length_m": 18.893156163577466,
+      "switch_lateral_5m": 0.3141717633301789,
+      "switch_heading_5m_deg": 2.7977390836647404
+    }
+  },
+  {
+    "sim_s": 13.232715547084808,
+    "camera_frame": 241,
+    "latency_ms": 129.79115999996793,
+    "target_ego_1": [
+      13.582068482289227,
+      -2.8798186671059174
+    ],
+    "target_ego_2": [
+      25.704002403630994,
+      -11.7148906427335
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.34444358588516666,
+      "length_m": 18.634865508675897,
+      "switch_lateral_5m": 0.23654718356856835,
+      "switch_heading_5m_deg": 1.2673968291284756
+    }
+  },
+  {
+    "sim_s": 13.732715554535389,
+    "camera_frame": 251,
+    "latency_ms": 143.62018400004217,
+    "target_ego_1": [
+      13.764260799909845,
+      -2.4144712523453
+    ],
+    "target_ego_2": [
+      26.48551377360082,
+      -10.362395903018278
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.30733534268071594,
+      "length_m": 18.834339575795884,
+      "switch_lateral_5m": 0.4510890460430592,
+      "switch_heading_5m_deg": 0.1400481684591249
+    }
+  },
+  {
+    "sim_s": 14.23271556198597,
+    "camera_frame": 261,
+    "latency_ms": 150.7611029999225,
+    "target_ego_1": [
+      13.719433708443992,
+      -1.999146556121091
+    ],
+    "target_ego_2": [
+      26.977210124329158,
+      -9.015629289994976
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.1838698598113564,
+      "length_m": 18.99971850357268,
+      "switch_lateral_5m": 0.31432866786640684,
+      "switch_heading_5m_deg": 2.456311590495007
+    }
+  },
+  {
+    "sim_s": 14.73271556943655,
+    "camera_frame": 271,
+    "latency_ms": 130.81903900001635,
+    "target_ego_1": [
+      13.911017967346808,
+      -2.25145083538728
+    ],
+    "target_ego_2": [
+      27.395319101287154,
+      -8.822053010830118
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.16062821898064517,
+      "length_m": 18.95028771951237,
+      "switch_lateral_5m": 0.24965446196932142,
+      "switch_heading_5m_deg": 1.1153216313318897
+    }
+  },
+  {
+    "sim_s": 15.23271557688713,
+    "camera_frame": 281,
+    "latency_ms": 125.4680740000822,
+    "target_ego_1": [
+      14.212811511790743,
+      -2.1423180643483946
+    ],
+    "target_ego_2": [
+      28.017919947841794,
+      -8.00890793963579
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.12546173681868966,
+      "length_m": 18.894352948395728,
+      "switch_lateral_5m": 0.1926526759769012,
+      "switch_heading_5m_deg": 3.677957992773568
+    }
+  },
+  {
+    "sim_s": 15.732715584337711,
+    "camera_frame": 291,
+    "latency_ms": 123.33310600001823,
+    "target_ego_1": [
+      14.198304466158287,
+      -2.071953838659755
+    ],
+    "target_ego_2": [
+      28.180682185236467,
+      -7.502403050710379
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.11064480761318896,
+      "length_m": 18.980848019745054,
+      "switch_lateral_5m": 0.0007199152585867486,
+      "switch_heading_5m_deg": 3.28671901746425
+    }
+  },
+  {
+    "sim_s": 16.232715591788292,
+    "camera_frame": 301,
+    "latency_ms": 125.35931699994762,
+    "target_ego_1": [
+      14.525964589888064,
+      -2.036085450534857
+    ],
+    "target_ego_2": [
+      28.70549349429755,
+      -6.928534337208456
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.10552885142129087,
+      "length_m": 18.952852178737942,
+      "switch_lateral_5m": 0.153939580294922,
+      "switch_heading_5m_deg": 2.618740120844712
+    }
+  },
+  {
+    "sim_s": 16.732715599238873,
+    "camera_frame": 311,
+    "latency_ms": 157.15548299999682,
+    "target_ego_1": [
+      14.88663004068799,
+      -1.677487993309767
+    ],
+    "target_ego_2": [
+      29.312594170645554,
+      -5.786692304840079
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.14046013344019226,
+      "length_m": 19.05750741793266,
+      "switch_lateral_5m": 0.000711493254173348,
+      "switch_heading_5m_deg": 2.9845358035762097
+    }
+  },
+  {
+    "sim_s": 17.232715606689453,
+    "camera_frame": 321,
+    "latency_ms": 180.99031599990667,
+    "target_ego_1": [
+      14.884301820649322,
+      -1.4639878368219517
+    ],
+    "target_ego_2": [
+      29.444779854461146,
+      -5.067608879810304
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.327343452043392,
+      "length_m": 18.787434794397868,
+      "switch_lateral_5m": 0.7968386819714737,
+      "switch_heading_5m_deg": 2.6785164733639593
+    }
+  },
+  {
+    "sim_s": 17.732715614140034,
+    "camera_frame": 331,
+    "latency_ms": 204.24532799995632,
+    "target_ego_1": [
+      15.040238093251478,
+      -1.5094687217350315
+    ],
+    "target_ego_2": [
+      29.677200826235428,
+      -4.7886918282611
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.25645196650025914,
+      "length_m": 18.875094225372617,
+      "switch_lateral_5m": 0.6896677019901776,
+      "switch_heading_5m_deg": 2.2635923071273534
+    }
+  },
+  {
+    "sim_s": 18.232715621590614,
+    "camera_frame": 341,
+    "latency_ms": 186.47427500002323,
+    "target_ego_1": [
+      15.02181448864391,
+      -1.429190638415181
+    ],
+    "target_ego_2": [
+      29.731418396091172,
+      -4.365648262491787
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.21294646288206476,
+      "length_m": 18.91088542518734,
+      "switch_lateral_5m": 0.6591169605707,
+      "switch_heading_5m_deg": 3.6263115808802953
+    }
+  },
+  {
+    "sim_s": 18.732715629041195,
+    "camera_frame": 351,
+    "latency_ms": 187.6726199999439,
+    "target_ego_1": [
+      15.055701178275797,
+      -0.7880377808577084
+    ],
+    "target_ego_2": [
+      29.897783676838195,
+      -2.95809725953544
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.3931039166236405,
+      "length_m": 18.787903648794966,
+      "switch_lateral_5m": 0.3666886029672049,
+      "switch_heading_5m_deg": 1.0652932654870042
+    }
+  },
+  {
+    "sim_s": 19.232715636491776,
+    "camera_frame": 361,
+    "latency_ms": 152.11535499997808,
+    "target_ego_1": [
+      15.017821793436477,
+      -1.083086197305052
+    ],
+    "target_ego_2": [
+      29.848922820793444,
+      -3.327306229177111
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.3661197797838245,
+      "length_m": 18.99507009512263,
+      "switch_lateral_5m": 0.6545604780619174,
+      "switch_heading_5m_deg": 2.9308899339841052
+    }
+  },
+  {
+    "sim_s": 19.732715643942356,
+    "camera_frame": 371,
+    "latency_ms": 128.55463200003214,
+    "target_ego_1": [
+      15.015204906631,
+      -0.9086059753435329
+    ],
+    "target_ego_2": [
+      29.89569103048287,
+      -2.798127544991662
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.42477477385945983,
+      "length_m": 18.932172093121668,
+      "switch_lateral_5m": 0.6066794861408599,
+      "switch_heading_5m_deg": 6.575486018564527
+    }
+  },
+  {
+    "sim_s": 20.232715651392937,
+    "camera_frame": 381,
+    "latency_ms": 131.7380549999143,
+    "target_ego_1": [
+      15.00000169948832,
+      -0.9625232497592814
+    ],
+    "target_ego_2": [
+      29.89544697803221,
+      -2.7304455717351233
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.34053427181559215,
+      "length_m": 18.97904665097028,
+      "switch_lateral_5m": 0.3900299775327621,
+      "switch_heading_5m_deg": 7.952777004039078
+    }
+  },
+  {
+    "sim_s": 20.732715658843517,
+    "camera_frame": 391,
+    "latency_ms": 132.5751519999585,
+    "target_ego_1": [
+      14.960195645092293,
+      -1.328573221104351
+    ],
+    "target_ego_2": [
+      29.836042097177657,
+      -3.2544954122083793
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.342245998572694,
+      "length_m": 18.97252086724922,
+      "switch_lateral_5m": 0.17618291443668377,
+      "switch_heading_5m_deg": 7.844385437832747
+    }
+  },
+  {
+    "sim_s": 21.232715666294098,
+    "camera_frame": 401,
+    "latency_ms": 156.7165980000027,
+    "target_ego_1": [
+      14.964489278846768,
+      -1.191903678520317
+    ],
+    "target_ego_2": [
+      29.87520381256152,
+      -2.826098305554279
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.25063163201708827,
+      "length_m": 19.012746454839483,
+      "switch_lateral_5m": 0.07792238604424939,
+      "switch_heading_5m_deg": 7.7659813335718795
+    }
+  },
+  {
+    "sim_s": 21.73271567374468,
+    "camera_frame": 411,
+    "latency_ms": 176.2377820000438,
+    "target_ego_1": [
+      14.957742975096032,
+      -1.2132853384923996
+    ],
+    "target_ego_2": [
+      29.88080147110592,
+      -2.730626804566148
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.1443100316545789,
+      "length_m": 19.107718686471696,
+      "switch_lateral_5m": 0.12689528615703177,
+      "switch_heading_5m_deg": 4.402795937786003
+    }
+  },
+  {
+    "sim_s": 22.23271568119526,
+    "camera_frame": 421,
+    "latency_ms": 135.59516999998777,
+    "target_ego_1": [
+      14.980652940361729,
+      -0.8453642534596647
+    ],
+    "target_ego_2": [
+      29.94258223527906,
+      -1.9133866192809155
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.17046385749014847,
+      "length_m": 19.052831674769106,
+      "switch_lateral_5m": 0.1288065131190401,
+      "switch_heading_5m_deg": 0.4793644248338131
+    }
+  },
+  {
+    "sim_s": 22.73271568864584,
+    "camera_frame": 431,
+    "latency_ms": 138.19770800000697,
+    "target_ego_1": [
+      14.996394137816013,
+      -0.4778742158995336
+    ],
+    "target_ego_2": [
+      29.981536126970877,
+      -1.145346735833706
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.09898095891910597,
+      "length_m": 19.01962669536102,
+      "switch_lateral_5m": 0.14505419279298848,
+      "switch_heading_5m_deg": 1.0722330565431222
+    }
+  },
+  {
+    "sim_s": 23.23271569609642,
+    "camera_frame": 441,
+    "latency_ms": 167.45049600001494,
+    "target_ego_1": [
+      14.996791442809396,
+      -0.42946306914643617
+    ],
+    "target_ego_2": [
+      29.98571673774539,
+      -1.0057603039367566
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.11483755456278377,
+      "length_m": 19.010363566697492,
+      "switch_lateral_5m": 0.15104816413149227,
+      "switch_heading_5m_deg": 0.1262474228865371
+    }
+  },
+  {
+    "sim_s": 23.732715703547,
+    "camera_frame": 451,
+    "latency_ms": 172.59266500002468,
+    "target_ego_1": [
+      15.003065183492797,
+      -0.04322718481281057
+    ],
+    "target_ego_2": [
+      30.001863689839926,
+      -0.23307808946771635
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.0819182346924947,
+      "length_m": 19.001776732782794,
+      "switch_lateral_5m": 0.13183700215994132,
+      "switch_heading_5m_deg": 1.4128667773135677
+    }
+  },
+  {
+    "sim_s": 24.23271571099758,
+    "camera_frame": 461,
+    "latency_ms": 137.06598700002814,
+    "target_ego_1": [
+      15.002415449042644,
+      0.06791236053517982
+    ],
+    "target_ego_2": [
+      30.00222730392419,
+      -0.007216316769953268
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.07354516318807125,
+      "length_m": 19.00027635385753,
+      "switch_lateral_5m": 0.028422508753841214,
+      "switch_heading_5m_deg": 1.5097822080011118
+    }
+  },
+  {
+    "sim_s": 24.732715718448162,
+    "camera_frame": 471,
+    "latency_ms": 145.28658300002917,
+    "target_ego_1": [
+      14.999875141290257,
+      0.3007609796959517
+    ],
+    "target_ego_2": [
+      29.999235425751678,
+      0.43929276998421884
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.12375720671556678,
+      "length_m": 19.001082951394018,
+      "switch_lateral_5m": 0.04953360156527369,
+      "switch_heading_5m_deg": 0.3512823634120192
+    }
+  },
+  {
+    "sim_s": 25.232715725898743,
+    "camera_frame": 481,
+    "latency_ms": 168.38540300000204,
+    "target_ego_1": [
+      14.997235509761346,
+      0.39745238283006873
+    ],
+    "target_ego_2": [
+      29.995741279511865,
+      0.6091707683309591
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.08489516141253374,
+      "length_m": 19.000080830975747,
+      "switch_lateral_5m": 0.11142494892619347,
+      "switch_heading_5m_deg": 0.33758098679589577
+    }
+  },
+  {
+    "sim_s": 25.732715733349323,
+    "camera_frame": 491,
+    "latency_ms": 165.14537800003382,
+    "target_ego_1": [
+      14.993005022543144,
+      0.52575996790271
+    ],
+    "target_ego_2": [
+      29.98989025667295,
+      0.8314285373339033
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.13272481623744392,
+      "length_m": 19.000393372842208,
+      "switch_lateral_5m": 0.03953699518807063,
+      "switch_heading_5m_deg": 0.674962839697464
+    }
+  },
+  {
+    "sim_s": 26.232715740799904,
+    "camera_frame": 501,
+    "latency_ms": 173.5584430000472,
+    "target_ego_1": [
+      14.994048803113145,
+      0.5084741165344366
+    ],
+    "target_ego_2": [
+      29.99173380031697,
+      0.7719977865264769
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.22646815643154206,
+      "length_m": 19.011428508057634,
+      "switch_lateral_5m": 0.1843336674577509,
+      "switch_heading_5m_deg": 0.3684826155180712
+    }
+  },
+  {
+    "sim_s": 26.732715748250484,
+    "camera_frame": 511,
+    "latency_ms": 238.57282899996335,
+    "target_ego_1": [
+      14.9863962732012,
+      0.7009701280659342
+    ],
+    "target_ego_2": [
+      29.98091214682431,
+      1.1057617419247747
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.25029527719707856,
+      "length_m": 19.011716521478817,
+      "switch_lateral_5m": 0.024013556887960457,
+      "switch_heading_5m_deg": 0.9218911789319152
+    }
+  },
+  {
+    "sim_s": 27.232715755701065,
+    "camera_frame": 521,
+    "latency_ms": 159.50912000005246,
+    "target_ego_1": [
+      14.985245649609771,
+      0.7436792178474513
+    ],
+    "target_ego_2": [
+      29.9778273089257,
+      1.0584543738039922
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.23083998926151628,
+      "length_m": 19.01449273682237,
+      "switch_lateral_5m": 0.09100743977727561,
+      "switch_heading_5m_deg": 0.806543075133017
+    }
+  },
+  {
+    "sim_s": 27.732715763151646,
+    "camera_frame": 531,
+    "latency_ms": 193.54602200007776,
+    "target_ego_1": [
+      14.993066932138026,
+      0.5748150715390036
+    ],
+    "target_ego_2": [
+      29.981046353757794,
+      0.537640455374802
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.2171673807547414,
+      "length_m": 19.015105814330035,
+      "switch_lateral_5m": 0.2596265171995806,
+      "switch_heading_5m_deg": 1.2535168436540454
+    }
+  },
+  {
+    "sim_s": 28.232715770602226,
+    "camera_frame": 541,
+    "latency_ms": 148.4600489999366,
+    "target_ego_1": [
+      14.994261378945499,
+      0.5557393147440699
+    ],
+    "target_ego_2": [
+      29.946546488977905,
+      0.14523018635381313
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.25389199397744155,
+      "length_m": 19.00809729427305,
+      "switch_lateral_5m": 0.20585047241281518,
+      "switch_heading_5m_deg": 0.4040682531287999
+    }
+  },
+  {
+    "sim_s": 28.732715778052807,
+    "camera_frame": 551,
+    "latency_ms": 169.4211730000461,
+    "target_ego_1": [
+      15.002573174242418,
+      0.20287217122044232
+    ],
+    "target_ego_2": [
+      29.872241211779063,
+      -0.9495306858305066
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.09824525952543617,
+      "length_m": 18.997696895352124,
+      "switch_lateral_5m": 0.09806079361695776,
+      "switch_heading_5m_deg": 0.7169179352292584
+    }
+  },
+  {
+    "sim_s": 29.232715785503387,
+    "camera_frame": 561,
+    "latency_ms": 213.42547200003992,
+    "target_ego_1": [
+      15.002344845487132,
+      0.19466779100483605
+    ],
+    "target_ego_2": [
+      29.77276778869408,
+      -1.4601232387960712
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.1330970178721147,
+      "length_m": 19.00114900724069,
+      "switch_lateral_5m": 0.14807049407240228,
+      "switch_heading_5m_deg": 1.9474129842691348
+    }
+  },
+  {
+    "sim_s": 29.732715792953968,
+    "camera_frame": 571,
+    "latency_ms": 188.73977700002342,
+    "target_ego_1": [
+      15.001307554263548,
+      0.2558154727867882
+    ],
+    "target_ego_2": [
+      29.600619593753375,
+      -2.0294604924744193
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.06457237494795454,
+      "length_m": 18.999530487066856,
+      "switch_lateral_5m": 0.07290860470371878,
+      "switch_heading_5m_deg": 0.5419204832360499
+    }
+  },
+  {
+    "sim_s": 30.23271580040455,
+    "camera_frame": 581,
+    "latency_ms": 213.78987599996435,
+    "target_ego_1": [
+      15.001848413354633,
+      0.20447544722581903
+    ],
+    "target_ego_2": [
+      29.373905171520256,
+      -2.8684351152219607
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.15418830737385836,
+      "length_m": 19.01225859184203,
+      "switch_lateral_5m": 0.1192302089455985,
+      "switch_heading_5m_deg": 0.7639737428921448
+    }
+  },
+  {
+    "sim_s": 30.73271580785513,
+    "camera_frame": 591,
+    "latency_ms": 139.86536099992009,
+    "target_ego_1": [
+      14.996590811920244,
+      0.4590487763712273
+    ],
+    "target_ego_2": [
+      29.134955376566243,
+      -3.266673972616707
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.24698567568695307,
+      "length_m": 19.025107524655784,
+      "switch_lateral_5m": 0.15813447574936387,
+      "switch_heading_5m_deg": 0.2264636546890599
+    }
+  },
+  {
+    "sim_s": 31.23271581530571,
+    "camera_frame": 601,
+    "latency_ms": 145.03672400007872,
+    "target_ego_1": [
+      14.98429985123295,
+      0.7837637783184717
+    ],
+    "target_ego_2": [
+      28.814050533060442,
+      -3.710855709433729
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.24726124489419554,
+      "length_m": 18.93781477793315,
+      "switch_lateral_5m": 0.2639139656813069,
+      "switch_heading_5m_deg": 2.8310866039083
+    }
+  },
+  {
+    "sim_s": 31.73271582275629,
+    "camera_frame": 611,
+    "latency_ms": 164.14284800009682,
+    "target_ego_1": [
+      15.000098768504394,
+      0.36446272788459877
+    ],
+    "target_ego_2": [
+      28.225973742785502,
+      -5.589484927699013
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.21611498328246803,
+      "length_m": 18.87423964446937,
+      "switch_lateral_5m": 0.5742064580391564,
+      "switch_heading_5m_deg": 4.86763759902246
+    }
+  },
+  {
+    "sim_s": 32.23271583020687,
+    "camera_frame": 621,
+    "latency_ms": 153.02089500005422,
+    "target_ego_1": [
+      14.985695494234399,
+      -0.6549596053863023
+    ],
+    "target_ego_2": [
+      27.264591446607042,
+      -8.36984642227406
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.25212437682463085,
+      "length_m": 18.97646733036978,
+      "switch_lateral_5m": 0.481006571344795,
+      "switch_heading_5m_deg": 3.3669034147489487
+    }
+  },
+  {
+    "sim_s": 32.73271583765745,
+    "camera_frame": 631,
+    "latency_ms": 134.68437500000618,
+    "target_ego_1": [
+      14.96343544429851,
+      -0.9319163128657358
+    ],
+    "target_ego_2": [
+      26.650682446196168,
+      -9.485160982685585
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": true,
+    "reason": "accepted",
+    "quality": {
+      "ok": true,
+      "reason": "ok",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.20620505006181222,
+      "length_m": 18.916355894376995,
+      "switch_lateral_5m": 0.07688976737304967,
+      "switch_heading_5m_deg": 3.17857226809171
+    }
+  },
+  {
+    "sim_s": 33.23271584510803,
+    "camera_frame": 641,
+    "latency_ms": 149.99429299996336,
+    "target_ego_1": [
+      14.976184762056292,
+      -0.4039295939451457
+    ],
+    "target_ego_2": [
+      26.496584701848793,
+      -9.202560701947052
+    ],
+    "desired_speed_mps": 4.0,
+    "accepted": false,
+    "reason": "curvature_limit",
+    "quality": {
+      "ok": false,
+      "reason": "curvature_limit",
+      "forward_ratio": 1.0,
+      "self_intersects": false,
+      "max_abs_curvature": 0.31969857677190205,
+      "length_m": 18.872012428533626,
+      "switch_lateral_5m": 0.7929293388014016,
+      "switch_heading_5m_deg": 2.6524791748901464
+    }
+  }
+]

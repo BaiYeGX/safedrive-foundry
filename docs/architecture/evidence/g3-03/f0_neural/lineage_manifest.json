@@ -1,0 +1,15 @@
+{
+  "base_model": "SimLingo/InternVL2-1B",
+  "checkpoint_path": "/mnt/e/autonomous driving/models/simlingo/simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt",
+  "checkpoint_sha256": "ec8943723d266ee9f5f56f45d153a163b22616960bfccb741965ea5daa700d28",
+  "checkpoint_bytes": 2569679322,
+  "code_root": "/mnt/e/autonomous driving/simlingo-main",
+  "license_scope": "see simlingo + internvl notices",
+  "deployment_scope": "simulation_research_only",
+  "precision": "bf16",
+  "model_id": "sdf-vla-v0@0.0.1",
+  "notes": [
+    "F0 lineage freeze",
+    "Do not use as real-vehicle deploy weights"
+  ]
+}

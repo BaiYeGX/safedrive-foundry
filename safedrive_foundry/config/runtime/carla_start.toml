@@ -11,6 +11,6 @@ windows_executable = "E:\\CARLA_0.9.16\\CarlaUE4.exe"
 wsl_path = "/mnt/e/CARLA_0.9.16/CarlaUE4.exe"
 # Prefer DX11 on Windows 11 to reduce UE "shader compilation failures are fatal".
 # Stay on one startup map; avoid client.load_world map switches that re-trigger shaders.
-# Prefer Town03 (urban loops / multi-junction) for complex classic-expert live.
-# If Windows start args ignore the map token, live runner may one-shot load_world once.
-arguments = "/Game/Carla/Maps/Town03 -windowed -ResX=800 -ResY=600 -quality-level=Low -nosound -dx11 -carla-rpc-port=2000"
+# Town04 is the known-stable default startup map.  A map mismatch requires a full
+# CarlaUE4 cold restart; live runners must not call client.load_world().
+arguments = "/Game/Carla/Maps/Town04 -windowed -ResX=800 -ResY=600 -quality-level=Low -nosound -dx11 -carla-rpc-port=2000"

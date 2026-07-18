@@ -1,0 +1,62 @@
+{
+  "demo": "g3_vla_v0_visual",
+  "status": "DEMO_MEASURED_NOT_PASS",
+  "demo_pass": false,
+  "fail_reasons": [
+    "distance_too_small:0.000"
+  ],
+  "not_g3_stage_verified": true,
+  "policy_backend": "neural_simlingo",
+  "version": "v0",
+  "mode": "VLA_SAFETY",
+  "seed": 11,
+  "map": "Carla/Maps/Town10HD_Opt",
+  "route_meta": {
+    "peak_yaw_change_deg": -89.80938720703125,
+    "turn_dir": "right",
+    "route_points": 43,
+    "route_mode": "turn90"
+  },
+  "steps": 2,
+  "camera_frames": 5,
+  "distance_m": 1.9073486328125e-06,
+  "n_track_approved": 3,
+  "n_emergency_brake": 0,
+  "n_mrm_brake": 0,
+  "n_no_exec": 0,
+  "decision_counts": {
+    "ACCEPT": 3
+  },
+  "decision_tail": [
+    "ACCEPT",
+    "ACCEPT",
+    "ACCEPT"
+  ],
+  "applied_mode_tail": [
+    "TRACK_APPROVED",
+    "TRACK_APPROVED",
+    "TRACK_APPROVED"
+  ],
+  "sources_seen": [
+    "vla_fast"
+  ],
+  "classic_current_frame": false,
+  "n_classic_candidates": 0,
+  "neural_inference_n": 159,
+  "neural_latency_p50_ms": 119.91381900043052,
+  "neural_latency_p95_ms": 143.25238970050123,
+  "peak_vram_mb": 2229.81591796875,
+  "keep_on_gpu": true,
+  "restamp_generated_time": false,
+  "sync_infer_no_world_tick": false,
+  "async_neural_speed": true,
+  "continuous_route_geometry": true,
+  "force_throttle": false,
+  "limits": [],
+  "g2_max_candidate_age_s": 0.25,
+  "candidate_age_p50_s": 0.0,
+  "candidate_age_p95_s": 0.0,
+  "run_id": "run-bb2c6eaeda920584c9c4",
+  "safety_bind": "apply_safety_control_v1",
+  "route_progress_frac": 2.9011586769027826e-08
+}

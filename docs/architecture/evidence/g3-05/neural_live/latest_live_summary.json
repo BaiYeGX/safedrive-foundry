@@ -1,0 +1,88 @@
+{
+  "mode": "VLA_SAFETY",
+  "version": "v0",
+  "policy_backend": "neural_simlingo",
+  "camera": true,
+  "classic_current_frame": false,
+  "seeds": [
+    11,
+    13
+  ],
+  "results": [
+    {
+      "status": "COMPLETED",
+      "steps": 120,
+      "seed": 11,
+      "mode": "VLA_SAFETY",
+      "version": "v0",
+      "policy_backend": "neural_simlingo",
+      "fault": "",
+      "distance_m": 140.41350671123644,
+      "latency_n": 3,
+      "latency_p95_ms": 274.96278399485163,
+      "peak_vram_mb": 2221.69091796875,
+      "decision_tail": [
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY"
+      ],
+      "run_id": "run-cea72a4583d40c6e4b9e",
+      "camera_frames": 120,
+      "sources_seen": [
+        "vla_fast"
+      ]
+    },
+    {
+      "status": "COMPLETED",
+      "steps": 120,
+      "seed": 13,
+      "mode": "VLA_SAFETY",
+      "version": "v0",
+      "policy_backend": "neural_simlingo",
+      "fault": "",
+      "distance_m": 147.7259572911429,
+      "latency_n": 5,
+      "latency_p95_ms": 191.3650089991279,
+      "peak_vram_mb": 2221.69091796875,
+      "decision_tail": [
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY",
+        "EMERGENCY"
+      ],
+      "run_id": "run-b3406989bfc523e34d4e",
+      "camera_frames": 120,
+      "sources_seen": [
+        "vla_fast"
+      ]
+    }
+  ],
+  "all_ok": true,
+  "map": "Carla/Maps/Town10HD_Opt",
+  "sources_seen": [
+    "vla_fast"
+  ]
+}

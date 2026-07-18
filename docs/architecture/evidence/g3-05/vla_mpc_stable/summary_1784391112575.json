@@ -1,0 +1,60 @@
+{
+  "demo": "pure_vla_spatial_constrained_mpc_v1",
+  "map": "Carla/Maps/Town10HD",
+  "requested_map": "Town10HD",
+  "map_arg": "random",
+  "v_ref_mps": 4.0,
+  "steps": 600,
+  "sim_duration_s": 30.0,
+  "distance_m": 71.53161975110532,
+  "displacement_m": 64.90221827261146,
+  "distance_over_displacement": 1.1021444513752692,
+  "camera": {
+    "width": 768,
+    "height": 384,
+    "fov_deg": 110.0,
+    "mount_xyz": [
+      -1.5,
+      0.0,
+      2.0
+    ]
+  },
+  "vehicle": {
+    "wheelbase_m": 2.5104638671875,
+    "max_steer_rad": 0.6
+  },
+  "vla_updates": 60,
+  "vla_accepts": 43,
+  "vla_reject_reasons": {
+    "curvature_limit": 17
+  },
+  "inference_ms": {
+    "p50": 142.95717350000814,
+    "p95": 213.44369220003614
+  },
+  "solver_modes": {
+    "mpc": 597,
+    "bounded_fallback": 3
+  },
+  "solver_statuses": {
+    "solved": 597,
+    "timeout": 3
+  },
+  "cte_rms_m": 0.20077054485285234,
+  "steer_abs_max": 0.38423996628112933,
+  "steer_saturation_fraction": 0.0,
+  "steer_sign_flips": 3,
+  "geometry_source": "SimLingo native path only; map route used for coarse VLA targets",
+  "gpu_schedule": "serialized inference; torch.cuda.synchronize before next world.tick",
+  "acceptance": {
+    "enough_vla_paths": true,
+    "mpc_fraction_ge_0_95": true,
+    "cte_rms_lt_0_50m": true,
+    "steer_saturation_lt_0_01": true,
+    "distance_over_displacement_lt_1_15": true,
+    "steer_flip_rate_lt_0_5hz": true,
+    "distance_gt_20m": true
+  },
+  "result": "DEMO_PASS",
+  "verified": false
+}

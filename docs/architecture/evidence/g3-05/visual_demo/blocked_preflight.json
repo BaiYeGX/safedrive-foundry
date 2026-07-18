@@ -1,0 +1,30 @@
+{
+  "status": "BLOCKED_EXTERNAL",
+  "preflight": {
+    "status": "RETRYABLE_FAILURE",
+    "host": "198.18.0.2",
+    "resolved_host": "198.18.0.2",
+    "port": 2000,
+    "host_source": "wsl_default_gateway_proxy",
+    "previous_host": "192.168.5.1",
+    "tcp_reachable": true,
+    "rpc_reachable": false,
+    "client_version": "0.9.16",
+    "server_version": null,
+    "map": null,
+    "process_state": "RUNNING",
+    "synchronous_mode": null,
+    "fixed_delta_seconds": null,
+    "tick_owner": "free (configured=sdf.g0-05.sync)",
+    "needs_user_action": false,
+    "error_code": "RPC_HANDSHAKE_FAILED",
+    "error_message": "RuntimeError: time-out of 15000ms while waiting for the simulator, make sure the simulator is ready and connected to 198.18.0.2:2000",
+    "retry_count": 2,
+    "task_action": "IN_PROGRESS",
+    "recovery_action": null,
+    "recovery_result": null,
+    "details": {}
+  },
+  "policy_backend": "neural_simlingo",
+  "demo": "g3_vla_v0_visual"
+}

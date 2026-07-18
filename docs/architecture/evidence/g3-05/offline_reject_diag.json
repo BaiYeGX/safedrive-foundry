@@ -1,0 +1,15 @@
+{
+  "source": "route_ego_baseline_as_vla_fast",
+  "n_candidates": 1,
+  "last_t": 2.5,
+  "horizon_span": 2.25,
+  "decision_kind": "ACCEPT",
+  "executed_trajectory_id": "route_ego_0",
+  "reject_reasons": [],
+  "state_after": "NORMAL",
+  "valid_for_s": 0.4,
+  "notes": [
+    "Horizon contract last_t=2.5; Safety min_horizon_s=2.0 uses span\u22482.25",
+    "If decision is not ACCEPT/QP, inspect reject_reasons before live"
+  ]
+}

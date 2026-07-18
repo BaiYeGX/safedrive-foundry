@@ -1,0 +1,7 @@
+{
+  "status": "BLOCKED_EXTERNAL",
+  "error_code": "MAP_MISMATCH_RESTART_REQUIRED",
+  "current_map": "Carla/Maps/Town10HD_Opt",
+  "required_map": "Town03",
+  "demo": "g3_vla_smooth_b"
+}

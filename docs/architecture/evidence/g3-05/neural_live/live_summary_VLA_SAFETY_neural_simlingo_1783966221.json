@@ -1,0 +1,50 @@
+{
+  "mode": "VLA_SAFETY",
+  "version": "v0",
+  "policy_backend": "neural_simlingo",
+  "camera": true,
+  "classic_current_frame": false,
+  "seeds": [
+    21
+  ],
+  "results": [
+    {
+      "status": "COMPLETED",
+      "steps": 100,
+      "seed": 21,
+      "mode": "VLA_SAFETY",
+      "version": "v0",
+      "policy_backend": "neural_simlingo",
+      "fault": "timeout",
+      "distance_m": 138.24306425313918,
+      "latency_n": 0,
+      "latency_p95_ms": null,
+      "peak_vram_mb": null,
+      "decision_tail": [
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT",
+        "ACCEPT"
+      ],
+      "run_id": "run-ab00cfecd01a0b5d8d91",
+      "camera_frames": 100,
+      "sources_seen": []
+    }
+  ],
+  "all_ok": true,
+  "map": "Carla/Maps/Town10HD_Opt",
+  "sources_seen": [
+    "vla_fast"
+  ]
+}

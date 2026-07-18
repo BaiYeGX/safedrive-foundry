@@ -1,0 +1,21 @@
+{
+  "demo": "vla_mpc_minimal",
+  "map": "Carla/Maps/Town10HD_Opt",
+  "duration_request_s": 25.0,
+  "steps": 289,
+  "distance_m": 40.08804540179476,
+  "n_mpc": 289,
+  "n_non_mpc": 0,
+  "mpc_fraction": 1.0,
+  "n_target_behind_ticks": 0,
+  "n_not_forward_ticks": 0,
+  "n_self_intersect_ticks": 0,
+  "n_steer_sat": 45,
+  "v_cap": 3.5,
+  "wall_s": 15.058094263076782,
+  "pass_raw_vla_forward": true,
+  "pass_targets_never_behind": true,
+  "pass_mpc_used": true,
+  "pass_no_circle_20s": true,
+  "note": "Raw VLA only (no prev blend / self-straighten). Advancing ego targets 15m/30m. Real dual targets into SimLingo. ControlLoop MPC; steer rad\u2192[-1,1]. Green=raw VLA, yellow=MPC ref, cyan=ego."
+}

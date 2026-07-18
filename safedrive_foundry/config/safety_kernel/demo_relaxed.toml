@@ -1,0 +1,139 @@
+# DEMO-ONLY Safety profile for visual VLA runs (U-turn / complex paths).
+# NOT the G2 frozen baseline. Official claims / assert_g3_close must still use baseline.toml.
+# Purpose: stop killing demos with hard EMERGENCY so you can watch VLA drive.
+schema_version = "safedrive.safety.config.v1"
+name = "safety_kernel_demo_relaxed"
+
+[timing]
+control_period_s = 0.02
+state_check_deadline_ms = 5.0
+candidate_check_deadline_ms = 25.0
+default_horizon_s = 4.0
+min_horizon_s = 1.5
+max_horizon_s = 6.0
+# Async VLA + multi-tick reuse; demo only (G2 baseline stays 0.25).
+max_candidate_age_s = 1.5
+min_points = 3
+
+[vehicle]
+wheelbase_m = 2.8
+max_speed_mps = 18.0
+max_accel_mps2 = 5.0
+max_decel_mps2 = 8.0
+max_jerk_mps3 = 12.0
+# U-turn / tight corner friendly
+max_curvature_per_m = 0.55
+max_lateral_accel_mps2 = 6.0
+width_m = 1.9
+length_m = 4.5
+collision_inflate_m = 0.15
+
+[road]
+# Still prefer on-road, but allow larger deviation for complex paths
+require_drivable = true
+max_offroad_m = 2.5
+lane_half_width_m = 3.0
+
+[rules]
+enforce_speed_limit = false
+speed_limit_margin_mps = 2.0
+enforce_red_light_stop = false
+red_light_stop_distance_m = 8.0
+red_light_max_approach_speed_mps = 1.0
+
+[state_machine]
+# Recover fast; do not stick in EMERGENCY forever
+escalate_debounce_frames = 5
+recover_debounce_frames = 2
+min_dwell_s = 0.04
+recover_clear_frames = 3
+
+[logging]
+# Never silently swallow contract or hard-reject errors.
+emit_safety_events = true
+record_failure_samples = true
+max_failure_samples = 32
+
+# G2-02 longitudinal QP repair (default on). Learning modules cannot override these.
+[qp]
+# Demo smoothness: centerline candidates usually ACCEPT without repair.
+# Keep QP as rare backup; disable heavy RATO (was ~100ms and tanked wall FPS).
+enabled = true
+# OSQP-form dense ADMM backend when python-osqp is absent; uses osqp if importable.
+solver = "osqp_auto"
+# Offline scipy_slsqp budget on small dense longitudinal QP (not GPU).
+# Online target with python-osqp remains ~15ms; pure-Python SLSQP cold-start is higher.
+deadline_ms = 20.0
+# OSQP iteration budget (scipy path uses a lower internal cap).
+max_iter = 2000
+abs_tol = 1.0e-4
+rel_tol = 1.0e-4
+warm_start = true
+# Cost weights (frozen for fair baselines).
+w_v_ref = 1.0
+w_a = 0.15
+w_jerk = 0.05
+w_slack = 80.0
+w_progress = 2.0
+# Slack upper bounds — prevent unlimited soft-stop pseudo-safety.
+slack_stop_max_m = 0.35
+slack_lead_max_m = 0.50
+slack_speed_max_mps = 0.25
+# Longitudinal safety geometry.
+min_gap_m = 2.5
+stop_line_buffer_m = 1.0
+time_headway_s = 0.8
+# Progress floor: require fraction of reference terminal arc-length when unconstrained.
+min_progress_ratio = 0.30
+# Modes allowed to attempt repair after hard reject of repairable margins.
+repair_on_hard_reject = true
+
+# G2-03 restricted 2D RATO-SCP — OFF in demo (too expensive for 20–50Hz wall FPS).
+# Trigger: legal lateral corridor + (QP failed OR QP progress below min_qp_progress_to_skip).
+# Learning modules cannot override hard constraints, slack caps, or deadlines.
+[rato]
+enabled = false
+deadline_ms = 40.0
+max_scp_iters = 3
+trust_radius_m = 2.5
+max_lateral_step_m = 1.2
+warm_start = true
+w_path = 0.5
+w_smooth = 3.0
+w_slack = 50.0
+w_progress = 1.0
+slack_corridor_max_m = 0.35
+slack_collision_max_m = 0.85
+min_lateral_clearance_m = 0.55
+# If longitudinal QP already achieves this progress, skip secondary RATO.
+min_qp_progress_to_skip = 0.55
+oscillation_eps_m = 0.03
+min_progress_ratio = 0.20
+repair_on_hard_reject = false
+
+# G2-04 arbitration / shadow / degradation (deterministic, no GPU dependency).
+# Soft scores never override hard rejects, Emergency, or frozen fallback authority.
+[arbitration]
+enabled = true
+deadline_ms = 5.0
+# Soft score weights (frozen). Higher is better.
+w_progress = 1.0
+w_comfort = 0.35
+w_margin = 1.5
+w_probability = 0.5
+w_uncertainty = 0.4
+# Source prior: classic preferred under equal soft score (deterministic tie-break still uses id).
+classic_source_bonus = 0.15
+vla_source_bonus = 0.05
+world_ranked_bonus = 0.02
+# Final validation tries up to this many soft-ranked survivors after hard precheck.
+max_final_candidates = 1
+# Classic Shadow: compare-only — OFF in demo (extra work every kernel tick).
+shadow_enabled = false
+# Degradation: treat overconfident learning candidates as unavailable when uncertainty below floor
+# while probability above ceiling (frozen OOD/overconfidence gate).
+overconfident_prob_min = 0.95
+overconfident_uncertainty_max = 0.05
+ood_uncertainty_min = 0.85
+# Learning soft-stale only (VLA_FAST/VLA_SLOW). Classic uses hard max_candidate_age_s.
+soft_stale_age_s = 0.50

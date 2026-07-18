@@ -1,0 +1,50 @@
+"""Minimal data card writer for G3-01."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+
+DEFAULT_DATACARD: dict[str, Any] = {
+    "name": "safedrive_vla_sample_v1",
+    "schema_version": "safedrive.vla.sample.v1",
+    "deployment_scope": "simulation_research_only",
+    "sources": [
+        "project_carla_collect",
+        "simlingo_minimal_manifest_only",
+    ],
+    "license_notes": [
+        "SimLingo dataset license is separate from code (Apache-2.0); do not mix lineages.",
+        "Default lineage is simulation_research_only; not for real-vehicle deploy weights.",
+    ],
+    "oracle_fields": [
+        "privileged_label.expert_trajectory",
+        "privileged_label.collision_label",
+        "evaluation_only.ade",
+        "evaluation_only.fde",
+    ],
+    "policy_input_fields": [
+        "front_rgb_uri",
+        "ego_state",
+        "route",
+        "optional_language_restricted",
+    ],
+    "split_policy": {
+        "axes": ["town", "route_id", "scenario_family", "weather", "failure_cluster"],
+        "regression_families": ["regression_core", "holdout_gate"],
+    },
+    "disk_quota_gb_soft": 90,
+    "active_working_set_gb_soft": 40,
+}
+
+
+def write_datacard(path: Path | str, extra: dict[str, Any] | None = None) -> Path:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    card = dict(DEFAULT_DATACARD)
+    if extra:
+        card.update(extra)
+    path.write_text(json.dumps(card, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return path
