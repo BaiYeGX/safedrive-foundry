@@ -1,0 +1,160 @@
+{
+  "status": "FAILED",
+  "run_id": "g3-vla-mpc-1784453810059",
+  "requested_map": "Town15",
+  "map_arg": "Town15",
+  "inference_mode": "full",
+  "duration_s": 300.0,
+  "sim_dt_s": 0.05,
+  "vla_period_s": 0.75,
+  "camera_sensor_tick_s": 0.75,
+  "camera_resolution": [
+    1024,
+    512
+  ],
+  "camera_fov_deg": 110.0,
+  "camera_mount_xyz": [
+    -1.5,
+    0.0,
+    2.0
+  ],
+  "server_resolution": [
+    640,
+    360
+  ],
+  "official_contract": true,
+  "simlingo_contract": {
+    "official_contract": true,
+    "camera_width": 1024,
+    "camera_height": 512,
+    "camera_xyz": [
+      -1.5,
+      0.0,
+      2.0
+    ],
+    "camera_fov_deg": 110.0,
+    "route_planner_min_distance_m": 7.5,
+    "route_planner_max_distance_m": 50.0,
+    "densify_ds_m": 1.0,
+    "legacy_target_d1_m": 15.0,
+    "legacy_target_d2_m": 30.0,
+    "jpeg_quality": 95,
+    "crop_bottom_frac_num": 4.8,
+    "crop_bottom_frac_den": 16.0,
+    "lateral_mode_flip_enabled": false,
+    "early_lane_change_enabled": true,
+    "command_text": null,
+    "preprocess_chain": "BGRA[:3]=BGR \u2192 cv2.imencode(.jpg) \u2192 imdecode \u2192 BGR2RGB \u2192 crop_bottom(4.8/16) \u2192 InternVL2 dynamic_preprocess 448",
+    "target_source": "RoutePlanner[1],[2] after densify~1m + min_distance pop",
+    "geometry_head": "pred_route \u2192 PathManager/MPC",
+    "speed_head": "pred_speed_wps \u2192 speed only",
+    "prompt_mode": "target_point",
+    "command_text_config_default": "Command: follow the road.",
+    "actual_runtime_command_text": null
+  },
+  "path_manager_gates": {
+    "enable_lateral_mode_flip": false,
+    "enable_early_lane_change": true
+  },
+  "requested_rhi": "dx12",
+  "effective_rhi": null,
+  "effective_rhi_source": "unknown_attach_no_cmdline_rhi",
+  "rhi_match_requested": false,
+  "rhi_independently_verified": false,
+  "render_offscreen": false,
+  "server_command_line": "\"E:\\CARLA_0.9.16\\CarlaUE4.exe\"",
+  "driver_version": "610.74",
+  "requested_vehicle_blueprint": "vehicle.mercedes.coupe_2020",
+  "effective_vehicle_blueprint": "vehicle.mercedes.coupe_2020",
+  "enable_stationary_requery": false,
+  "speed_cap_mps": 30.0,
+  "speed_gain": 1.0,
+  "steer_sign": 1.0,
+  "route_segment_m": 600.0,
+  "checkpoint_period_s": 10.0,
+  "gpu_idle_guard_ms": 50.0,
+  "debug_draw": false,
+  "seed": null,
+  "startup_timeout_s": 180.0,
+  "no_map_restart": true,
+  "force_cold_start": false,
+  "wall_start_s": 1784453810.0596602,
+  "actual_map": "Carla/Maps/Town15/Town15",
+  "vehicle_geometry": {
+    "wheelbase_m": 2.8319008764915603,
+    "track_width_m": 1.5984691297706521,
+    "max_steer_rad": 1.2217303432379762,
+    "geometry_source": "physics_wheels_pca",
+    "validation_status": "ok",
+    "fields": {
+      "wheelbase_m": {
+        "value": 2.8319008764915603,
+        "source": "physics_wheels_pca",
+        "validation_status": "ok",
+        "physics_value": 2.8319008764915603,
+        "notes": []
+      },
+      "track_width_m": {
+        "value": 1.5984691297706521,
+        "source": "physics_wheels_pca",
+        "validation_status": "ok",
+        "physics_value": 1.5984691297706521,
+        "notes": []
+      },
+      "max_steer_rad": {
+        "value": 1.2217303432379762,
+        "source": "physics_wheels",
+        "validation_status": "ok",
+        "physics_value": 1.2217303432379762,
+        "notes": []
+      }
+    },
+    "wheel_positions_raw": [
+      [
+        39625.29296875,
+        16401.75,
+        11645.498046875
+      ],
+      [
+        39522.69921875,
+        16524.330078125,
+        11645.5029296875
+      ],
+      [
+        39408.12890625,
+        16219.99609375,
+        11639.27734375
+      ],
+      [
+        39305.53125,
+        16342.5703125,
+        11639.6025390625
+      ]
+    ],
+    "wheel_positions_m": [
+      [
+        396.2529296875,
+        164.0175
+      ],
+      [
+        395.2269921875,
+        165.24330078125
+      ],
+      [
+        394.0812890625,
+        162.1999609375
+      ],
+      [
+        393.0553125,
+        163.425703125
+      ]
+    ],
+    "units_detected": "cm_to_m",
+    "n_wheels": 4,
+    "notes": []
+  },
+  "model_resident_vram_mb": 1870.546875,
+  "failure_class": "CARLA_SERVER_HANG_NO_CRASH_CONTEXT",
+  "n_forward_to_failure": 247,
+  "wall_end_s": 1784454217.757935
+}

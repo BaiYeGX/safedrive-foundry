@@ -1,14 +1,23 @@
-# Pure VLA CARLA Demo — Status Brief for External Consult
+# Pure VLA CARLA Demo — Historical Status Brief for External Consult
+
+> **ARCHIVED DIAGNOSTIC (2026-07-19):** This file preserves the failure history that
+> led to the current implementation. It is not the startup guide and several defaults
+> below (DX11, 640×320, 15/30m targets, pure pursuit) are intentionally obsolete.
+> The authoritative current document is
+> [`G3_VLA_MPC_RELEASE_GUIDE.md`](./G3_VLA_MPC_RELEASE_GUIDE.md): official 1024×512
+> SimLingo contract, DX12, RoutePlanner 7.5m targets, pure VLA path/speed and
+> constrained MPC. The current milestone is `MEASURED_WITH_LIMITS`; formal G3-05
+> VLA+Safety live acceptance remains pending.
 
 **Date:** 2026-07-19  
 **Project:** SafeDrive Foundry (CARLA 0.9.16 + ROS2 SIL; Windows CARLA + WSL2 Ubuntu client)  
 **Hardware:** RTX 4080 16GB (single GPU, no iGPU), Intel i5-13600KF  
 **Purpose of this doc:** Hand to ChatGPT / another expert to diagnose why pure VLA closed-loop driving fails (spins at intersections → D3D crash).
 
-> **2026-07-18 update:** Sections 2–9 describe the failed historical pipeline and are
+> **2026-07-19 update:** Sections 2–9 describe the failed historical pipeline and are
 > retained as diagnostic evidence. The active implementation is now
 > `run_g3_vla_mpc_minimal.py` → `run_g3_vla_mpc_stable.py`; see Section 11 and
-> `G3_VLA_MPC_STABLE_RUNBOOK.md`. No new live pass is claimed yet.
+> `G3_VLA_MPC_RELEASE_GUIDE.md`.
 
 ---
 

@@ -1,5 +1,11 @@
 # G3 执行过程日志（边做边写）
 
+> **2026-07-19 权威更新**：下方早期“终态 COMPLETED_WITH_LIMITS”已被 2026-07-16
+> 复审作废。当前 pure SimLingo VLA+constrained MPC 为 `MEASURED_WITH_LIMITS`，正式
+> G3-05 Safety 阶段仍是 `REVALIDATION_REQUIRED`。启动、已完成能力、live 证据、限制与
+> G4 路线统一见 `docs/architecture/G3_VLA_MPC_RELEASE_GUIDE.md`；本文件其余内容保留为
+> 时间顺序历史，不再作为当前状态来源。
+
 > **授权**：用户批准全阶段无人值守计划；G3-01→G3-05 连续执行至 CARLA 验收。
 > **成功口径**：C1 + `VLA_SAFETY` CARLA 可重复闭环；稳定优先；效果可负。
 > **Python**：`/home/sdf/.venvs/sdf`
@@ -8,10 +14,10 @@
 
 | 字段 | 值 |
 |---|---|
-| 任务 | G3-02 |
-| 切片 | start |
-| Profile | offline |
-| 最近状态 | G3-01 PASS → G3-02 |
+| 任务 | G3-05 formal close pending |
+| 切片 | pure VLA+MPC release checkpoint |
+| Profile | online_eval + offline replay |
+| 最近状态 | CORE `MEASURED_WITH_LIMITS`；Safety `REVALIDATION_REQUIRED` |
 
 ## 阻塞板
 

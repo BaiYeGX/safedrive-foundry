@@ -1,8 +1,10 @@
 # SafeDrive Foundry：工程骨架与确定性同步
 
-本目录提供 CARLA → WSL2 Python client → ROS 2 的最小状态链路、G0 确定性同步契约，以及 G1 起的 runtime / classic_stack 扩展。
+本目录提供 CARLA → WSL2 Python client → ROS 2 状态链路、确定性运行时、经典专家、
+Safety Kernel，以及当前 G3 的 SimLingo VLA + constrained MPC 实现。World Model 尚未实现。
 
-它不包含 VLA、世界模型或 Safety Kernel。
+G3 当前用法与边界见
+[`docs/architecture/G3_VLA_MPC_RELEASE_GUIDE.md`](../docs/architecture/G3_VLA_MPC_RELEASE_GUIDE.md)。
 
 ## 固定约定
 
@@ -24,10 +26,10 @@
 
 ```bash
 cd "/mnt/e/autonomous driving"
-python3 scripts/sdf.py sim status
-python3 scripts/sdf.py sim preflight   # READY 才能继续真实 CARLA 任务
+python scripts/sdf.py sim status
+python scripts/sdf.py sim preflight   # READY 才能继续真实 CARLA 任务
 # 可选一次启动（Windows CarlaUE4.exe，经 PowerShell 互操作）：
-python3 scripts/sdf.py sim ensure
+python scripts/sdf.py sim ensure --map Town03 --rhi dx12 --startup-timeout 180
 ```
 
 解析顺序（摘要）：
@@ -43,15 +45,24 @@ python3 scripts/sdf.py sim ensure
 
 ## 启动 CARLA Server
 
-**推荐（Windows 安装包，从 WSL 也可 ensure）：**
+**推荐（从 WSL 自动启动，与手动双击行为对齐）：**
+
+```bash
+python scripts/sdf.py sim ensure --map Town03 --rhi dx12 --startup-timeout 180 --json
+```
+
+自动启动会先原子 pin `DefaultEngine.ini` 的 map/RHI，再从 CARLA 安装目录启动且不传
+额外 ArgumentList。这避免历史上命令行 DX12/map 参数触发的启动时 shader fatal。
+
+需要手动启动时只双击 `CarlaUE4.exe`，或使用：
 
 ```powershell
 # Windows PowerShell
 Start-Process -FilePath 'E:\CARLA_0.9.16\CarlaUE4.exe' `
-  -ArgumentList '/Game/Carla/Maps/Town10HD','-windowed','-ResX=800','-ResY=600','-quality-level=Low','-nosound','-carla-rpc-port=2000'
+  -WorkingDirectory 'E:\CARLA_0.9.16'
 ```
 
-或在 WSL：`python3 scripts/sdf.py sim ensure`（读取 `config/runtime/carla_start.toml`）。
+地图和 RHI 仍由 `DefaultEngine.ini` 决定；不要在运行中反复 `load_world()`。
 
 说明：当前安装为 **Windows 构建**（`CarlaUE4.exe`），不是 Linux `CarlaUE4.sh`。Server 进程跑在 Windows；客户端在 WSL。
 若将来提供 Linux 构建，同一 `ensure` 路径可选用 `linux_executable` / 旁路 `CarlaUE4.sh`。

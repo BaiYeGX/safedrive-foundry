@@ -4,13 +4,30 @@
 # Windows host path and WSL mount path refer to the same installation.
 # From WSL, ensure launches CarlaUE4.exe via powershell.exe interop.
 # A native Linux CarlaUE4.sh is used only when present next to the install.
+#
+# launch_mode:
+#   default_engine     — manual-compatible cold start (no ArgumentList); map/RHI
+#                        come from DefaultEngine.ini (preferred / current default).
+#   explicit_arguments — experimental: pass map/RHI/resolution on the command line.
+#
+# Always set windows_working_directory to the CARLA install root so Start-Process
+# does not inherit the WSL project cwd (a known source of shader pipeline fatals).
 
 [carla_start]
 expected_version = "0.9.16"
 windows_executable = "E:\\CARLA_0.9.16\\CarlaUE4.exe"
+windows_working_directory = "E:\\CARLA_0.9.16"
 wsl_path = "/mnt/e/CARLA_0.9.16/CarlaUE4.exe"
-# Prefer DX11 on Windows 11 to reduce UE "shader compilation failures are fatal".
+launch_mode = "default_engine"
+# Used when `sdf sim ensure` is called without --map.
+default_map = "Town03"
+# G3 live evidence on 2026-07-19 established DX12 as the stable RHI for sharing
+# this RTX 4080 between CARLA rendering and SimLingo CUDA forward. DX11 is the
+# known-failing D3D baseline; do not revert without rerunning the isolated E0 test.
 # Stay on one startup map; avoid client.load_world map switches that re-trigger shaders.
-# Town04 is the known-stable default startup map.  A map mismatch requires a full
-# CarlaUE4 cold restart; live runners must not call client.load_world().
-arguments = "/Game/Carla/Maps/Town04 -windowed -ResX=800 -ResY=600 -quality-level=Low -nosound -dx11 -carla-rpc-port=2000"
+# rhi: exactly one of dx11|dx12 (mirrored into arguments as -dx11 or -dx12 in explicit mode).
+# render_offscreen: when true, explicit_arguments mode includes exactly one -RenderOffScreen.
+rhi = "dx12"
+render_offscreen = false
+# explicit_arguments mode only (ignored as ArgumentList when launch_mode=default_engine).
+arguments = "/Game/Carla/Maps/Town03 -windowed -ResX=640 -ResY=360 -quality-level=Low -nosound -dx12 -carla-rpc-port=2000"

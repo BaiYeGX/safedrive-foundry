@@ -1,0 +1,44 @@
+{
+  "status": "COMPLETE",
+  "run_id": "g3-vla-mpc-1784432396772",
+  "requested_map": "Town04",
+  "map_arg": "Town04",
+  "inference_mode": "full",
+  "duration_s": 180.0,
+  "sim_dt_s": 0.05,
+  "vla_period_s": 0.75,
+  "camera_sensor_tick_s": 0.75,
+  "camera_resolution": [
+    640,
+    320
+  ],
+  "server_resolution": [
+    640,
+    360
+  ],
+  "requested_rhi": "dx12",
+  "effective_rhi": "dx12",
+  "render_offscreen": false,
+  "server_command_line": "\"E:\\CARLA_0.9.16\\CarlaUE4.exe\" /Game/Carla/Maps/Town04 -windowed -ResX=640 -ResY=360 -quality-level=Low -nosound -dx12 -carla-rpc-port=2000",
+  "driver_version": "610.74",
+  "speed_cap_mps": 15.0,
+  "speed_gain": 1.5,
+  "steer_sign": 1.0,
+  "route_segment_m": 600.0,
+  "checkpoint_period_s": 10.0,
+  "gpu_idle_guard_ms": 50.0,
+  "debug_draw": false,
+  "seed": null,
+  "startup_timeout_s": 180.0,
+  "no_map_restart": false,
+  "force_cold_start": true,
+  "wall_start_s": 1784432396.7721572,
+  "actual_map": "Carla/Maps/Town04",
+  "server_resolution_effective": [
+    640,
+    360
+  ],
+  "model_resident_vram_mb": 1870.546875,
+  "result": "DEMO_FAIL",
+  "wall_end_s": 1784432735.4280126
+}

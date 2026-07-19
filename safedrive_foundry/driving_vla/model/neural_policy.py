@@ -29,6 +29,9 @@ class NativePathPrediction:
     target_ego_2: tuple[float, float]
     latency_s: float
     peak_vram_mb: float
+    # Optional dual-head ego-frame dumps for debug-draw / evidence.
+    route_ego_xy: tuple[tuple[float, float], ...] = ()
+    speed_wps_ego_xy: tuple[tuple[float, float], ...] = ()
 
 
 class NeuralV0Policy:
@@ -75,12 +78,16 @@ class NeuralV0Policy:
     def _route_targets(
         self, obs: ObservationBundle, *, d1: float = 15.0, d2: float = 30.0
     ) -> tuple[tuple[float, float], tuple[float, float]]:
-        """Two ego-frame navigation targets always *ahead* along route (~d1, ~d2 meters).
+        """Two ego-frame navigation targets.
 
-        Fixes the classic bug of fixed route_xy[10]: after the car passes that point,
-        ego_x becomes negative (behind) and VLA is prompted to U-turn / circle.
-        Override via obs.meta['target_ego_1'] / ['target_ego_2'] if provided.
+        Prefer explicit meta targets from the runner (official RoutePlanner or
+        legacy arc). Fallback: legacy +d1/+d2 arc along ``obs.route_xy``.
         """
+        from driving_vla.model.simlingo_contract import (
+            SimLingoContractConfig,
+            navigation_targets,
+        )
+
         meta = obs.meta or {}
         if "target_ego_1" in meta and "target_ego_2" in meta:
             t1 = meta["target_ego_1"]
@@ -90,59 +97,21 @@ class NeuralV0Policy:
         if not obs.route_xy or len(obs.route_xy) < 2:
             return (float(d1), 0.0), (float(d2), 0.0)
 
-        # Arc-length table on map route
-        poly = [(float(x), float(y)) for x, y in obs.route_xy]
-        s_acc = [0.0]
-        for i in range(1, len(poly)):
-            s_acc.append(
-                s_acc[-1] + math.hypot(poly[i][0] - poly[i - 1][0], poly[i][1] - poly[i - 1][1])
-            )
-        # Nearest s, then advance (prefer forward when ties)
-        best_s, best_d = 0.0, float("inf")
-        for i in range(len(poly) - 1):
-            x0, y0 = poly[i]
-            x1, y1 = poly[i + 1]
-            vx, vy = x1 - x0, y1 - y0
-            L2 = vx * vx + vy * vy
-            if L2 < 1e-12:
-                t = 0.0
-            else:
-                t = max(0.0, min(1.0, ((obs.ego_x - x0) * vx + (obs.ego_y - y0) * vy) / L2))
-            px, py = x0 + t * vx, y0 + t * vy
-            d = math.hypot(obs.ego_x - px, obs.ego_y - py)
-            if d < best_d:
-                best_d = d
-                best_s = s_acc[i] + t * (s_acc[i + 1] - s_acc[i])
-
-        def _at_s(s: float) -> tuple[float, float]:
-            s = max(0.0, min(s, s_acc[-1]))
-            if s <= 0:
-                return poly[0]
-            if s >= s_acc[-1]:
-                return poly[-1]
-            for i in range(1, len(s_acc)):
-                if s_acc[i] >= s:
-                    u = (s - s_acc[i - 1]) / max(s_acc[i] - s_acc[i - 1], 1e-9)
-                    return (
-                        poly[i - 1][0] + u * (poly[i][0] - poly[i - 1][0]),
-                        poly[i - 1][1] + u * (poly[i][1] - poly[i - 1][1]),
-                    )
-            return poly[-1]
-
-        # Always place goals ahead of current progress (not a fixed index)
-        s1 = min(s_acc[-1], best_s + d1)
-        s2 = min(s_acc[-1], best_s + d2)
-        # If near end of route, keep targets at least slightly ahead of ego in ego frame
-        m1 = _at_s(s1)
-        m2 = _at_s(s2)
-        e1 = self._map_to_ego(m1[0], m1[1], obs)
-        e2 = self._map_to_ego(m2[0], m2[1], obs)
-        # Clamp: if numerical glitch put target behind, fall back to ego-forward
-        if e1[0] < 1.0:
-            e1 = (float(d1), 0.0)
-        if e2[0] <= e1[0] + 1.0:
-            e2 = (float(e1[0] + max(5.0, d2 - d1)), float(e1[1]))
-        return e1, e2
+        official = bool(meta.get("official_contract", True))
+        cfg = SimLingoContractConfig(
+            official_contract=official,
+            legacy_target_d1_m=float(d1),
+            legacy_target_d2_m=float(d2),
+        )
+        result = navigation_targets(
+            list(obs.route_xy),
+            ego_x=float(obs.ego_x),
+            ego_y=float(obs.ego_y),
+            ego_yaw=float(obs.ego_yaw),
+            progress_hint_s=float(meta.get("route_progress_s", 0.0) or 0.0),
+            config=cfg,
+        )
+        return result.target_ego_1, result.target_ego_2
 
     def _route_target(self, obs: ObservationBundle) -> tuple[float, float]:
         """Backward-compatible single target (first of dual advancing targets)."""
@@ -157,6 +126,36 @@ class NeuralV0Policy:
             my = obs.ego_y + s * float(x) + c * float(y)
             out.append((mx, my))
         return tuple(out)
+
+    @staticmethod
+    def resolve_vla_input_speed_mps(obs: ObservationBundle) -> float:
+        """Speed value fed into SimLingo (not the commanded vehicle speed).
+
+        Default: real non-negative ego speed, including true 0 when stopped.
+
+        Historical bug: ``ego_v <= 0.05`` was replaced with ``3.0``, so after a
+        first collision the model still saw "rolling at 3 m/s" while the car was
+        parked and often kept outputting non-restartable stop intent.
+
+        Optional first-start assist (distinct from post-collision stop):
+        - set ``meta["startup_speed_assist_mps"]`` (e.g. 3.0) only while cold-starting
+        - set ``meta["has_collided"]=True`` after the first collision episode; assist
+          is then forbidden and real 0 m/s is always used when stopped
+        - or force any value via ``meta["vla_input_speed_mps"]``
+        """
+        ego_v = max(0.0, float(obs.ego_v))
+        meta = obs.meta or {}
+        if "vla_input_speed_mps" in meta and meta["vla_input_speed_mps"] is not None:
+            return max(0.0, float(meta["vla_input_speed_mps"]))
+        has_collided = bool(meta.get("has_collided", False))
+        assist = meta.get("startup_speed_assist_mps")
+        if (
+            assist is not None
+            and not has_collided
+            and ego_v <= 0.05
+        ):
+            return max(0.0, float(assist))
+        return ego_v
 
     def predict_arrays(self, obs: ObservationBundle) -> list[TrajectoryArray]:
         native = self.predict_native(obs)
@@ -189,9 +188,15 @@ class NeuralV0Policy:
         arr = np.asarray(rgb)
         if arr.ndim == 3 and arr.shape[2] == 4:
             arr = arr[:, :, :3]
-        # BGR carla often — if mean channel0 > channel2 slightly keep as is; convert if meta says bgr
-        if obs.meta.get("image_bgr"):
-            arr = arr[:, :, ::-1].copy()
+        meta = obs.meta or {}
+        official = bool(meta.get("official_contract", True))
+        # Prefer explicit layout; image_bgr legacy flag ⇒ BGR.
+        if meta.get("image_layout"):
+            image_layout = str(meta["image_layout"]).lower()
+        elif meta.get("image_bgr"):
+            image_layout = "bgr"
+        else:
+            image_layout = "rgb"
         tp1, tp2 = self._route_targets(obs)
         # Expose for logging / debug demos
         if obs.meta is not None:
@@ -200,17 +205,57 @@ class NeuralV0Policy:
                 obs.meta["resolved_target_ego_2"] = tp2
             except Exception:
                 pass
+        vla_speed = self.resolve_vla_input_speed_mps(obs)
+        if obs.meta is not None:
+            try:
+                obs.meta["resolved_vla_input_speed_mps"] = vla_speed
+            except Exception:
+                pass
+        from driving_vla.model.simlingo_runtime import SIMLINGO_CAMERA_XYZ
+
+        cam_xyz = tuple(meta.get("camera_mount_xyz") or SIMLINGO_CAMERA_XYZ)
+        # Official target_point mode: runtime uses command_text=None.
+        # Do not invent "Command: follow the road" when meta explicitly has None.
+        if "command_text" in meta:
+            raw_cmd = meta.get("command_text")
+            command_text = None if raw_cmd is None else str(raw_cmd)
+        else:
+            command_text = (
+                None if official else "Command: follow the road."
+            )
+        if obs.meta is not None:
+            try:
+                obs.meta["resolved_command_text"] = command_text
+                obs.meta["resolved_prompt_mode"] = (
+                    "target_point" if official else "legacy_command_text"
+                )
+            except Exception:
+                pass
         result = self.runtime.forward_numpy(
             arr,
-            speed_mps=float(obs.ego_v if obs.ego_v > 0.05 else 3.0),
+            speed_mps=vla_speed,
             target_point_xy=tp1,
             target_point2_xy=tp2,
             keep_on_gpu=self.keep_on_gpu,
             borrow_gpu=not self.keep_on_gpu,
+            camera_mount_xyz=(float(cam_xyz[0]), float(cam_xyz[1]), float(cam_xyz[2])),
+            image_layout=image_layout,
+            official_contract=official,
+            command_text=command_text if command_text is not None else "Command: follow the road.",
         )
         self.last_latency_s = result.latency_s
         self.last_peak_vram_mb = result.peak_vram_mb
         path_map = self._ego_path_to_map(result.route_xy, obs)
+        route_ego = tuple(
+            (float(x), float(y)) for x, y in np.asarray(result.route_xy).reshape(-1, 2)
+        )
+        speed_wps = getattr(result, "speed_wps_xy", None)
+        if speed_wps is None:
+            speed_ego: tuple[tuple[float, float], ...] = ()
+        else:
+            speed_ego = tuple(
+                (float(x), float(y)) for x, y in np.asarray(speed_wps).reshape(-1, 2)
+            )
         return NativePathPrediction(
             path_map_xy=path_map,
             speed_mps=tuple(float(v) for v in result.speed_mps),
@@ -218,6 +263,8 @@ class NeuralV0Policy:
             target_ego_2=tp2,
             latency_s=float(result.latency_s),
             peak_vram_mb=float(result.peak_vram_mb),
+            route_ego_xy=route_ego,
+            speed_wps_ego_xy=speed_ego,
         )
 
 

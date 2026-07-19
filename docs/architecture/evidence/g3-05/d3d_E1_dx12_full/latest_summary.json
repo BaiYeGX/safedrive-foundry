@@ -1,0 +1,111 @@
+{
+  "demo": "pure_vla_spatial_constrained_mpc_v1",
+  "run_id": "g3-vla-mpc-1784432396772",
+  "inference_mode": "full",
+  "map": "Carla/Maps/Town04",
+  "requested_map": "Town04",
+  "map_arg": "Town04",
+  "speed_cap_mps": 15.0,
+  "speed_calibration_gain": 1.5,
+  "speed_semantics": "VLA speed head is primary; calibrated then capped; no positive speed floor",
+  "steps": 3600,
+  "sim_duration_s": 180.0,
+  "distance_m": 319.03898240641274,
+  "displacement_m": 231.28494922191825,
+  "distance_over_displacement": 1.3794195579077408,
+  "route": {
+    "coarse_navigation_only": true,
+    "progress_m": 318.0436969150796,
+    "progress_efficiency": 0.9968803640112377,
+    "refreshes": 0,
+    "refresh_failures": 0,
+    "target_invalid_count": 0,
+    "segment_length_m": 600.0
+  },
+  "camera": {
+    "width": 640,
+    "height": 320,
+    "sensor_tick_s": 0.75,
+    "frames_received": 241,
+    "fov_deg": 110.0,
+    "mount_xyz": [
+      -1.5,
+      0.0,
+      2.0
+    ]
+  },
+  "server_resolution_requested": [
+    640,
+    360
+  ],
+  "vehicle": {
+    "wheelbase_m": 2.513828125,
+    "max_steer_rad": 0.6
+  },
+  "vla_updates": 240,
+  "vla_accepts": 193,
+  "vla_reject_reasons": {
+    "lateral_switch": 3,
+    "heading_switch": 5,
+    "curvature_hard_limit": 23,
+    "curvature_limit": 16
+  },
+  "inference_ms": {
+    "p50": 149.3036874999234,
+    "p95": 197.87642444948673
+  },
+  "speed_mps": {
+    "actual_p50": 0.03860346162870647,
+    "actual_p95": 7.102159047896697,
+    "actual_max": 7.736908581005898,
+    "controller_target_p50": 0.6106124578530933,
+    "controller_target_p95": 8.315173611938137
+  },
+  "path_age_s": {
+    "p95": 18.702500278688955,
+    "max": 27.700000412762165
+  },
+  "tail_motion": {
+    "window_s": 20.0,
+    "mean_speed_mps": 0.028544955394204558,
+    "moving_fraction": 0.0
+  },
+  "peak_vram_mb": 2221.69140625,
+  "model_resident_vram_mb": 1870.546875,
+  "road_events": {
+    "collisions": 272,
+    "collision_impulse": 14017.893946105818,
+    "lane_invasions": 4
+  },
+  "offroad_steps": 0,
+  "offroad_fraction": 0.0,
+  "solver_modes": {
+    "mpc": 3367,
+    "bounded_fallback": 233
+  },
+  "solver_statuses": {
+    "solved": 3366,
+    "timeout": 233,
+    "solved_inaccurate": 1
+  },
+  "cte_rms_m": 0.6169941292863542,
+  "steer_abs_max": 1.0,
+  "steer_saturation_fraction": 0.19055555555555556,
+  "steer_sign_flips": 22,
+  "geometry_source": "SimLingo native path only; map route used for coarse VLA targets",
+  "gpu_schedule": "VLA camera rate matched; runtime CUDA synchronize; configurable host idle guard before next world.tick",
+  "acceptance": {
+    "enough_vla_paths": true,
+    "mpc_fraction_ge_0_95": false,
+    "cte_rms_lt_0_50m": false,
+    "steer_saturation_lt_0_01": false,
+    "steer_flip_rate_lt_0_5hz": true,
+    "route_progress_efficiency_ge_0_65": true,
+    "collision_free": false,
+    "offroad_fraction_lt_0_02": true,
+    "minimum_distance": true,
+    "tail_moving_fraction_ge_0_50": false
+  },
+  "result": "DEMO_FAIL",
+  "verified": false
+}

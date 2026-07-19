@@ -1,0 +1,103 @@
+{
+  "status": "BLOCKED_EXTERNAL",
+  "result": "RUNTIME_ERROR",
+  "run_id": "g3-vla-mpc-1784428353290",
+  "inference_mode": "forward-only",
+  "requested_map": "Town04",
+  "error_type": "RuntimeError",
+  "error": "time-out of 30000ms while waiting for the simulator, make sure the simulator is ready and connected to 127.0.0.1:2000",
+  "failure_class": "CARLA_SERVER_UNRESPONSIVE",
+  "carla_crash_context": null,
+  "last_live_state": {
+    "phase": "running",
+    "last_operation": "world_tick",
+    "last_checkpoint": {
+      "status": "RUNNING",
+      "run_id": "g3-vla-mpc-1784428353290",
+      "inference_mode": "forward-only",
+      "map": "Carla/Maps/Town04",
+      "sim_elapsed_s": 50.00000074505806,
+      "requested_duration_s": 180.0,
+      "distance_m": 1.52587890625e-05,
+      "route_progress_m": 0.0,
+      "route_refreshes": 0,
+      "vla_updates": 67,
+      "vla_accepts": 67,
+      "vla_accept_fraction": 1.0,
+      "vla_reject_reasons": {},
+      "inference_ms": {
+        "p50": 145.5718350002826,
+        "p95": 181.4852716998757
+      },
+      "peak_vram_mb": 2221.69140625,
+      "model_resident_vram_mb": 1870.546875,
+      "actual_speed_mps": 0.0,
+      "vla_speed_target_mps": 12.187860571589255,
+      "path_age_s": null,
+      "control": {
+        "solver_modes": {},
+        "solver_statuses": {},
+        "cte_rms_m": null,
+        "steer_abs_max": 0.0,
+        "steer_saturation_fraction": null,
+        "steer_sign_flips": 0,
+        "steer_flip_rate_hz": 0.0
+      },
+      "tail_motion": {
+        "window_s": 20.0,
+        "mean_speed_mps": 0.0,
+        "moving_fraction": 0.0
+      },
+      "route_target_invalid_count": 0,
+      "camera": {
+        "last_frame": 1074,
+        "frames_received": 68
+      },
+      "road_events": {
+        "collisions": 0,
+        "collision_impulse": 0.0,
+        "lane_invasions": 0
+      },
+      "offroad_fraction": 0.0,
+      "wall_time_s": 1784428496.8624218
+    },
+    "sim_start_s": 2.2671732306480408,
+    "sim_elapsed_s": 58.850000876933336,
+    "steps": 1177
+  },
+  "run_config": {
+    "status": "CONNECTED",
+    "run_id": "g3-vla-mpc-1784428353290",
+    "requested_map": "Town04",
+    "map_arg": "Town04",
+    "inference_mode": "forward-only",
+    "duration_s": 180.0,
+    "sim_dt_s": 0.05,
+    "vla_period_s": 0.75,
+    "camera_sensor_tick_s": 0.75,
+    "camera_resolution": [
+      640,
+      320
+    ],
+    "server_resolution": [
+      640,
+      360
+    ],
+    "speed_cap_mps": 15.0,
+    "speed_gain": 1.5,
+    "steer_sign": 1.0,
+    "route_segment_m": 600.0,
+    "checkpoint_period_s": 10.0,
+    "gpu_idle_guard_ms": 50.0,
+    "debug_draw": false,
+    "seed": null,
+    "startup_timeout_s": 180.0,
+    "no_map_restart": false,
+    "force_cold_start": true,
+    "wall_start_s": 1784428353.2909842,
+    "actual_map": "Carla/Maps/Town04",
+    "model_resident_vram_mb": 1870.546875
+  },
+  "traceback": "Traceback (most recent call last):\n  File \"/mnt/e/autonomous driving/tests/g3/run_g3_vla_mpc_stable.py\", line 1085, in main\n    world.tick()\nRuntimeError: time-out of 30000ms while waiting for the simulator, make sure the simulator is ready and connected to 127.0.0.1:2000\n",
+  "wall_time_s": 1784428538.869624
+}

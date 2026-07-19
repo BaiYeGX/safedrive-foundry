@@ -66,36 +66,103 @@ def _pct(xs: list[float], p: float) -> float | None:
     return ys[f] + (ys[c] - ys[f]) * (k - f)
 
 
+# Chase-cam offsets in *vehicle* frame (community / official tutorial style).
+# Relative Z works on high-elevation large maps (Town11–15); never use absolute z>8.
+SPECTATOR_BACK_M = 8.0
+SPECTATOR_UP_M = 5.5
+SPECTATOR_PITCH_DEG = -20.0
+# Only treat as fall-through when Z drops this much vs last good vehicle height.
+SPECTATOR_FALL_DELTA_Z_M = -20.0
+
+
+def compute_chase_cam_world(
+    *,
+    x: float,
+    y: float,
+    z: float,
+    yaw_deg: float,
+    back_m: float = SPECTATOR_BACK_M,
+    up_m: float = SPECTATOR_UP_M,
+) -> tuple[float, float, float, float]:
+    """World-frame chase pose from vehicle pose (no CARLA dependency).
+
+    Equivalent to ``vehicle_tf.transform(Location(x=-back, z=up))`` for yaw-only
+    rotation (CARLA vehicle forward = local +x).
+    """
+    yaw_rad = math.radians(float(yaw_deg))
+    # Local (-back, 0, up) rotated by yaw about Z, then + vehicle origin.
+    cam_x = float(x) - float(back_m) * math.cos(yaw_rad)
+    cam_y = float(y) - float(back_m) * math.sin(yaw_rad)
+    cam_z = float(z) + float(up_m)
+    return cam_x, cam_y, cam_z, float(yaw_deg)
+
+
+def _spectator_pose_is_fallen(
+    z: float,
+    *,
+    last_good: dict | None,
+    fall_delta_z_m: float = SPECTATOR_FALL_DELTA_Z_M,
+) -> bool:
+    """True only for NaN/Inf or a large *relative* drop vs last good vehicle z."""
+    if math.isnan(z) or math.isinf(z):
+        return True
+    if last_good is None or last_good.get("z") is None:
+        return False
+    try:
+        prev_z = float(last_good["z"])
+    except (TypeError, ValueError):
+        return False
+    if math.isnan(prev_z) or math.isinf(prev_z):
+        return False
+    # Absolute altitude is valid on large maps (e.g. Town15 z≈116m). Do NOT use z>8.
+    return (z - prev_z) <= float(fall_delta_z_m)
+
+
 def set_spectator_follow(
     world: carla.World,
     vehicle: carla.Vehicle,
     *,
     last_good: dict | None = None,
 ) -> None:
-    """Always chase the car. If vehicle pose is garbage (fallen), use last_good."""
+    """Chase the car from behind/above using vehicle-frame offset (community pattern).
+
+    Uses relative height only so high-elevation large maps stay above the road.
+    If the vehicle truly falls through the map (large Δz drop), hold last good XY.
+    """
     try:
         spectator = world.get_spectator()
         tf = vehicle.get_transform()
+        x = float(tf.location.x)
+        y = float(tf.location.y)
         z = float(tf.location.z)
-        # If vehicle fell through map, keep camera at last good XY so user still sees where it died
-        if last_good is not None and (z < -1.0 or z > 8.0 or math.isnan(z)):
-            x, y, yaw = last_good["x"], last_good["y"], last_good["yaw"]
-            z_cam = last_good.get("z", 0.5) + 6.0
-        else:
-            x = float(tf.location.x)
-            y = float(tf.location.y)
-            z_cam = max(z, 0.3) + 5.5
-            yaw = float(tf.rotation.yaw)
-            if last_good is not None:
-                last_good["x"], last_good["y"], last_good["z"], last_good["yaw"] = x, y, z, yaw
-        yaw_rad = math.radians(yaw)
-        cam_loc = carla.Location(
-            x - 10.0 * math.cos(yaw_rad),
-            y - 10.0 * math.sin(yaw_rad),
-            z_cam,
-        )
+        yaw = float(tf.rotation.yaw)
+
+        if last_good is not None and _spectator_pose_is_fallen(z, last_good=last_good):
+            x = float(last_good.get("x", x))
+            y = float(last_good.get("y", y))
+            z = float(last_good.get("z", z))
+            yaw = float(last_good.get("yaw", yaw))
+        elif last_good is not None:
+            last_good["x"], last_good["y"], last_good["z"], last_good["yaw"] = x, y, z, yaw
+
+        # Prefer CARLA vehicle-frame transform when available (matches tutorials).
+        try:
+            base = carla.Transform(
+                carla.Location(x, y, z),
+                carla.Rotation(pitch=0.0, yaw=yaw, roll=0.0),
+            )
+            cam_loc = base.transform(
+                carla.Location(x=-float(SPECTATOR_BACK_M), z=float(SPECTATOR_UP_M))
+            )
+        except Exception:
+            cx, cy, cz, _ = compute_chase_cam_world(x=x, y=y, z=z, yaw_deg=yaw)
+            cam_loc = carla.Location(cx, cy, cz)
+
         spectator.set_transform(
-            carla.Transform(cam_loc, carla.Rotation(pitch=-22.0, yaw=yaw, roll=0.0))
+            carla.Transform(
+                cam_loc,
+                carla.Rotation(pitch=float(SPECTATOR_PITCH_DEG), yaw=yaw, roll=0.0),
+            )
         )
     except Exception:
         pass

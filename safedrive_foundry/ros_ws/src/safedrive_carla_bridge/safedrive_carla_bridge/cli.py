@@ -157,8 +157,54 @@ def _parser() -> argparse.ArgumentParser:
         command.add_argument("--timeout", type=float, default=3.0, help="TCP/RPC timeout in seconds")
         command.add_argument("--json", action="store_true", help="emit one structured JSON object")
         if name == "ensure":
-            command.add_argument("--startup-timeout", type=float, default=30.0)
+            command.add_argument(
+                "--startup-timeout",
+                type=float,
+                default=180.0,
+                help="Seconds to wait for RPC READY after a cold start (default: 180)",
+            )
             command.add_argument("--poll-interval", type=float, default=0.5)
+            command.add_argument(
+                "--map",
+                dest="map_name",
+                default=None,
+                help="Requested startup map (e.g. Town03). Must match DefaultEngine.ini "
+                "in default_engine mode; READY actual_map is verified (no load_world).",
+            )
+            command.add_argument(
+                "--rhi",
+                choices=("dx11", "dx12"),
+                default=None,
+                help="CARLA RHI override (exactly one of dx11/dx12; cold-start if mismatch)",
+            )
+            command.add_argument(
+                "--launch-mode",
+                choices=("default_engine", "explicit_arguments"),
+                default=None,
+                help="default_engine=manual-compatible (no ArgumentList); "
+                "explicit_arguments=experimental command-line map/RHI flags",
+            )
+            command.add_argument(
+                "--no-auto-pin-default-engine",
+                action="store_true",
+                help="Do not rewrite DefaultEngine.ini; return MAP_OR_RHI_CONFIG_MISMATCH instead",
+            )
+            command.set_defaults(render_offscreen=None)
+            offscreen = command.add_mutually_exclusive_group()
+            offscreen.add_argument(
+                "--render-offscreen",
+                dest="render_offscreen",
+                action="store_const",
+                const=True,
+                help="Launch CARLA with -RenderOffScreen (explicit_arguments mode)",
+            )
+            offscreen.add_argument(
+                "--no-render-offscreen",
+                dest="render_offscreen",
+                action="store_const",
+                const=False,
+                help="Launch CARLA without -RenderOffScreen",
+            )
     return parser
 
 
@@ -306,6 +352,11 @@ def _cmd_sim(args: argparse.Namespace) -> int:
                 port=args.carla_port,
                 startup_timeout_seconds=args.startup_timeout,
                 poll_interval_seconds=args.poll_interval,
+                rhi=getattr(args, "rhi", None),
+                render_offscreen=getattr(args, "render_offscreen", None),
+                map_name=getattr(args, "map_name", None),
+                launch_mode=getattr(args, "launch_mode", None),
+                auto_pin_default_engine=not bool(getattr(args, "no_auto_pin_default_engine", False)),
             )
         _print_connection_report(report, as_json=args.json)
         return exit_code(report)

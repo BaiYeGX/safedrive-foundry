@@ -32,7 +32,7 @@ G0～G6、G8 是发布主线；G4B/G7 不阻塞发布。任何学习模块未优
 
 跨阶段时间、身份、接口、Oracle/Observable、Profile、权限和Registry约束只在[执行架构](./docs/project/EXECUTION_ARCHITECTURE.md)维护；G2～G8 的 VLA/World/Safety 运行链、资源与降级边界见[工业化架构规范](./docs/project/G2_G8_INDUSTRIAL_ARCHITECTURE.md)；具体实现分别见[SDF-VLA-1B 设计](./docs/project/SDF_VLA_1B_DESIGN.md)、[World-V0 门禁与设计](./docs/project/SDF_WORLD_MODEL_DESIGN.md)和[VLA主线+可选World总体架构](./docs/project/SDF_VLA_WORLD_SYSTEM_ARCHITECTURE.md)；Windows CARLA 与 WSL 模型共享 4080 的准入、互斥 workload 和降级规则见[单机执行预算](./docs/project/SINGLE_MACHINE_EXECUTION_BUDGET.md)；通用完成规则只在`AGENTS.md`维护；最终研究主张见[CLAIMS](./docs/project/CLAIMS.md)。
 
-VLA 是必须完成的主线：G3 依次完成 V0/V1 和无 Classic 当前帧候选闭环，G4A 再比较 top-1 与 oracle best-of-K。只有存在稳定选择空间才进入 G5 World-V0；否则继续 G6/G8并保存负结论。二者始终位于 Validator/Safety Kernel 约束内。
+VLA 是必须完成的主线：G3 依次完成 V0/V1 和无 Classic 当前帧候选闭环，G4A 再比较 top-1 与 oracle best-of-K。G4A 输出的选择空间标签决定 World 收益主张强弱，但不取消作品要求的 G5 World-V0 实现；没有稳定选择空间时仍接入并保存负结论。二者始终位于 Validator/Safety Kernel 约束内。
 
 ## 2. 阶段与任务数量
 
@@ -94,6 +94,17 @@ G2～G8 共 33 项，G1～G8 共 42 项，全项目共 48 项。任务按可形�
 | G3-03 | VLA-V0：F0 checkpoint 门禁、上游接入、canonicalizer 与最小闭环 | G3-02 |
 | G3-04 | VLA-V1 最小增强；V2 FAST/REASON 为递进 optional | G3-03 |
 | G3-05 | VLA+Safety 无 Classic闭环与 Hybrid 工程验收 | G3-01～G3-04 |
+
+### 2026-07-19 发布检查点
+
+pure SimLingo VLA path/speed → constrained MPC → CARLA 已达到
+`MEASURED_WITH_LIMITS`，并完成官方输入契约、DX12 D3D 隔离、自动冷启动和长测证据。
+这只是 G3 核心驾驶能力检查点；正式 G3-05 仍须补 VLA+Safety 的新 live evidence，不能把
+stable runner 的 `DEMO_PASS` 写成阶段 `VERIFIED`。当前统一入口见
+`docs/architecture/G3_VLA_MPC_RELEASE_GUIDE.md`。
+
+用户若希望先准备下一阶段，只能明确授权 G4-01/G4-02 以 `PRE_G3_CLOSE` 实现场景
+Registry/固定 replay；它不改变 G4 对 G3-05 的正式依赖。
 
 ## 7. G4：场景覆盖、主动搜索与反事实
 

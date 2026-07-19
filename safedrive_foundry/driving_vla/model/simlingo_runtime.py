@@ -323,33 +323,51 @@ class SimLingoNeuralRuntime:
         command_text: str = "Command: follow the road.",
         camera_mount_xyz: tuple[float, float, float] = SIMLINGO_CAMERA_XYZ,
         jpeg_roundtrip: bool = True,
+        image_layout: str = "rgb",
+        official_contract: bool = True,
     ) -> Any:
-        """rgb: HxWx3 uint8 RGB."""
+        """Build DrivingInput.
+
+        ``rgb`` is HxWx3 uint8. Layout:
+        - official_contract + layout ``bgr``: agent_simlingo BGR→JPEG→RGB→crop
+        - otherwise: legacy RGB→PIL JPEG→crop (when jpeg_roundtrip)
+        """
         import torch
         from PIL import Image
         from simlingo_training.utils.custom_types import DrivingInput, LanguageLabel
         from simlingo_training.utils.internvl2_utils import build_transform, dynamic_preprocess
+        from driving_vla.model.simlingo_contract import (
+            build_official_prompt,
+            preprocess_camera_legacy_rgb,
+            preprocess_camera_official_bgr,
+        )
 
         if rgb is None:
-            raise ValueError("neural backend requires front RGB image")
+            raise ValueError("neural backend requires front camera image")
         arr = np.asarray(rgb)
-        if arr.ndim != 3 or arr.shape[2] != 3:
-            raise ValueError(f"rgb must be HxWx3, got {arr.shape}")
+        if arr.ndim != 3 or arr.shape[2] < 3:
+            raise ValueError(f"image must be HxWx3, got {arr.shape}")
+        arr = np.ascontiguousarray(arr[:, :, :3])
         if arr.dtype != np.uint8:
             arr = np.clip(arr, 0, 255).astype(np.uint8)
 
-        # Upstream evaluation JPEG-encodes every camera frame before the
-        # training crop.  Matching it avoids a silent train/deploy mismatch.
-        if jpeg_roundtrip:
-            encoded = io.BytesIO()
-            Image.fromarray(arr).save(encoded, format="JPEG", quality=95)
-            encoded.seek(0)
-            arr = np.asarray(Image.open(encoded).convert("RGB"), dtype=np.uint8)
+        layout = str(image_layout or "rgb").lower()
+        if official_contract and layout == "bgr":
+            arr = preprocess_camera_official_bgr(arr)
+        elif official_contract and layout == "rgb":
+            # Runner may already convert; treat as BGR-swapped for official path.
+            arr = preprocess_camera_official_bgr(arr[:, :, ::-1].copy())
+        elif jpeg_roundtrip:
+            if layout == "bgr":
+                arr = arr[:, :, ::-1].copy()
+            arr = preprocess_camera_legacy_rgb(arr)
+        else:
+            if layout == "bgr":
+                arr = arr[:, :, ::-1].copy()
+            from driving_vla.model.simlingo_contract import crop_bottom_official
 
-        # crop bottom quarter (training)
-        h, w = arr.shape[:2]
-        cut = h - (h * 48) // 160  # ~4.8/16
-        arr = arr[:cut]
+            arr = crop_bottom_official(arr)
+
         image = Image.fromarray(arr)
         use_global = bool(getattr(self.cfg.model.vision_model, "use_global_img", False))
         images = dynamic_preprocess(
@@ -367,7 +385,14 @@ class SimLingoNeuralRuntime:
 
         speed = float(round(speed_mps, 1))
         tp2 = target_point2_xy or (target_point_xy[0] + 5.0, target_point_xy[1])
-        prompt = f"Current speed: {speed} m/s. {command_text} Target waypoint: <TARGET_POINT><TARGET_POINT>. What should the ego do next?"
+        if official_contract:
+            prompt = build_official_prompt(speed_mps=speed, command_text=None)
+        else:
+            prompt = (
+                f"Current speed: {speed} m/s. {command_text} "
+                f"Target waypoint: <TARGET_POINT><TARGET_POINT>. "
+                f"What should the ego do next?"
+            )
 
         get_conv_template = self._load_conv_template()
         if "<image>" not in prompt:
@@ -532,6 +557,9 @@ class SimLingoNeuralRuntime:
         keep_on_gpu: bool | None = None,
         camera_mount_xyz: tuple[float, float, float] = SIMLINGO_CAMERA_XYZ,
         jpeg_roundtrip: bool = True,
+        image_layout: str = "rgb",
+        official_contract: bool = True,
+        command_text: str = "Command: follow the road.",
     ) -> NeuralForwardResult:
         """Neural forward.
 
@@ -541,7 +569,10 @@ class SimLingoNeuralRuntime:
         if self.model is None or not self.load_report.ok:
             raise RuntimeError(f"model not loaded: {self.load_report.error}")
         import torch
-        from driving_vla.model.speed_convert import speed_wps_2d_to_mps
+        from driving_vla.model.speed_convert import (
+            speed_wps_2d_to_mps,
+            speed_wps_to_planner_samples,
+        )
 
         resident = getattr(self, "_resident_device", None)
         if keep_on_gpu is None:
@@ -569,8 +600,11 @@ class SimLingoNeuralRuntime:
                     speed_mps=speed_mps,
                     target_point_xy=target_point_xy,
                     target_point2_xy=target_point2_xy,
+                    command_text=command_text,
                     camera_mount_xyz=camera_mount_xyz,
                     jpeg_roundtrip=jpeg_roundtrip,
+                    image_layout=image_layout,
+                    official_contract=official_contract,
                 ),
                 device=run_dev,
             )
@@ -591,7 +625,12 @@ class SimLingoNeuralRuntime:
                 else:
                     pad = np.repeat(route_np[-1:], 20 - route_np.shape[0], axis=0)
                     route_np = np.concatenate([route_np, pad], axis=0)
-            speeds = speed_wps_2d_to_mps(speed_np, n_out=10)
+            # Official contract: agent_simlingo desired_speed scalar as planner samples.
+            # Keep finite-diff series available via speed_wps_xy for evidence.
+            if official_contract:
+                speeds = speed_wps_to_planner_samples(speed_np, use_official_scalar=True)
+            else:
+                speeds = speed_wps_2d_to_mps(speed_np, n_out=10)
             peak = 0.0
             if use_cuda:
                 peak = float(torch.cuda.max_memory_allocated()) / (1024.0 * 1024.0)

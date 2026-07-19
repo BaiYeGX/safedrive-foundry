@@ -100,6 +100,11 @@ G1 固定文档链：任务文件 → `docs/project/EXECUTION_ARCHITECTURE.md` �
 | G3-04 | `tasks/G3/G3-04_VLA_V1_OPTIONAL_ROUTER.md` | VLA-V1；V2 FAST/REASON 递进 optional |
 | G3-05 | `tasks/G3/G3-05_VLA_SAFETY_CLOSED_LOOP_ACCEPTANCE.md` | VLA→Safety→MPC 闭环与阶段 Evidence |
 
+当前 pure VLA+MPC 发布检查点、启动命令、已知限制和 G4 路线统一见
+`docs/architecture/G3_VLA_MPC_RELEASE_GUIDE.md`。其中 `MEASURED_WITH_LIMITS` 不替代
+G3-05 的 Safety 正式验收。用户可明确授权 G4-01/G4-02 以 `PRE_G3_CLOSE` 只准备
+Registry/replay 基础设施，但不得据此把 G3 或 G4 标记为关闭。
+
 ### 4.5 G4（5 项，场景搜索与反事实）
 
 | ID | 唯一任务文件 | 任务内主阅读锚点 |
@@ -236,4 +241,14 @@ ObservationBundle
 
 ```text
 读取 START_TASK.md，继续解决 G3-01；不要开始下一任务。
+```
+
+当前发布检查点后的推荐口令：
+
+```text
+读取 START_TASK.md，恢复 G3-05；按发布说明补 VLA+Safety 正式 live evidence。
+```
+
+```text
+读取 START_TASK.md，启动 G4-01；允许 PRE_G3_CLOSE 基础设施，但不宣称 G3 VERIFIED。
 ```

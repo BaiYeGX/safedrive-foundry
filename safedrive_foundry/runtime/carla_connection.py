@@ -25,6 +25,9 @@ from typing import Any, Callable, Mapping, Sequence
 
 EXPECTED_CARLA_VERSION = "0.9.16"
 DEFAULT_RPC_PORT = 2000
+DEFAULT_STARTUP_TIMEOUT_SECONDS = 180.0
+DEFAULT_LAUNCH_MODE = "default_engine"
+VALID_LAUNCH_MODES = frozenset({"default_engine", "explicit_arguments"})
 READY = "READY"
 RETRYABLE_FAILURE = "RETRYABLE_FAILURE"
 BLOCKED_EXTERNAL = "BLOCKED_EXTERNAL"
@@ -47,10 +50,37 @@ TICK_OWNER_CONFLICT = "TICK_OWNER_CONFLICT"
 STARTUP_TIMEOUT = "STARTUP_TIMEOUT"
 UNKNOWN_CARLA_PATH = "UNKNOWN_CARLA_PATH"
 NEEDS_USER_ACTION = "NEEDS_USER_ACTION"
+LAUNCH_PARAM_MISMATCH = "LAUNCH_PARAM_MISMATCH"
+MAP_OR_RHI_CONFIG_MISMATCH = "MAP_OR_RHI_CONFIG_MISMATCH"
+MAP_MISMATCH = "MAP_MISMATCH"
+CARLA_SHADER_PIPELINE_FATAL = "CARLA_SHADER_PIPELINE_FATAL"
+CARLA_PROCESS_EXITED_EARLY = "CARLA_PROCESS_EXITED_EARLY"
+WORKING_DIRECTORY_MISSING = "WORKING_DIRECTORY_MISSING"
+INVALID_LAUNCH_CONFIG = "INVALID_LAUNCH_CONFIG"
 
 RETRYABLE_CODES = frozenset(
-    {SERVER_NOT_RUNNING, HOST_RESOLUTION_FAILED, TCP_UNREACHABLE, RPC_HANDSHAKE_FAILED, STARTUP_TIMEOUT}
+    {
+        SERVER_NOT_RUNNING,
+        HOST_RESOLUTION_FAILED,
+        TCP_UNREACHABLE,
+        RPC_HANDSHAKE_FAILED,
+        STARTUP_TIMEOUT,
+        LAUNCH_PARAM_MISMATCH,
+        CARLA_PROCESS_EXITED_EARLY,
+    }
 )
+
+VALID_RHI = frozenset({"dx11", "dx12"})
+_RHI_ALIASES = {
+    "dx11": "dx11",
+    "d3d11": "dx11",
+    "11": "dx11",
+    "dx12": "dx12",
+    "d3d12": "dx12",
+    "12": "dx12",
+}
+_RHI_CLI_TOKENS = frozenset({"-dx11", "-dx12", "dx11", "dx12"})
+_OFFSCREEN_CLI_TOKENS = frozenset({"-renderoffscreen", "renderoffscreen"})
 BLOCKING_CODES = frozenset(
     {CLIENT_VERSION_MISMATCH, SERVER_VERSION_MISMATCH, MAP_QUERY_FAILED, WORLD_SETTINGS_QUERY_FAILED, TICK_OWNER_CONFLICT}
 )
@@ -82,6 +112,480 @@ def _is_proxy_like_host(host: str) -> bool:
     except ValueError:
         return False
     return any(address in network for network in _PROXY_LIKE_NETWORKS)
+
+
+def normalize_rhi(value: str | None, *, default: str = "dx11") -> str:
+    """Normalize RHI tokens to exactly one of ``dx11`` / ``dx12``."""
+
+    if value is None or str(value).strip() == "":
+        return default
+    token = str(value).strip().lower().lstrip("-")
+    token = _RHI_ALIASES.get(token, token)
+    if token not in VALID_RHI:
+        raise ValueError(f"unsupported RHI {value!r}; expected one of {sorted(VALID_RHI)}")
+    return token
+
+
+def parse_rhi_from_command_line(arguments: str | None) -> str | None:
+    """Return the sole RHI flag from a CARLA command line, or None if absent."""
+
+    if not arguments:
+        return None
+    found: list[str] = []
+    for token in str(arguments).split():
+        lowered = token.lower().lstrip("-")
+        if lowered in VALID_RHI or lowered in _RHI_ALIASES:
+            found.append(normalize_rhi(token))
+    if not found:
+        return None
+    # Last wins for malformed lines, but callers should still reject dual flags.
+    return found[-1]
+
+
+def parse_offscreen_from_command_line(arguments: str | None) -> bool:
+    """Return True when ``-RenderOffScreen`` is present (case-insensitive)."""
+
+    if not arguments:
+        return False
+    return any(token.lower() in _OFFSCREEN_CLI_TOKENS for token in str(arguments).split())
+
+
+def count_rhi_flags(arguments: str | None) -> int:
+    if not arguments:
+        return 0
+    count = 0
+    for token in str(arguments).split():
+        lowered = token.lower().lstrip("-")
+        if lowered in VALID_RHI or lowered in {"d3d11", "d3d12", "11", "12"}:
+            count += 1
+    return count
+
+
+def count_offscreen_flags(arguments: str | None) -> int:
+    if not arguments:
+        return 0
+    return sum(1 for token in str(arguments).split() if token.lower() in _OFFSCREEN_CLI_TOKENS)
+
+
+def rewrite_arguments_rhi_offscreen(
+    arguments: str,
+    *,
+    rhi: str | None = None,
+    render_offscreen: bool | None = None,
+) -> str:
+    """Strip existing RHI/offscreen flags and re-apply exactly one RHI (+ optional offscreen)."""
+
+    tokens = [token for token in str(arguments).split() if token]
+    kept: list[str] = []
+    for token in tokens:
+        lowered = token.lower()
+        bare = lowered.lstrip("-")
+        if lowered in _RHI_CLI_TOKENS or bare in VALID_RHI or bare in _RHI_ALIASES:
+            continue
+        if lowered in _OFFSCREEN_CLI_TOKENS:
+            continue
+        kept.append(token)
+
+    effective_rhi = normalize_rhi(
+        rhi if rhi is not None else parse_rhi_from_command_line(arguments) or "dx11"
+    )
+    effective_offscreen = (
+        bool(render_offscreen)
+        if render_offscreen is not None
+        else parse_offscreen_from_command_line(arguments)
+    )
+
+    # Keep relative order: inject RHI just before -carla-rpc-port when present.
+    rhi_flag = f"-{effective_rhi}"
+    offscreen_flag = "-RenderOffScreen"
+    insert_at = len(kept)
+    for index, token in enumerate(kept):
+        if token.lower().startswith("-carla-rpc-port"):
+            insert_at = index
+            break
+    injection = [rhi_flag]
+    if effective_offscreen:
+        injection.append(offscreen_flag)
+    kept[insert_at:insert_at] = injection
+    return " ".join(kept)
+
+
+def build_carla_launch_arguments(
+    *,
+    map_content: str = "/Game/Carla/Maps/Town04",
+    res_x: int = 640,
+    res_y: int = 360,
+    quality_level: str = "Low",
+    rhi: str = "dx11",
+    render_offscreen: bool = False,
+    rpc_port: int = DEFAULT_RPC_PORT,
+    windowed: bool = True,
+    nosound: bool = True,
+) -> str:
+    """Build a single-process CARLA argument string with exactly one RHI flag."""
+
+    rhi_norm = normalize_rhi(rhi)
+    parts: list[str] = [str(map_content)]
+    if windowed:
+        parts.append("-windowed")
+    parts.extend(
+        [
+            f"-ResX={int(res_x)}",
+            f"-ResY={int(res_y)}",
+            f"-quality-level={quality_level}",
+        ]
+    )
+    if nosound:
+        parts.append("-nosound")
+    parts.append(f"-{rhi_norm}")
+    if render_offscreen:
+        parts.append("-RenderOffScreen")
+    parts.append(f"-carla-rpc-port={int(rpc_port)}")
+    command = " ".join(parts)
+    assert count_rhi_flags(command) == 1, command
+    assert count_offscreen_flags(command) == (1 if render_offscreen else 0), command
+    return command
+
+
+def rewrite_arguments_map(arguments: str, map_name: str) -> str:
+    """Replace the leading map content token with the requested town path."""
+
+    from runtime.carla_engine_config import map_content_path
+
+    content = map_content_path(map_name)
+    tokens = [token for token in str(arguments).split() if token]
+    if not tokens:
+        return content
+    if tokens[0].startswith("/Game/") or tokens[0].startswith("Game/"):
+        tokens[0] = content
+    else:
+        tokens.insert(0, content)
+    return " ".join(tokens)
+
+
+def parse_map_from_command_line(arguments: str | None) -> str | None:
+    """Best-effort town token from a CARLA argument string."""
+
+    from runtime.carla_engine_config import normalize_map_token
+
+    if not arguments:
+        return None
+    for token in str(arguments).split():
+        if "/Maps/" in token or token.startswith("/Game/"):
+            return normalize_map_token(token)
+    return None
+
+
+@dataclass(frozen=True)
+class LaunchResult:
+    """Result of a single Windows/Linux CARLA process start attempt."""
+
+    ok: bool
+    pid: int | None = None
+    executable: str | None = None
+    working_directory: str | None = None
+    launch_arguments: str | None = None
+    launch_mode: str | None = None
+    powershell_command: str | None = None
+    error: str | None = None
+    started_at: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ok": self.ok,
+            "pid": self.pid,
+            "executable": self.executable,
+            "working_directory": self.working_directory,
+            "launch_arguments": self.launch_arguments,
+            "launch_mode": self.launch_mode,
+            "powershell_command": self.powershell_command,
+            "error": self.error,
+            "started_at": self.started_at,
+        }
+
+
+def build_powershell_start_command(
+    *,
+    windows_executable: str,
+    working_directory: str,
+    argument_parts: Sequence[str] | None = None,
+) -> str:
+    """Build a PowerShell Start-Process command with explicit WorkingDirectory and -PassThru."""
+
+    exe = windows_executable.replace("'", "''")
+    cwd = working_directory.replace("'", "''")
+    base = (
+        f"$p = Start-Process -FilePath '{exe}' -WorkingDirectory '{cwd}' "
+        f"-PassThru"
+    )
+    parts = [p for p in (argument_parts or ()) if p]
+    if parts:
+        # Escape single quotes inside each argument for PowerShell single-quoted strings.
+        escaped = [p.replace("'", "''") for p in parts]
+        ps_list = ",".join(f"'{p}'" for p in escaped)
+        base += f" -ArgumentList {ps_list}"
+    base += "; Write-Output $p.Id"
+    return base
+
+
+def windows_path_exists(windows_path: str) -> bool:
+    """Return True when a Windows path is visible from this process (WSL mount or native)."""
+
+    text = str(windows_path).strip()
+    if not text:
+        return False
+    wsl = windows_path_to_wsl(text)
+    if wsl is not None and wsl.exists():
+        return True
+    native = Path(text)
+    if native.exists():
+        return True
+    powershell = shutil.which("powershell.exe") or shutil.which("pwsh")
+    if powershell is None:
+        return False
+    safe = text.replace("'", "''")
+    try:
+        completed = subprocess.run(
+            [
+                powershell,
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                f"if (Test-Path -LiteralPath '{safe}') {{ '1' }} else {{ '0' }}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return (completed.stdout or "").strip() == "1"
+
+
+def query_windows_pid_alive(pid: int) -> bool | None:
+    """Return True/False when PowerShell can answer; None if unqueryable."""
+
+    powershell = shutil.which("powershell.exe") or shutil.which("pwsh")
+    if powershell is None:
+        return None
+    try:
+        completed = subprocess.run(
+            [
+                powershell,
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                f"if (Get-Process -Id {int(pid)} -ErrorAction SilentlyContinue) {{ '1' }} else {{ '0' }}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    out = (completed.stdout or "").strip()
+    if out == "1":
+        return True
+    if out == "0":
+        return False
+    return None
+
+
+def _xml_find_text_recursive(root: Any, tag: str) -> str:
+    import xml.etree.ElementTree as ET
+
+    wanted = tag
+    if root.tag == wanted or root.tag.endswith(wanted):
+        return (root.text or "").strip()
+    for child in list(root):
+        text = _xml_find_text_recursive(child, wanted)
+        if text:
+            return text
+        # Dotted Unreal tags are literal element names.
+        if child.tag == wanted or child.tag.endswith(wanted):
+            return (child.text or "").strip()
+    # Fallback XPath-style.
+    try:
+        found = root.find(f".//{wanted}")
+        if found is not None and found.text:
+            return found.text.strip()
+    except Exception:
+        pass
+    return ""
+
+
+def find_recent_crash_context(
+    *,
+    since_unix_s: float,
+    crash_root: Path | None = None,
+) -> dict[str, Any] | None:
+    """Locate a CrashContext.runtime-xml written at/after the launch wall time."""
+
+    import xml.etree.ElementTree as ET
+
+    roots: list[Path] = []
+    if crash_root is not None:
+        roots.append(crash_root)
+    else:
+        # WSL view of Windows user profiles.
+        users = Path("/mnt/c/Users")
+        if users.is_dir():
+            roots.append(users)
+        local = os.environ.get("LOCALAPPDATA")
+        if local:
+            roots.append(Path(local) / "CarlaUE4" / "Saved" / "Crashes")
+
+    candidates: list[Path] = []
+    for root in roots:
+        try:
+            if root.name == "Crashes" or (root / "CrashContext.runtime-xml").is_file():
+                pattern_roots = [root]
+            else:
+                pattern_roots = [root]
+            for base in pattern_roots:
+                if not base.exists():
+                    continue
+                if base.is_file() and base.name == "CrashContext.runtime-xml":
+                    candidates.append(base)
+                    continue
+                # Profile tree: */AppData/Local/CarlaUE4/Saved/Crashes/*/CrashContext.runtime-xml
+                for path in base.glob(
+                    "**/CarlaUE4/Saved/Crashes/*/CrashContext.runtime-xml"
+                ):
+                    candidates.append(path)
+                for path in base.glob("*/CrashContext.runtime-xml"):
+                    candidates.append(path)
+                direct = base / "CrashContext.runtime-xml"
+                if direct.is_file():
+                    candidates.append(direct)
+        except OSError:
+            continue
+
+    recent: list[Path] = []
+    for path in candidates:
+        try:
+            if path.stat().st_mtime >= float(since_unix_s) - 2.0:
+                recent.append(path)
+        except OSError:
+            continue
+    if not recent:
+        return None
+    source = max(recent, key=lambda path: path.stat().st_mtime)
+    try:
+        tree = ET.parse(source)
+        root_el = tree.getroot()
+    except (OSError, ET.ParseError) as exc:
+        return {
+            "captured": False,
+            "source_path": str(source),
+            "capture_error": str(exc),
+        }
+    wanted = (
+        "CrashGUID",
+        "CrashType",
+        "ErrorMessage",
+        "SecondsSinceStart",
+        "CommandLine",
+        "ProcessId",
+        "RHI.RHIName",
+        "MemoryStats.bIsOOM",
+        "ExecutableName",
+        "BaseDir",
+        "RootDir",
+    )
+    fields = {tag: _xml_find_text_recursive(root_el, tag) for tag in wanted}
+    return {
+        "captured": True,
+        "source_path": str(source),
+        "source_mtime_s": source.stat().st_mtime,
+        "fields": fields,
+        "CrashGUID": fields.get("CrashGUID"),
+        "CrashType": fields.get("CrashType"),
+        "ErrorMessage": fields.get("ErrorMessage"),
+        "RHI": fields.get("RHI.RHIName"),
+        "CommandLine": fields.get("CommandLine"),
+        "SecondsSinceStart": fields.get("SecondsSinceStart"),
+        "bIsOOM": fields.get("MemoryStats.bIsOOM"),
+    }
+
+
+def classify_startup_crash(crash_context: Mapping[str, Any] | None) -> str | None:
+    """Return a startup error_code when CrashContext explains an early death."""
+
+    if not crash_context or not crash_context.get("captured"):
+        return None
+    fields = crash_context.get("fields") if isinstance(crash_context.get("fields"), Mapping) else crash_context
+    message = str(
+        (fields or {}).get("ErrorMessage")
+        or crash_context.get("ErrorMessage")
+        or ""
+    )
+    if "Shader compilation failures are Fatal" in message:
+        return CARLA_SHADER_PIPELINE_FATAL
+    return None
+
+
+def parse_resolution_from_command_line(arguments: str | None) -> tuple[int | None, int | None]:
+    if not arguments:
+        return None, None
+    res_x = res_y = None
+    for token in str(arguments).split():
+        if token.startswith("-ResX="):
+            try:
+                res_x = int(token.split("=", 1)[1])
+            except ValueError:
+                pass
+        elif token.startswith("-ResY="):
+            try:
+                res_y = int(token.split("=", 1)[1])
+            except ValueError:
+                pass
+    return res_x, res_y
+
+
+def query_windows_carla_command_line() -> str | None:
+    """Best-effort read of the live CarlaUE4 command line via PowerShell."""
+
+    powershell = shutil.which("powershell.exe") or shutil.which("pwsh")
+    if powershell is None:
+        return None
+    command = (
+        "$p = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | "
+        "Where-Object { $_.Name -match '^CarlaUE4' } | Select-Object -First 1; "
+        "if ($p) { $p.CommandLine }"
+    )
+    try:
+        completed = subprocess.run(
+            [powershell, "-NoProfile", "-NonInteractive", "-Command", command],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    line = (completed.stdout or "").strip()
+    return line or None
+
+
+def launch_params_match(
+    command_line: str | None,
+    *,
+    rhi: str,
+    render_offscreen: bool,
+) -> bool | None:
+    """Return True/False when cmdline is parseable, else None (unknown)."""
+
+    if not command_line:
+        return None
+    effective = parse_rhi_from_command_line(command_line)
+    if effective is None:
+        return None
+    return effective == normalize_rhi(rhi) and parse_offscreen_from_command_line(command_line) == bool(
+        render_offscreen
+    )
 
 
 def _parse_default_routes(route_text: str) -> list[tuple[int, str]]:
@@ -454,7 +958,14 @@ class ConnectionResolver:
                 pass
         return f"free (configured={configured})", configured
 
-    def _start_spec(self) -> dict[str, Any] | None:
+    def _start_spec(
+        self,
+        *,
+        rhi: str | None = None,
+        render_offscreen: bool | None = None,
+        map_name: str | None = None,
+        launch_mode: str | None = None,
+    ) -> dict[str, Any] | None:
         path = self.root / "safedrive_foundry" / "config" / "runtime" / "carla_start.toml"
         if not path.exists():
             return None
@@ -463,6 +974,74 @@ class ConnectionResolver:
             spec = dict(data.get("carla_start", {}))
             if spec.get("expected_version") != self.expected_version:
                 return None
+            raw_arguments = str(spec.get("arguments", "") or "")
+            configured_rhi = spec.get("rhi")
+            if configured_rhi is None or str(configured_rhi).strip() == "":
+                configured_rhi = parse_rhi_from_command_line(raw_arguments) or "dx12"
+            effective_rhi = normalize_rhi(rhi if rhi is not None else configured_rhi, default="dx12")
+            if render_offscreen is not None:
+                effective_offscreen = bool(render_offscreen)
+            elif "render_offscreen" in spec:
+                effective_offscreen = bool(spec.get("render_offscreen"))
+            else:
+                effective_offscreen = parse_offscreen_from_command_line(raw_arguments)
+
+            mode = str(launch_mode or spec.get("launch_mode") or DEFAULT_LAUNCH_MODE).strip().lower()
+            if mode not in VALID_LAUNCH_MODES:
+                return None
+
+            requested_map = (
+                str(map_name).strip()
+                if map_name is not None and str(map_name).strip()
+                else str(spec.get("default_map") or "").strip() or parse_map_from_command_line(raw_arguments)
+            )
+
+            arguments = raw_arguments
+            if requested_map:
+                arguments = rewrite_arguments_map(arguments, requested_map) if arguments else (
+                    build_carla_launch_arguments(
+                        map_content=f"/Game/Carla/Maps/{requested_map}",
+                        rhi=effective_rhi,
+                        render_offscreen=effective_offscreen,
+                    )
+                )
+            arguments = rewrite_arguments_rhi_offscreen(
+                arguments,
+                rhi=effective_rhi,
+                render_offscreen=effective_offscreen,
+            )
+            if mode == "explicit_arguments":
+                if count_rhi_flags(arguments) != 1:
+                    return None
+                if count_offscreen_flags(arguments) != (1 if effective_offscreen else 0):
+                    return None
+            # default_engine mode keeps rewritten arguments only for evidence / explicit fallback.
+
+            windows_executable = str(spec.get("windows_executable", "") or "").strip()
+            working_directory = str(spec.get("windows_working_directory", "") or "").strip()
+            if not working_directory and windows_executable:
+                from runtime.carla_engine_config import windows_install_root_from_executable
+
+                working_directory = windows_install_root_from_executable(windows_executable) or ""
+
+            default_engine_ini = str(spec.get("default_engine_ini", "") or "").strip() or None
+
+            spec["rhi"] = effective_rhi
+            spec["render_offscreen"] = effective_offscreen
+            spec["arguments"] = arguments
+            spec["requested_rhi"] = normalize_rhi(rhi, default="dx12") if rhi is not None else effective_rhi
+            spec["requested_map"] = requested_map
+            spec["launch_mode"] = mode
+            spec["windows_working_directory"] = working_directory
+            if default_engine_ini:
+                spec["default_engine_ini"] = default_engine_ini
+            # In default_engine mode the process is started without ArgumentList.
+            if mode == "default_engine":
+                spec["effective_launch_arguments"] = ""
+                spec["effective_rhi_source"] = "default_engine_config"
+            else:
+                spec["effective_launch_arguments"] = arguments
+                spec["effective_rhi_source"] = "command_line"
             return spec
         except (OSError, ValueError, TypeError):
             return None
@@ -622,33 +1201,117 @@ class ConnectionResolver:
             windows_executable = wsl_path_to_windows(wsl_path)
         return windows_executable, wsl_path
 
-    def _launch_known(self, spec: Mapping[str, Any]) -> bool:
+    def _launch_result(self, spec: Mapping[str, Any]) -> LaunchResult:
+        """Start CARLA once and return structured launch evidence (including PID)."""
+
         if self.start_process is not None:
-            return bool(self.start_process(spec))
+            raw = self.start_process(spec)
+            if isinstance(raw, LaunchResult):
+                return raw
+            if isinstance(raw, Mapping):
+                return LaunchResult(
+                    ok=bool(raw.get("ok", True)),
+                    pid=int(raw["pid"]) if raw.get("pid") is not None else None,
+                    executable=raw.get("executable") or spec.get("windows_executable"),  # type: ignore[arg-type]
+                    working_directory=raw.get("working_directory") or spec.get("windows_working_directory"),  # type: ignore[arg-type]
+                    launch_arguments=raw.get("launch_arguments")  # type: ignore[arg-type]
+                    if "launch_arguments" in raw
+                    else str(spec.get("effective_launch_arguments", "") or ""),
+                    launch_mode=str(raw.get("launch_mode") or spec.get("launch_mode") or ""),
+                    powershell_command=raw.get("powershell_command"),  # type: ignore[arg-type]
+                    error=raw.get("error"),  # type: ignore[arg-type]
+                    started_at=float(raw["started_at"]) if raw.get("started_at") is not None else time.time(),
+                )
+            return LaunchResult(ok=bool(raw), started_at=time.time(), launch_mode=str(spec.get("launch_mode") or ""))
+
         windows_executable, wsl_path = self._resolve_start_paths(spec)
         if wsl_path is not None and not wsl_path.exists():
-            return False
-        arguments = str(spec.get("arguments", ""))
-        # Preferred: Windows CARLA via PowerShell (works from WSL interop).
-        # ArgumentList must be a comma-separated quoted list, not one giant string,
-        # or Unreal may ignore the map path and reopen the previous map.
+            return LaunchResult(ok=False, error=f"wsl_path missing: {wsl_path}", started_at=time.time())
+
+        working_directory = str(spec.get("windows_working_directory", "") or "").strip()
+        launch_mode = str(spec.get("launch_mode") or DEFAULT_LAUNCH_MODE)
+        if launch_mode == "default_engine":
+            launch_arguments = ""
+            arg_parts: list[str] = []
+        else:
+            launch_arguments = str(spec.get("effective_launch_arguments") or spec.get("arguments") or "")
+            arg_parts = [p for p in launch_arguments.split() if p]
+
+        started_at = time.time()
         powershell = shutil.which("powershell.exe") or shutil.which("pwsh")
         if powershell is not None and windows_executable:
-            arg_parts = [p for p in arguments.split() if p]
-            if arg_parts:
-                ps_list = ",".join(f"'{p}'" for p in arg_parts)
-                command = f"Start-Process -FilePath '{windows_executable}' -ArgumentList {ps_list}"
-            else:
-                command = f"Start-Process -FilePath '{windows_executable}'"
-            try:
-                subprocess.run(
-                    [powershell, "-NoProfile", "-NonInteractive", "-Command", command],
-                    timeout=5.0,
-                    check=True,
+            if not working_directory:
+                return LaunchResult(
+                    ok=False,
+                    executable=windows_executable,
+                    working_directory=None,
+                    launch_arguments=launch_arguments,
+                    launch_mode=launch_mode,
+                    error="windows_working_directory is required for Windows Start-Process",
+                    started_at=started_at,
                 )
-                return True
-            except (OSError, subprocess.SubprocessError):
-                pass
+            if not windows_path_exists(working_directory):
+                return LaunchResult(
+                    ok=False,
+                    executable=windows_executable,
+                    working_directory=working_directory,
+                    launch_arguments=launch_arguments,
+                    launch_mode=launch_mode,
+                    error=f"working directory does not exist: {working_directory}",
+                    started_at=started_at,
+                )
+            command = build_powershell_start_command(
+                windows_executable=windows_executable,
+                working_directory=working_directory,
+                argument_parts=arg_parts,
+            )
+            try:
+                completed = subprocess.run(
+                    [powershell, "-NoProfile", "-NonInteractive", "-Command", command],
+                    capture_output=True,
+                    text=True,
+                    timeout=10.0,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError) as exc:
+                return LaunchResult(
+                    ok=False,
+                    executable=windows_executable,
+                    working_directory=working_directory,
+                    launch_arguments=launch_arguments,
+                    launch_mode=launch_mode,
+                    powershell_command=command,
+                    error=str(exc),
+                    started_at=started_at,
+                )
+            pid: int | None = None
+            for line in (completed.stdout or "").splitlines():
+                token = line.strip()
+                if token.isdigit():
+                    pid = int(token)
+                    break
+            if completed.returncode != 0 and pid is None:
+                return LaunchResult(
+                    ok=False,
+                    executable=windows_executable,
+                    working_directory=working_directory,
+                    launch_arguments=launch_arguments,
+                    launch_mode=launch_mode,
+                    powershell_command=command,
+                    error=(completed.stderr or completed.stdout or "Start-Process failed").strip(),
+                    started_at=started_at,
+                )
+            return LaunchResult(
+                ok=True,
+                pid=pid,
+                executable=windows_executable,
+                working_directory=working_directory,
+                launch_arguments=launch_arguments,
+                launch_mode=launch_mode,
+                powershell_command=command,
+                started_at=started_at,
+            )
+
         # Optional native Linux/WSL CARLA binary (CarlaUE4.sh) when present.
         linux_launcher = str(spec.get("linux_executable", "") or "").strip()
         if not linux_launcher and wsl_path is not None:
@@ -657,32 +1320,170 @@ class ConnectionResolver:
                 linux_launcher = str(sibling)
         if linux_launcher and Path(linux_launcher).exists():
             try:
-                args = [linux_launcher, *arguments.split()] if arguments else [linux_launcher]
-                subprocess.Popen(
+                args = [linux_launcher, *arg_parts] if arg_parts else [linux_launcher]
+                proc = subprocess.Popen(
                     args,
                     cwd=str(Path(linux_launcher).parent),
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     start_new_session=True,
                 )
-                return True
-            except OSError:
-                return False
-        return False
+                return LaunchResult(
+                    ok=True,
+                    pid=proc.pid,
+                    executable=linux_launcher,
+                    working_directory=str(Path(linux_launcher).parent),
+                    launch_arguments=launch_arguments,
+                    launch_mode=launch_mode,
+                    started_at=started_at,
+                )
+            except OSError as exc:
+                return LaunchResult(ok=False, error=str(exc), started_at=started_at)
+        return LaunchResult(ok=False, error="no launch path available", started_at=started_at)
+
+    def _launch_known(self, spec: Mapping[str, Any]) -> bool:
+        """Backward-compatible bool wrapper around :meth:`_launch_result`."""
+
+        return self._launch_result(spec).ok
+
+    def _attach_launch_evidence(
+        self,
+        report: ConnectionReport,
+        *,
+        spec: Mapping[str, Any] | None = None,
+        launch: LaunchResult | None = None,
+        requested_map: str | None = None,
+        configured_default_map: str | None = None,
+        crash_context: Mapping[str, Any] | None = None,
+        process_exit_code: int | None = None,
+        startup_wall_time: float | None = None,
+    ) -> None:
+        details = dict(report.details or {})
+        if spec is not None:
+            details.setdefault("launch_mode", spec.get("launch_mode"))
+            details.setdefault("requested_rhi", spec.get("requested_rhi") or spec.get("rhi"))
+            details.setdefault("effective_rhi", spec.get("rhi"))
+            details.setdefault("effective_rhi_source", spec.get("effective_rhi_source"))
+            details.setdefault("render_offscreen", bool(spec.get("render_offscreen")))
+            details.setdefault("executable", spec.get("windows_executable"))
+            details.setdefault("working_directory", spec.get("windows_working_directory"))
+            details.setdefault(
+                "launch_arguments",
+                spec.get("effective_launch_arguments")
+                if spec.get("launch_mode") == "default_engine"
+                else spec.get("arguments"),
+            )
+            details.setdefault("requested_map", spec.get("requested_map") or requested_map)
+        if requested_map is not None:
+            details["requested_map"] = requested_map
+        if configured_default_map is not None:
+            details["configured_default_map"] = configured_default_map
+        if report.map is not None:
+            details["actual_map"] = report.map
+        if launch is not None:
+            details["pid"] = launch.pid
+            details["executable"] = launch.executable or details.get("executable")
+            details["working_directory"] = launch.working_directory or details.get("working_directory")
+            details["launch_arguments"] = (
+                launch.launch_arguments
+                if launch.launch_arguments is not None
+                else details.get("launch_arguments")
+            )
+            details["launch_mode"] = launch.launch_mode or details.get("launch_mode")
+            details["powershell_command"] = launch.powershell_command
+            details["launch"] = launch.to_dict()
+        if process_exit_code is not None:
+            details["process_exit_code"] = process_exit_code
+        if startup_wall_time is not None:
+            details["startup_wall_time"] = startup_wall_time
+        if crash_context is not None:
+            details["crash_context"] = dict(crash_context)
+        report.details = details
 
     def ensure(
         self,
         *,
         host: str | None = None,
         port: int | None = None,
-        startup_timeout_seconds: float = 30.0,
+        startup_timeout_seconds: float = DEFAULT_STARTUP_TIMEOUT_SECONDS,
         poll_interval_seconds: float = 0.5,
+        rhi: str | None = None,
+        render_offscreen: bool | None = None,
+        map_name: str | None = None,
+        launch_mode: str | None = None,
+        auto_pin_default_engine: bool = True,
     ) -> ConnectionReport:
+        """Reuse a compatible instance or start CARLA once (map-aware, no mode cycling)."""
+
+        from runtime.carla_engine_config import (
+            maps_match,
+            pin_default_engine_config,
+            read_default_engine_config,
+            resolve_default_engine_ini,
+            verify_default_engine_matches,
+            windows_install_root_from_executable,
+        )
+
+        wall_start = time.time()
         report = self.preflight(host=host, port=port)
+        requested_rhi = normalize_rhi(rhi, default="dx12") if rhi is not None else None
+        requested_map = str(map_name).strip() if map_name is not None and str(map_name).strip() else None
+
         if report.status == READY:
+            report.details = dict(report.details or {})
+            cmdline = query_windows_carla_command_line()
+            report.details["server_command_line"] = cmdline
+            report.details["actual_map"] = report.map
+            if requested_map is not None:
+                report.details["requested_map"] = requested_map
+                if not maps_match(report.map, requested_map):
+                    report.status = FAILED_FINAL
+                    report.error_code = MAP_MISMATCH
+                    report.error_message = (
+                        f"running map {report.map!r} does not match requested {requested_map!r}; "
+                        "cold-start required (no client.load_world)"
+                    )
+                    report.recovery_action = "require_cold_start"
+                    report.recovery_result = "map_mismatch_existing_instance"
+                    report.task_action = "BLOCKED"
+                    return report
+            if requested_rhi is not None or render_offscreen is not None:
+                want_rhi = requested_rhi or parse_rhi_from_command_line(cmdline or "") or "dx12"
+                want_off = (
+                    bool(render_offscreen)
+                    if render_offscreen is not None
+                    else parse_offscreen_from_command_line(cmdline or "")
+                )
+                match = launch_params_match(cmdline, rhi=want_rhi, render_offscreen=want_off)
+                report.details["requested_rhi"] = want_rhi
+                report.details["effective_rhi"] = parse_rhi_from_command_line(cmdline or "")
+                report.details["render_offscreen"] = want_off
+                # Manual/default_engine processes may have no -dx12 on the command line.
+                if match is False and parse_rhi_from_command_line(cmdline or "") is not None:
+                    report.status = RETRYABLE_FAILURE
+                    report.error_code = LAUNCH_PARAM_MISMATCH
+                    report.error_message = (
+                        "running CARLA RHI/offscreen does not match request; cold-start required"
+                    )
+                    report.recovery_action = "require_cold_start"
+                    report.recovery_result = "launch_param_mismatch"
+                    report.task_action = "IN_PROGRESS"
+                    return report
+                if parse_rhi_from_command_line(cmdline or "") is None and requested_rhi is not None:
+                    report.details["effective_rhi"] = requested_rhi
+                    report.details["effective_rhi_source"] = "default_engine_config"
+            else:
+                parsed = parse_rhi_from_command_line(cmdline or "")
+                report.details["effective_rhi"] = parsed
+                report.details["render_offscreen"] = parse_offscreen_from_command_line(cmdline or "")
+                if parsed is None:
+                    report.details["effective_rhi_source"] = "default_engine_config"
+                else:
+                    report.details["effective_rhi_source"] = "command_line"
             report.recovery_action = "already_running"
             report.recovery_result = "compatible_instance_present; no second process started"
             return report
+
         if report.error_code not in RETRYABLE_CODES:
             return report
         if report.process_state != "NOT_RUNNING":
@@ -692,7 +1493,13 @@ class ConnectionResolver:
             report.error_message = "CARLA process state is unknown; refusing to start a possibly duplicate instance"
             report.task_action = "BLOCKED_EXTERNAL"
             return report
-        spec = self._start_spec()
+
+        spec = self._start_spec(
+            rhi=rhi,
+            render_offscreen=render_offscreen,
+            map_name=requested_map,
+            launch_mode=launch_mode,
+        )
         if spec is None:
             report.status = BLOCKED_EXTERNAL
             report.needs_user_action = True
@@ -700,27 +1507,207 @@ class ConnectionResolver:
             report.error_message = "No verified CARLA 0.9.16 startup specification is available"
             report.task_action = "BLOCKED_EXTERNAL"
             return report
-        if not self._launch_known(spec):
+
+        effective_map = requested_map or spec.get("requested_map")
+        effective_rhi = str(spec.get("rhi") or "dx12")
+        mode = str(spec.get("launch_mode") or DEFAULT_LAUNCH_MODE)
+        working_directory = str(spec.get("windows_working_directory") or "").strip()
+        if not working_directory:
             report.status = BLOCKED_EXTERNAL
             report.needs_user_action = True
-            report.error_code = NEEDS_USER_ACTION
-            report.error_message = "Verified CARLA startup could not be invoked without external interaction"
+            report.error_code = INVALID_LAUNCH_CONFIG
+            report.error_message = "windows_working_directory is not configured in carla_start.toml"
             report.task_action = "BLOCKED_EXTERNAL"
+            self._attach_launch_evidence(report, spec=spec, requested_map=effective_map)
             return report
+        if not windows_path_exists(working_directory):
+            report.status = BLOCKED_EXTERNAL
+            report.needs_user_action = True
+            report.error_code = WORKING_DIRECTORY_MISSING
+            report.error_message = f"CARLA working directory does not exist: {working_directory}"
+            report.task_action = "BLOCKED_EXTERNAL"
+            self._attach_launch_evidence(report, spec=spec, requested_map=effective_map)
+            return report
+
+        install_root = working_directory or windows_install_root_from_executable(
+            str(spec.get("windows_executable") or "")
+        )
+        ini_override = spec.get("default_engine_ini")
+        ini_path = Path(str(ini_override)) if ini_override else resolve_default_engine_ini(install_root)
+        engine_cfg = read_default_engine_config(ini_path)
+        configured_default_map = engine_cfg.configured_map_token
+
+        if mode == "default_engine":
+            mismatch = verify_default_engine_matches(
+                engine_cfg,
+                requested_map=str(effective_map) if effective_map else None,
+                requested_rhi=effective_rhi,
+            )
+            if mismatch is not None:
+                if auto_pin_default_engine:
+                    pin_result = pin_default_engine_config(
+                        requested_map=str(effective_map) if effective_map else None,
+                        requested_rhi=effective_rhi,
+                        path=ini_path,
+                    )
+                    report.details = dict(report.details or {})
+                    report.details["default_engine_pin"] = pin_result
+                    if not pin_result.get("ok"):
+                        report.status = BLOCKED_EXTERNAL
+                        report.needs_user_action = True
+                        report.error_code = str(pin_result.get("error_code") or MAP_OR_RHI_CONFIG_MISMATCH)
+                        report.error_message = str(pin_result.get("message") or mismatch.message)
+                        report.task_action = "BLOCKED_EXTERNAL"
+                        self._attach_launch_evidence(
+                            report,
+                            spec=spec,
+                            requested_map=effective_map,
+                            configured_default_map=configured_default_map,
+                        )
+                        return report
+                    engine_cfg = read_default_engine_config(ini_path)
+                    configured_default_map = engine_cfg.configured_map_token
+                    mismatch = verify_default_engine_matches(
+                        engine_cfg,
+                        requested_map=str(effective_map) if effective_map else None,
+                        requested_rhi=effective_rhi,
+                    )
+                if mismatch is not None:
+                    report.status = BLOCKED_EXTERNAL
+                    report.needs_user_action = True
+                    report.error_code = MAP_OR_RHI_CONFIG_MISMATCH
+                    report.error_message = mismatch.message
+                    report.task_action = "BLOCKED_EXTERNAL"
+                    report.details = dict(report.details or {})
+                    report.details["config_mismatch"] = mismatch.to_dict()
+                    self._attach_launch_evidence(
+                        report,
+                        spec=spec,
+                        requested_map=effective_map,
+                        configured_default_map=configured_default_map,
+                    )
+                    return report
+
+        launch = self._launch_result(spec)
+        if not launch.ok:
+            report.status = BLOCKED_EXTERNAL
+            report.needs_user_action = True
+            err = launch.error or "Verified CARLA startup could not be invoked without external interaction"
+            if "working directory" in err.lower():
+                report.error_code = WORKING_DIRECTORY_MISSING
+            else:
+                report.error_code = NEEDS_USER_ACTION
+            report.error_message = err
+            report.task_action = "BLOCKED_EXTERNAL"
+            report.recovery_action = "start_known_carla"
+            report.recovery_result = "launch_failed"
+            self._attach_launch_evidence(
+                report,
+                spec=spec,
+                launch=launch,
+                requested_map=effective_map,
+                configured_default_map=configured_default_map,
+                startup_wall_time=time.time() - wall_start,
+            )
+            return report
+
         deadline = time.monotonic() + max(0.0, startup_timeout_seconds)
         while time.monotonic() < deadline:
             self.sleeper(max(0.0, poll_interval_seconds))
+            if launch.pid is not None:
+                alive = query_windows_pid_alive(launch.pid)
+                if alive is False:
+                    crash = find_recent_crash_context(since_unix_s=launch.started_at or wall_start)
+                    shader_code = classify_startup_crash(crash)
+                    report.status = BLOCKED_EXTERNAL if shader_code else RETRYABLE_FAILURE
+                    report.error_code = shader_code or CARLA_PROCESS_EXITED_EARLY
+                    report.needs_user_action = bool(shader_code)
+                    report.error_message = (
+                        "CARLA process exited during startup with shader pipeline fatal"
+                        if shader_code
+                        else f"CARLA process pid={launch.pid} exited before RPC READY"
+                    )
+                    report.recovery_action = "start_known_carla"
+                    report.recovery_result = "process_exited_early"
+                    report.task_action = "BLOCKED_EXTERNAL" if shader_code else "IN_PROGRESS"
+                    report.process_state = "NOT_RUNNING"
+                    self._attach_launch_evidence(
+                        report,
+                        spec=spec,
+                        launch=launch,
+                        requested_map=effective_map,
+                        configured_default_map=configured_default_map,
+                        crash_context=crash,
+                        process_exit_code=1,
+                        startup_wall_time=time.time() - wall_start,
+                    )
+                    return report
             ready = self.preflight(host=host, port=port, retry_host=False)
             if ready.status == READY:
                 ready.recovery_action = "start_known_carla"
                 ready.recovery_result = "started_and_handshake_ready"
+                self._attach_launch_evidence(
+                    ready,
+                    spec=spec,
+                    launch=launch,
+                    requested_map=effective_map,
+                    configured_default_map=configured_default_map,
+                    startup_wall_time=time.time() - wall_start,
+                )
+                if effective_map and not maps_match(ready.map, str(effective_map)):
+                    ready.status = FAILED_FINAL
+                    ready.error_code = MAP_MISMATCH
+                    ready.error_message = (
+                        f"READY but actual_map={ready.map!r} requested_map={effective_map!r}; "
+                        "refusing client.load_world"
+                    )
+                    ready.recovery_result = "map_mismatch_after_start"
+                    ready.task_action = "BLOCKED"
+                    ready.details["actual_map"] = ready.map
+                    ready.details["requested_map"] = effective_map
+                    return ready
                 return ready
+
+        # Alive (or unknown) but RPC never became ready → true startup timeout.
         report.status = RETRYABLE_FAILURE
         report.error_code = STARTUP_TIMEOUT
         report.error_message = f"CARLA did not become ready within {startup_timeout_seconds:.1f}s"
         report.recovery_action = "start_known_carla"
         report.recovery_result = "timeout"
         report.task_action = "IN_PROGRESS"
+        if launch.pid is not None:
+            alive = query_windows_pid_alive(launch.pid)
+            if alive is False:
+                crash = find_recent_crash_context(since_unix_s=launch.started_at or wall_start)
+                shader_code = classify_startup_crash(crash)
+                report.status = BLOCKED_EXTERNAL if shader_code else RETRYABLE_FAILURE
+                report.error_code = shader_code or CARLA_PROCESS_EXITED_EARLY
+                report.needs_user_action = bool(shader_code)
+                report.error_message = (
+                    "CARLA process exited during startup with shader pipeline fatal"
+                    if shader_code
+                    else f"CARLA process pid={launch.pid} exited before RPC READY"
+                )
+                report.recovery_result = "process_exited_early"
+                self._attach_launch_evidence(
+                    report,
+                    spec=spec,
+                    launch=launch,
+                    requested_map=effective_map,
+                    configured_default_map=configured_default_map,
+                    crash_context=crash,
+                    process_exit_code=1,
+                    startup_wall_time=time.time() - wall_start,
+                )
+                return report
+        self._attach_launch_evidence(
+            report,
+            spec=spec,
+            launch=launch,
+            requested_map=effective_map,
+            configured_default_map=configured_default_map,
+            startup_wall_time=time.time() - wall_start,
+        )
         return report
 
 

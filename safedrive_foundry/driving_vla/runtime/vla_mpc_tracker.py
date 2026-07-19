@@ -35,9 +35,21 @@ class VLAMPCConfig:
     max_accel_mps2: float = 1.50
     max_brake_mps2: float = 3.00
     path_end_margin_m: float = 2.00
+    # Freshness envelope (do NOT hard-cut to 0 at the first hard threshold):
+    #   age <= soft  → full speed cap
+    #   soft < age < hard → ramp max → crawl
+    #   hard <= age < zero → crawl → 0
+    #   age >= zero → 0
+    # Avoids intersection reject storms parking the car before reanchor can land.
     path_stale_soft_s: float = 1.00
     path_stale_hard_s: float = 2.50
+    path_stale_zero_s: float = 5.00
+    path_stale_crawl_mps: float = 1.00
     min_linearization_speed_mps: float = 0.60
+    # How far above measured speed the lateral model may look ahead (m/s).
+    # Must NOT jump to path.target (e.g. 6 m/s) while the car crawls at ~2 m/s —
+    # that over-reads path curvature and multiplies steer sign flips.
+    linearization_speed_slack_mps: float = 0.50
     weight_lateral: float = 6.0
     weight_heading: float = 4.0
     weight_steer: float = 1.0
@@ -62,6 +74,8 @@ class VLAMPCCommand:
     horizon_speed_limit_mps: float
     freshness_speed_limit_mps: float
     path_age_s: float
+    # fresh | soft_ramp | crawl | hard_stop
+    freshness_regime: str
     mode: str
     solver_status: str
     solver_backend: str
@@ -82,6 +96,16 @@ class ConstrainedVLAMPC:
 
     def __init__(self, config: VLAMPCConfig | None = None) -> None:
         self.config = config or VLAMPCConfig()
+        if not (
+            0.0 <= self.config.path_stale_soft_s
+            <= self.config.path_stale_hard_s
+            <= self.config.path_stale_zero_s
+        ):
+            raise ValueError(
+                "path freshness thresholds must satisfy 0 <= soft <= hard <= zero"
+            )
+        if self.config.path_stale_crawl_mps < 0.0:
+            raise ValueError("path_stale_crawl_mps must be non-negative")
         self._solver = LongitudinalQPSolver(
             deadline_ms=self.config.solver_deadline_ms,
             max_iter=4000,
@@ -240,7 +264,7 @@ class ConstrainedVLAMPC:
         *,
         progress_s: float,
         now_s: float | None,
-    ) -> tuple[float, float, float, float, float, float]:
+    ) -> tuple[float, float, float, float, float, float, str]:
         cfg = self.config
         # A single interpolation spike must not collapse straight-line speed.
         # Sustained curvature still survives this robust percentile unchanged.
@@ -256,15 +280,31 @@ class ConstrainedVLAMPC:
         horizon_limit = math.sqrt(2.0 * cfg.max_brake_mps2 * remaining)
 
         path_age = 0.0 if now_s is None else max(0.0, float(now_s) - path.stamp_s)
-        if path_age <= cfg.path_stale_soft_s:
+        soft = float(cfg.path_stale_soft_s)
+        hard = float(cfg.path_stale_hard_s)
+        zero = max(hard, float(getattr(cfg, "path_stale_zero_s", 5.0)))
+        crawl = min(
+            float(cfg.max_speed_mps),
+            max(0.0, float(getattr(cfg, "path_stale_crawl_mps", 1.0))),
+        )
+        if path_age <= soft:
             freshness_limit = cfg.max_speed_mps
-        elif path_age >= cfg.path_stale_hard_s:
+            freshness_regime = "fresh"
+        elif path_age >= zero:
             freshness_limit = 0.0
+            freshness_regime = "hard_stop"
+        elif path_age >= hard:
+            # Crawl → 0 between hard and zero (not an instant park at hard).
+            t = (zero - path_age) / max(zero - hard, 1e-6)
+            t = float(np.clip(t, 0.0, 1.0))
+            freshness_limit = crawl * t
+            freshness_regime = "crawl" if freshness_limit > 1e-3 else "hard_stop"
         else:
-            fraction = (cfg.path_stale_hard_s - path_age) / max(
-                cfg.path_stale_hard_s - cfg.path_stale_soft_s, 1e-6
-            )
-            freshness_limit = cfg.max_speed_mps * fraction
+            # soft → hard: max → crawl
+            t = (hard - path_age) / max(hard - soft, 1e-6)
+            t = float(np.clip(t, 0.0, 1.0))
+            freshness_limit = crawl + (cfg.max_speed_mps - crawl) * t
+            freshness_regime = "soft_ramp"
 
         target = max(
             0.0,
@@ -286,6 +326,7 @@ class ConstrainedVLAMPC:
             horizon_limit,
             freshness_limit,
             path_age,
+            freshness_regime,
         )
 
     def _fallback_steer(self, lateral: float, heading: float, curvature: float) -> float:
@@ -313,12 +354,15 @@ class ConstrainedVLAMPC:
         s0, lateral, heading, curvature0 = self._tracking_errors(path, ego, self._progress_s)
         self._progress_s = max(self._progress_s, s0)
         prediction_horizon_s = cfg.prediction_dt_s * cfg.horizon
-        reachable_speed = ego.speed_mps + cfg.max_accel_mps2 * prediction_horizon_s
-        linear_speed = max(
-            cfg.min_linearization_speed_mps,
-            ego.speed_mps,
-            min(path.target_speed_mps, cfg.max_speed_mps, reachable_speed),
+        reachable_speed = max(0.0, float(ego.speed_mps)) + cfg.max_accel_mps2 * prediction_horizon_s
+        # Linearize near the *actual/short-term executable* speed, not the cruise cap.
+        exec_speed = min(
+            max(0.0, float(ego.speed_mps)) + max(0.0, float(cfg.linearization_speed_slack_mps)),
+            max(0.0, float(path.target_speed_mps)),
+            float(cfg.max_speed_mps),
+            float(reachable_speed),
         )
+        linear_speed = max(float(cfg.min_linearization_speed_mps), float(exec_speed))
         kappa_ref, delta_ff = self._reference(path, s0, linear_speed)
         x0 = np.array([lateral, heading, self._steer_rad], dtype=float)
         base, influence = self._condensed_model(x0=x0, speed=linear_speed, kappa_ref=kappa_ref)
@@ -353,7 +397,15 @@ class ConstrainedVLAMPC:
         )
         self._steer_rad = steer
         self._steer_rate_rps = applied_rate
-        target_speed, accel, curve_limit, horizon_limit, freshness_limit, path_age = self._longitudinal(
+        (
+            target_speed,
+            accel,
+            curve_limit,
+            horizon_limit,
+            freshness_limit,
+            path_age,
+            freshness_regime,
+        ) = self._longitudinal(
             path,
             ego,
             kappa_ref,
@@ -372,6 +424,7 @@ class ConstrainedVLAMPC:
             horizon_speed_limit_mps=horizon_limit,
             freshness_speed_limit_mps=freshness_limit,
             path_age_s=path_age,
+            freshness_regime=freshness_regime,
             mode=mode,
             solver_status=trace.status.value,
             solver_backend=trace.backend,
