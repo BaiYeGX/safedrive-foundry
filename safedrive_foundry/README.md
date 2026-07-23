@@ -4,12 +4,14 @@
 Safety Kernel，以及当前 G3 的 SimLingo VLA + constrained MPC 实现。World Model 尚未实现。
 
 G3 当前用法与边界见
-[`docs/architecture/G3_VLA_MPC_RELEASE_GUIDE.md`](../docs/architecture/G3_VLA_MPC_RELEASE_GUIDE.md)。
+[`docs/G3_BASELINE.md`](../docs/G3_BASELINE.md)。
+当前正式切片是 G3-04R 真实 K2；通过后按“极简 G4A → G5 World on/off → 条件式
+G6 → G8”执行。G3-05 Safety、G4B 与 G7 不阻塞核心 VLA+World 研究完成。
 
 ## 固定约定
 
 - CARLA Server 安装：Windows `E:\CARLA_0.9.16\CarlaUE4.exe`（WSL 路径 `/mnt/e/CARLA_0.9.16/CarlaUE4.exe`）
-- VLA 本机资产与 venv：见 `docs/project/LOCAL_ASSETS.md` 与 `config/vla/local_assets.toml`  
+- VLA 本机资产与 venv：见 `docs/RESOURCES.md` 与 `config/vla/local_assets.toml`
   - 权重/代码路径已登记；**G3+ 必须** `source /home/sdf/.venvs/sdf/bin/activate`（torch 2.12.1+cu126）
 - 官方 OpenDRIVE：`/mnt/e/CARLA_0.9.16/CarlaUE4/Content/Carla/Maps/OpenDrive/*.xodr`
 - CARLA RPC：`2000`；streaming：`2001`；Traffic Manager：`2002`

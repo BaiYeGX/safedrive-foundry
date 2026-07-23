@@ -25,6 +25,7 @@ tools/
 # Runtime leftovers
 *.pid
 .wsl-*.txt
+docs/runtime-evidence/
 
 # Editors and operating system
 .vscode/

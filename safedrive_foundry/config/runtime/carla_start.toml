@@ -1,5 +1,5 @@
 # This is the only startup specification consumed by `sdf sim ensure`.
-# The path and arguments were validated in docs/environment/CARLA_SERVER_BASELINE.md.
+# Current environment contract: docs/ENVIRONMENT.md.
 #
 # Windows host path and WSL mount path refer to the same installation.
 # From WSL, ensure launches CarlaUE4.exe via powershell.exe interop.

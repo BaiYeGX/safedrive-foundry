@@ -32,7 +32,7 @@ PIP="${VENV}/bin/pip"
 echo "Using: ${PY}"
 "${PY}" --version
 
-# Match docs/environment/WSL_ROS2_BASELINE.md when possible
+# Match docs/RESOURCES.md when possible
 TORCH_SPEC="${TORCH_SPEC:-torch==2.12.1}"
 echo "Installing ${TORCH_SPEC} (cu126) ..."
 "${PIP}" install -U pip

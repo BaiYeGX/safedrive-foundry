@@ -540,7 +540,7 @@ def main() -> int:
     ap.add_argument("--turn-prefer", default="either", choices=["either", "left", "right"])
     ap.add_argument(
         "--evidence-dir",
-        default=str(ROOT / "docs/architecture/evidence/g3-05/visual_demo"),
+        default=str(ROOT / "docs/runtime-evidence/g3-05/visual_demo"),
     )
     args = ap.parse_args()
     evidence_dir = Path(args.evidence_dir)

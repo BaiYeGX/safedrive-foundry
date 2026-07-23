@@ -34,7 +34,7 @@ from safety_kernel.contracts.types import (  # noqa: E402
 )
 from safety_kernel.state_machine import SafetyStateMachine  # noqa: E402
 
-G1_SAMPLE = ROOT / "docs/architecture/evidence/g1-04/sample_follow_trajectory.json"
+G1_SAMPLE = ROOT / "tests/fixtures/g1/sample_follow_trajectory.json"
 
 
 def _corridor_for_traj(points: list[dict], half: float = 2.0) -> tuple[tuple[float, float], ...]:

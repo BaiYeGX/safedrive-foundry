@@ -41,7 +41,7 @@ from safety_kernel.faults import (  # noqa: E402
 )
 from safety_kernel.metrics import build_latency_report  # noqa: E402
 
-EVIDENCE_DIR = ROOT / "docs/architecture/evidence/g2-05"
+EVIDENCE_DIR = ROOT / "docs/runtime-evidence/g2-05"
 REPRO_CMD = "SDF_WRITE_G2_EVIDENCE=1 PYTHONPATH=safedrive_foundry python3 -m unittest tests.g2.test_g2_05_latency_evidence -v"
 
 

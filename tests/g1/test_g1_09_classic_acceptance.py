@@ -149,7 +149,7 @@ class G109ClassicAcceptanceTests(unittest.TestCase):
             self.assertTrue(out_path.is_file())
             # Optional: allow explicit evidence publish via env for offline tooling
             if os.environ.get("SDF_WRITE_G1_09_EVIDENCE") == "1":
-                formal = ROOT / "docs/architecture/evidence/g1-09" / "repair-20260713"
+                formal = ROOT / "docs/runtime-evidence/g1-09" / "repair-20260713"
                 formal.mkdir(parents=True, exist_ok=True)
                 (formal / "summary.json").write_text(
                     json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8"

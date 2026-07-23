@@ -32,9 +32,9 @@ from safety_kernel.evidence_util import (  # noqa: E402
 from safety_kernel.metrics import build_latency_report  # noqa: E402
 from safety_kernel.validator import ValidationStage  # noqa: E402
 
-G1_FOLLOW = ROOT / "docs/architecture/evidence/g1-04/sample_follow_trajectory.json"
-G1_HYBRID = ROOT / "docs/architecture/evidence/g1-05/sample_blocked_detour.json"
-EVIDENCE_DIR = ROOT / "docs/architecture/evidence/g2-01"
+G1_FOLLOW = ROOT / "tests/fixtures/g1/sample_follow_trajectory.json"
+G1_HYBRID = ROOT / "tests/fixtures/g1/sample_blocked_detour.json"
+EVIDENCE_DIR = ROOT / "docs/runtime-evidence/g2-01"
 REPRO_CMD = "SDF_WRITE_G2_EVIDENCE=1 PYTHONPATH=safedrive_foundry python3 -m unittest tests.g2.test_g2_01_latency_evidence -v"
 
 

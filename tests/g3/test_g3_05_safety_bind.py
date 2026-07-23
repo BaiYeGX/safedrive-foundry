@@ -284,7 +284,7 @@ class TestEpisodeStatus(unittest.TestCase):
 class TestAssertG3CloseRejectsLegacy(unittest.TestCase):
     def test_legacy_summary_fails_close_gate(self) -> None:
         """Old neural_live latest must not satisfy strengthened close logic fields."""
-        legacy = ROOT / "docs/architecture/evidence/g3-05/neural_live/latest_live_summary.json"
+        legacy = ROOT / "docs/runtime-evidence/g3-05/neural_live/latest_live_summary.json"
         if not legacy.is_file():
             self.skipTest("legacy evidence not present")
         data = json.loads(legacy.read_text(encoding="utf-8"))

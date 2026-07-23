@@ -25,7 +25,7 @@ from safety_kernel.contracts.types import (  # noqa: E402
 
 
 def main() -> int:
-    out = ROOT / "docs/architecture/evidence/g3-05/offline_reject_diag.json"
+    out = ROOT / "docs/runtime-evidence/g3-05/offline_reject_diag.json"
     out.parent.mkdir(parents=True, exist_ok=True)
 
     route = tuple((float(i) * 2.0, 0.0) for i in range(40))

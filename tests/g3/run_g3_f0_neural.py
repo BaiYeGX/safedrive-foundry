@@ -53,11 +53,11 @@ def main() -> int:
     ap.add_argument("--stability-steps", type=int, default=200, help="no-OOM stability loop")
     ap.add_argument(
         "--out",
-        default=str(ROOT / "docs/architecture/evidence/g3-03/f0_neural/report.json"),
+        default=str(ROOT / "docs/runtime-evidence/g3-03/f0_neural/report.json"),
     )
     ap.add_argument(
         "--lineage-out",
-        default=str(ROOT / "docs/architecture/evidence/g3-03/f0_neural/lineage_manifest.json"),
+        default=str(ROOT / "docs/runtime-evidence/g3-03/f0_neural/lineage_manifest.json"),
     )
     ap.add_argument("--skip-full-sha", action="store_true", help="dev only; fails close if used")
     args = ap.parse_args()

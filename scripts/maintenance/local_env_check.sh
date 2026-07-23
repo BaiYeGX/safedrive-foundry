@@ -103,9 +103,34 @@ echo "--- sdf sim preflight ---"
 python3 scripts/sdf.py sim preflight
 echo "preflight_exit=$?"
 
-echo "--- task catalog ---"
-PYTHONPATH=. python3 scripts/maintenance/task_catalog_check.py
-echo "catalog_exit=$?"
+echo "--- active repository layout ---"
+layout_exit=0
+for p in \
+  "AGENTS.md" \
+  "README.md" \
+  "ROADMAP.md" \
+  "START_TASK.md" \
+  "PROGRESS.md" \
+  "docs/PROJECT.md" \
+  "docs/VLA.md" \
+  "docs/WORLD_MODEL.md" \
+  "docs/RESOURCES.md" \
+  "docs/ENVIRONMENT.md" \
+  "docs/G3_BASELINE.md" \
+  "docs/EVIDENCE.md" \
+  "safedrive_foundry/README.md" \
+  "safedrive_foundry" \
+  "scripts" \
+  "tests"
+do
+  if [ -e "$p" ]; then
+    echo "OK   $p"
+  else
+    echo "MISS $p"
+    layout_exit=1
+  fi
+done
+echo "layout_exit=${layout_exit}"
 
 echo "=== local_env_check done ==="
 echo "VLA rule: always use ${SDF_VENV} (not system python3, not carla_ros venv)."

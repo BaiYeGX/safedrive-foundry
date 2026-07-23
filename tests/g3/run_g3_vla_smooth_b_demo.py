@@ -445,7 +445,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--evidence-dir",
-        default=str(ROOT / "docs/architecture/evidence/g3-05/visual_demo_b"),
+        default=str(ROOT / "docs/runtime-evidence/g3-05/visual_demo_b"),
     )
     ap.add_argument(
         "--max-speed",

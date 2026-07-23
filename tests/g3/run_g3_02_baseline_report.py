@@ -38,7 +38,7 @@ def _ade_fde(pred, expert) -> tuple[float, float]:
 
 
 def main() -> int:
-    out = ROOT / "docs/architecture/evidence/g3-02/baseline_report.json"
+    out = ROOT / "docs/runtime-evidence/g3-02/baseline_report.json"
     out.parent.mkdir(parents=True, exist_ok=True)
 
     models = {

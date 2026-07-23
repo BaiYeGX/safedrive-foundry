@@ -12,10 +12,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-F0 = ROOT / "docs/architecture/evidence/g3-03/f0_neural/report.json"
+F0 = ROOT / "docs/runtime-evidence/g3-03/f0_neural/report.json"
 # Prefer v2 live evidence; fall back only if env explicitly allows legacy path.
-LIVE_V2 = ROOT / "docs/architecture/evidence/g3-05/neural_live_v2/latest_live_summary.json"
-LIVE_LEGACY = ROOT / "docs/architecture/evidence/g3-05/neural_live/latest_live_summary.json"
+LIVE_V2 = ROOT / "docs/runtime-evidence/g3-05/neural_live_v2/latest_live_summary.json"
+LIVE_LEGACY = ROOT / "docs/runtime-evidence/g3-05/neural_live/latest_live_summary.json"
 
 MIN_LATENCY_N = int(os.environ.get("SDF_G3_CLOSE_MIN_LATENCY_N", "20"))
 REQUIRE_V2 = os.environ.get("SDF_G3_CLOSE_REQUIRE_V2", "1") not in {"0", "false", "False"}

@@ -4,7 +4,7 @@
 # Offline fixtures ship with the package; live CARLA OpenDRIVE can replace them later.
 fixture_maps = ["Town01", "Town03", "Town10HD"]
 cache_enabled = true
-cache_dir = "docs/architecture/evidence/g1-03/map-cache"
+cache_dir = "docs/runtime-evidence/g1-03/map-cache"
 lane_change_enabled = true
 default_speed_limit_mps = 13.89
 

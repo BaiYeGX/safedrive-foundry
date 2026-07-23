@@ -1000,7 +1000,7 @@ def main() -> int:
 
     seed = args.seed if args.seed is not None else random.randint(1, 10_000_000)
     rng = random.Random(seed)
-    evidence_dir = ROOT / "docs/architecture/evidence/g1-live"
+    evidence_dir = ROOT / "docs/runtime-evidence/g1-live"
     evidence_dir.mkdir(parents=True, exist_ok=True)
     run_id = f"g1-live-{args.stack}-{seed}-{int(time.time())}"
 

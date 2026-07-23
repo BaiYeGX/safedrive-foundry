@@ -1219,7 +1219,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--evidence-dir",
-        default=str(ROOT / "docs/architecture/evidence/g3-05/vla_mpc_stable"),
+        default=str(ROOT / "docs/runtime-evidence/g3-05/vla_mpc_stable"),
     )
     parser.add_argument(
         "--vehicle-blueprint",

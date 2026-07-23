@@ -1,8 +1,0 @@
-{
-  "schema": "safedrive.evidence.manifest.v1",
-  "generated_unix": 1783945544,
-  "branch": "grok/g1-acceptance-repair",
-  "files_sha256": {
-    "summary.json": "78b556764301583340e2336d9b49a8ef048ee4204dabcaf2dfc97c81b56d11b5"
-  }
-}

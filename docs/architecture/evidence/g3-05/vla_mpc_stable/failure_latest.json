@@ -1,9 +1,0 @@
-{
-  "status": "BLOCKED_EXTERNAL",
-  "result": "RUNTIME_ERROR",
-  "requested_map": "Town04",
-  "error_type": "RuntimeError",
-  "error": "time-out of 30000ms while waiting for the simulator, make sure the simulator is ready and connected to 127.0.0.1:2000",
-  "traceback": "Traceback (most recent call last):\n  File \"/mnt/e/autonomous driving/tests/g3/run_g3_vla_mpc_stable.py\", line 834, in main\n    world.tick()\nRuntimeError: time-out of 30000ms while waiting for the simulator, make sure the simulator is ready and connected to 127.0.0.1:2000\n",
-  "wall_time_s": 1784394336.414629
-}

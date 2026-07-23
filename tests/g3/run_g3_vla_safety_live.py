@@ -172,7 +172,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--evidence-dir",
-        default=str(ROOT / "docs/architecture/evidence/g3-05/neural_live_v2"),
+        default=str(ROOT / "docs/runtime-evidence/g3-05/neural_live_v2"),
     )
     args = ap.parse_args()
     seeds = [int(x) for x in args.seeds.split(",") if x.strip()] or [args.seed]

@@ -46,7 +46,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--out",
-        default=str(ROOT / "docs/architecture/evidence/g3-03/f0/f0_report.json"),
+        default=str(ROOT / "docs/runtime-evidence/g3-03/f0/f0_report.json"),
     )
     args = ap.parse_args()
     out: dict = {"stages": {}}

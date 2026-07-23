@@ -2,7 +2,7 @@
 # Prefer env overrides when set:
 #   SDF_VENV, SDF_PYTHON, SDF_SIMLINGO_CODE_ROOT, SDF_SIMLINGO_CKPT_ROOT,
 #   SDF_INTERNVL2_1B_ROOT, CARLA_ROOT
-# Policy: docs/project/LOCAL_ASSETS.md
+# Policy: docs/RESOURCES.md
 
 [meta]
 registered = "2026-07-14"

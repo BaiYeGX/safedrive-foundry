@@ -1,81 +1,82 @@
 # SafeDrive Foundry
 
-SafeDrive Foundry 是一个运行在单机上的 CARLA–ROS 2 纯软件在环自动驾驶研发平台。
-项目把经典专家、轻量驾驶 VLA、独立 Safety Kernel、约束 MPC、场景回归和后续动作条件
-World Model 组织成可运行、可降级、可审计的闭环。
+SafeDrive Foundry 是单机 CARLA–ROS 2 纯软件在环自动驾驶研发平台。当前核心是：
+
+```text
+VLA 真实 K2 → World Model 动作条件软排序 → MPC/PID → CARLA
+```
+
+项目重点是 VLA 驾驶质量与 World on/off 的真实效果，不把 Classic 或独立 Safety
+当作核心效果前置；二者保留为基线、标签和可选工程扩展。
 
 ## 当前状态
 
-- G0：环境与确定性基线已冻结；
-- G1：经典专家与运行时已 `COMPLETED_WITH_LIMITS`；
-- G2：独立 Safety Kernel 已完成 offline 主体；
-- G3：**SimLingo 纯 VLA 路径 + VLA 速度 + constrained MPC 已真实接入 CARLA，
-  状态为 `MEASURED_WITH_LIMITS`**；
-- G3-05 正式 VLA+Safety live 验收仍需新证据；
-- G4/G5 尚未正式启动。
+| 能力 | 状态 |
+|---|---|
+| G0 environment | `COMPLETED / FROZEN` |
+| G1 classic/runtime | `COMPLETED_WITH_LIMITS` |
+| G2 Safety offline | `COMPLETED_WITH_LIMITS` |
+| G3 K1 pure VLA+MPC | `MEASURED_WITH_LIMITS` |
+| G3 real K2 | `CURRENT / REPAIR_REQUIRED` |
+| G4/G5 | `PENDING` |
 
-当前最重要的实现链：
+当前唯一任务：把现有坍塌/运动学不一致的 K2 修成可执行、可区分的 candidate 0/1。
+
+## 从这里开始
+
+1. [当前任务](START_TASK.md)
+2. [后续最短路线](ROADMAP.md)
+3. [项目合同](docs/PROJECT.md)
+4. [当前进度](PROGRESS.md)
+
+实现参考：
+
+- [VLA/K2](docs/VLA.md)
+- [World Model/G4A](docs/WORLD_MODEL.md)
+- [本机资产与预算](docs/RESOURCES.md)
+- [环境与运行](docs/ENVIRONMENT.md)
+- [K1 基线](docs/G3_BASELINE.md)
+- [Evidence/Archive](docs/EVIDENCE.md)
+
+## 目录
 
 ```text
-CARLA RGB + ego + coarse target
-  → SimLingo / InternVL2-1B
-  → raw VLA path + VLA speed
-  → PathManager
-  → constrained MPC
-  → CARLA vehicle
+safedrive_foundry/  核心 Python/ROS 2/runtime/VLA/Safety 代码
+scripts/            sdf 入口、环境维护和 smoke
+tests/              单元、集成和 live runner
+models/             本机模型权重（Git 忽略）
+simlingo-main/      上游 VLA 代码（Git 忽略）
+tools/              本机工具链（Git 忽略）
+docs/               仅保留活动权威文档
+archive/            本机历史归档，不是活动路线
 ```
 
-MPC 不跟踪 CARLA 车道中心线；地图只提供类似 GPS 的 coarse navigation target。
-
-## 从哪里开始
-
-完整能力说明、环境启动、短测/长测命令、三条可视化线、D3D 解法、已知限制、优化顺序
-和 G4 入口统一见：
-
-- [G3 Pure VLA + MPC 发布说明与后续路线](docs/architecture/G3_VLA_MPC_RELEASE_GUIDE.md)
-- [G3 稳定运行与故障排查手册](docs/architecture/G3_VLA_MPC_STABLE_RUNBOOK.md)
-- [G3 精选发布证据索引](docs/architecture/evidence/g3-05/RELEASE_EVIDENCE_INDEX.md)
-- [当前进度](PROGRESS.md)
-- [任务入口](START_TASK.md)
-- [项目路线图](ROADMAP.md)
-
-最短启动流程：
+## 最短环境入口
 
 ```bash
-source /home/sdf/.venvs/sdf/bin/activate
 cd "/mnt/e/autonomous driving"
-
+source /home/sdf/.venvs/sdf/bin/activate
+python scripts/sdf.py doctor
 python scripts/sdf.py sim preflight --json
-# CARLA 未运行且结果为 RETRYABLE_FAILURE 时只 ensure 一次：
-python scripts/sdf.py sim ensure --map Town03 --rhi dx12 --startup-timeout 180 --json
+```
 
-python tests/g3/run_g3_vla_mpc_minimal.py \
-  --map Town03 \
-  --duration-s 60 \
-  --inference-mode full \
-  --no-map-restart \
-  --max-speed 6 \
-  --debug-draw \
-  --evidence-dir docs/architecture/evidence/g3-05/release_smoke_town03_60s
+CARLA 未运行且 preflight 为 `RETRYABLE_FAILURE` 时只执行一次：
+
+```bash
+python scripts/sdf.py sim ensure --map Town03 --rhi dx12 --startup-timeout 180 --json
 ```
 
 ## 关键边界
 
-- 当前是 CARLA SIL，不是实车或公共道路安全证明；
-- VLA/World 不能绕过 Validator、Safety Kernel 或执行层硬约束；
-- pure VLA+MPC demo 当前不带 Safety，不具备完整避障保证；
-- 单张 RTX 4080 同时承担 CARLA DX12 与 CUDA，当前稳定基线为 DX12；
-- SimLingo 代码与模型权重是外部大资产，不纳入 Git，路径见
-  [LOCAL_ASSETS.md](docs/project/LOCAL_ASSETS.md)；
-- 运行产生的大型 evidence 默认应本地保存，只选择关键摘要进入版本库。
+- CARLA SIL ≠ 实车或道路安全证明；
+- VLA/World 不直接发无约束底盘控制；
+- World 只排序同一 K2，异常回到 VLA 原始 top-1；
+- 核心 A/B 固定 VLA、候选、场景、seed、initial-state 和 MPC；
+- Safety 启用后，学习模块不能覆盖硬约束、MRM 或 Emergency；
+- 大型权重、安装包、运行 Evidence 和历史文档不放在活动源码目录。
 
-## 离线验证
+当前执行口令：
 
-```bash
-source /home/sdf/.venvs/sdf/bin/activate
-python -m unittest discover -s tests/g3 -t . -v
-python -m unittest tests.g1.test_g1_02_connection -v
+```text
+读取 START_TASK.md，开始当前任务。
 ```
-
-最近一次 G3 全量离线结果：`Ran 154`，153 passed，1 个真实 GPU 20× forward 测试按
-显式环境开关跳过。
