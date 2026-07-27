@@ -17,10 +17,13 @@ VLA 真实 K2 → World Model 动作条件软排序 → MPC/PID → CARLA
 | G1 classic/runtime | `COMPLETED_WITH_LIMITS` |
 | G2 Safety offline | `COMPLETED_WITH_LIMITS` |
 | G3 K1 pure VLA+MPC | `MEASURED_WITH_LIMITS` |
-| G3 real K2 | `CURRENT / REPAIR_REQUIRED` |
-| G4/G5 | `PENDING` |
+| G3 real K2 / R1 | `COMPLETED_WITH_LIMITS` |
+| R2 / G4A paired oracle | **`COMPLETED_WITH_LIMITS`**（纵向；`NO_SELECTION_SPACE`） |
+| R2-X Spatial/Semantic K2 | **`COMPLETED_WITH_LIMITS`**（nominal 可用；defensive availability 不可靠） |
+| World / G5 | `PENDING`（不得自动启动） |
 
-当前唯一任务：把现有坍塌/运动学不一致的 K2 修成可执行、可区分的 candidate 0/1。
+纵向 R2 已关闭；R2-X 以“可用但非 World-ready”收尾，不覆盖旧 Evidence。
+R3/R4 已有实施规格，但仍未授权。详见 `START_TASK.md` / `PROGRESS.md`。
 
 ## 从这里开始
 
@@ -31,8 +34,12 @@ VLA 真实 K2 → World Model 动作条件软排序 → MPC/PID → CARLA
 
 实现参考：
 
+- [R1 真实 K2 实施任务](docs/R1_REAL_K2.md)
+- [R2 Paired Outcome + Oracle](docs/R2_PAIRED_ORACLE.md)
+- [R2-X Spatial/Semantic K2](docs/R2X_SPATIAL_K2.md)
 - [VLA/K2](docs/VLA.md)
 - [World Model/G4A](docs/WORLD_MODEL.md)
+- [R3/R4 World 数据与模型实施规格](docs/R3_R4_WORLD_DATA_MODEL.md)
 - [本机资产与预算](docs/RESOURCES.md)
 - [环境与运行](docs/ENVIRONMENT.md)
 - [K1 基线](docs/G3_BASELINE.md)

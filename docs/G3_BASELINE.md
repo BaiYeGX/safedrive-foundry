@@ -9,7 +9,7 @@
 
 ```text
 K1 pure VLA + constrained MPC: MEASURED_WITH_LIMITS
-real K2: REPAIR_REQUIRED
+real K2 / R1: COMPLETED_WITH_LIMITS
 Safety live acceptance: optional / not verified
 ```
 
@@ -25,7 +25,7 @@ Safety live acceptance: optional / not verified
 
 尚未成立：
 
-- 真实 K2；
+- R2 paired outcome / oracle；
 - World on/off；
 - 多场景稳定效果；
 - 完整 Safety 工程闭环；
@@ -130,7 +130,7 @@ python tests/g3/run_g3_vla_mpc_minimal.py \
 
 ## 9. 当前下一步
 
-不要继续优化 K1 演示。当前唯一动作是完成真实 K2：
+不要继续优化 K1 演示或重做 R1。当前唯一动作是完成 R2：
 
 ```text
 读取 START_TASK.md，开始当前任务。

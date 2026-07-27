@@ -251,6 +251,46 @@ class ConstrainedVLAMPCTest(unittest.TestCase):
         cmd = ConstrainedVLAMPC(cfg).step(path, EgoPose(0.0, 0.0, 0.0, 1.0), now_s=1.0)
         self.assertGreater(cmd.curve_speed_limit_mps, 9.9)
 
+    def test_speed_tightened_lat_accel_bound_keeps_recovery_qp_feasible(self) -> None:
+        """A rising-speed bound must permit the fastest physical steer recovery.
+
+        This reproduces the crossing failure: at about 2.4 m/s the tightened
+        lateral-acceleration angle is below the next angle reachable from the
+        measured steer/rate state.  The old immediate hard bound made OSQP
+        primal-infeasible and the fallback chain later reported a timeout.
+        """
+        cfg = VLAMPCConfig(
+            control_dt_s=0.05,
+            prediction_dt_s=0.10,
+            horizon=20,
+            wheelbase_m=2.8325408500216467,
+            max_steer_rad=1.2217303432379762,
+            max_steer_rate_rps=0.35,
+            max_steer_accel_rps2=1.50,
+            max_lateral_accel_mps2=1.0,
+            max_speed_mps=8.0,
+            solver_deadline_ms=100.0,
+        )
+        path = spatial_path_from_xy(
+            [(float(x), 0.0) for x in range(41)],
+            ego=EgoPose(0.0, 0.0, 0.0, 0.0),
+            target_speed_mps=8.0,
+            stamp_s=1.0,
+        )
+        assert path is not None
+        tracker = ConstrainedVLAMPC(cfg)
+        tracker._steer_rate_rps = cfg.max_steer_rate_rps
+        measured = 0.26175340672655095 * cfg.max_steer_rad
+        cmd = tracker.step(
+            path,
+            EgoPose(0.0, -0.83, 0.04, 2.408562339233613),
+            measured_steer_rad=measured,
+            now_s=1.0,
+        )
+        self.assertEqual(cmd.mode, "mpc")
+        self.assertIn(cmd.solver_status, {"solved", "solved_inaccurate"})
+        self.assertLess(cmd.solver_ms, cfg.solver_deadline_ms)
+
 
 if __name__ == "__main__":
     unittest.main()

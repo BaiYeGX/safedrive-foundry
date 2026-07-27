@@ -1,7 +1,8 @@
-"""VLA-V1: low-dim history + K=2 anchored residual candidates (G3-04).
+"""Debug / fingerprint V1 residual helpers (NOT R1 acceptance).
 
-Candidates must be spatially distinguishable and kinematically consistent so
-oracle best-of-K (position ADE) and World ranking have a real selection space.
+Formal real-K2 acceptance uses ``NeuralV1Policy`` + ``k2_builder`` (path retiming).
+This module keeps the legacy fingerprint ``V1Policy`` and residual/lateral-bias
+utilities for offline debug only. Do not treat lateral_bias forks as neural K2.
 """
 
 from __future__ import annotations

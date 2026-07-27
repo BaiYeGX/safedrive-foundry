@@ -23,7 +23,8 @@ class UpstreamPathSpeed:
     frame: str = "ego"  # ego|map
 
 
-def _cum_arclength(path: Sequence[tuple[float, float]]) -> list[float]:
+def cum_arclength(path: Sequence[tuple[float, float]]) -> list[float]:
+    """Cumulative arc-length table for a polyline (public; used by K1 + R1 K2)."""
     s = [0.0]
     for i in range(1, len(path)):
         dx = path[i][0] - path[i - 1][0]
@@ -32,8 +33,14 @@ def _cum_arclength(path: Sequence[tuple[float, float]]) -> list[float]:
     return s
 
 
-def _interp_xy(path: Sequence[tuple[float, float]], s_list: Sequence[float], s_query: float) -> tuple[float, float, float]:
-    """Return x,y,yaw at arc-length s_query."""
+# Backward-compatible private aliases
+_cum_arclength = cum_arclength
+
+
+def interp_xy(
+    path: Sequence[tuple[float, float]], s_list: Sequence[float], s_query: float
+) -> tuple[float, float, float]:
+    """Return x,y,yaw at arc-length s_query (clamped to path ends)."""
     if len(path) == 0:
         return 0.0, 0.0, 0.0
     if len(path) == 1:
@@ -58,7 +65,16 @@ def _interp_xy(path: Sequence[tuple[float, float]], s_list: Sequence[float], s_q
     return x1, y1, math.atan2(y1 - y0, x1 - x0)
 
 
+_interp_xy = interp_xy
+
+
 def _speed_at(speeds: Sequence[float], t: float, dt: float = DT_S) -> float:
+    """K1-only speed interpolation (legacy).
+
+    R1 K2 must not use this helper for target profiles — use the versioned
+    ``normalize_k2_target_speed_profile`` instead. Behavior preserved for K1
+    regression: index from ``t / dt`` with clamp.
+    """
     if not speeds:
         return 0.0
     # speeds[i] at time (i+1)*dt or i*dt — use i*dt for index i

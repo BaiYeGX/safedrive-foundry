@@ -64,6 +64,7 @@ class LongitudinalQPSolver:
         alpha: float = 1.6,
         deadline_ms: float = 50.0,
         prefer_osqp: bool = True,
+        polish: bool = True,
     ) -> None:
         self.max_iter = max_iter
         self.abs_tol = abs_tol
@@ -72,6 +73,7 @@ class LongitudinalQPSolver:
         self.alpha = alpha
         self.deadline_ms = deadline_ms
         self.prefer_osqp = prefer_osqp
+        self.polish = bool(polish)
         self._warm = WarmStart()
 
     def clear_warm_start(self) -> None:
@@ -175,6 +177,13 @@ class LongitudinalQPSolver:
             last_x, last_trace = self._enforce_deadline(last_x, last_trace, t0=t0)
             if last_trace.status is SolverStatus.TIMEOUT:
                 return None, last_trace
+            # A convex QP reported primal/dual infeasible by OSQP does not
+            # become feasible when handed to SLSQP.  Falling through only
+            # burns the real-time budget and mislabels the condition as a
+            # timeout.  Preserve the actual failure class so the caller can
+            # apply its bounded fallback immediately.
+            if last_trace.status is SolverStatus.INFEASIBLE:
+                return None, last_trace
             if last_x is not None:
                 return last_x, last_trace
 
@@ -263,7 +272,7 @@ class LongitudinalQPSolver:
                     l=problem.l.astype(float),
                     u=problem.u.astype(float),
                     warm_starting=True,
-                    polishing=True,
+                    polishing=self.polish,
                     **settings,
                 )
             except TypeError:
@@ -274,7 +283,7 @@ class LongitudinalQPSolver:
                     l=problem.l.astype(float),
                     u=problem.u.astype(float),
                     warm_start=True,
-                    polish=True,
+                    polish=self.polish,
                     **settings,
                 )
             if warm_start and self._warm.x is not None and self._warm.x.size == n:

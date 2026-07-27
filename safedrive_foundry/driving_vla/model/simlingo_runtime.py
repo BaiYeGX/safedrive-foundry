@@ -102,11 +102,26 @@ class NeuralLoadReport:
 @dataclass
 class NeuralForwardResult:
     route_xy: np.ndarray  # (20, 2) ego frame meters
-    speed_wps_xy: np.ndarray  # (10, 2) ego frame
-    speed_mps: tuple[float, ...]  # (10,)
+    speed_wps_xy: np.ndarray  # (10, 2) ego frame raw speed waypoint head
+    # Planner samples for VLASpeedPlanner — NOT a T10 timed profile.
+    # Official contract: length 5, same desired-speed scalar repeated.
+    # Legacy finite-diff series may be length 10. R1 K2 expands via
+    # speed_convert.normalize_k2_target_speed_profile.
+    speed_mps: tuple[float, ...]
     latency_s: float
     source: str = "neural_simlingo"
     peak_vram_mb: float = 0.0
+    # Same-forward driving features (R2-X / X5A). Empty only if extraction failed.
+    driving_feature: tuple[float, ...] = ()  # mean64
+    driving_feature_hash: str = ""
+    driving_feature_full_pool: tuple[float, ...] = ()
+    driving_feature_full_pool_hash: str = ""
+    driving_feature_raw_shape: tuple[int, ...] = ()
+    driving_feature_raw_dtype: str = ""
+    driving_feature_raw_hash: str = ""
+    driving_feature_source: str = ""
+    driving_feature_ok: bool = False
+    driving_feature_error: str = ""
 
 
 class SimLingoNeuralRuntime:
@@ -254,6 +269,10 @@ class SimLingoNeuralRuntime:
                 except AttributeError:
                     driving_input = example
                 model.speed_wps, model.route, model.language = None, None, []
+                # Clear previous feature cache each forward
+                model._sdf_driving_feature_bundle = None  # type: ignore[attr-defined]
+                model._sdf_driving_feature = None  # type: ignore[attr-defined]
+                model._sdf_driving_feature_hash = ""  # type: ignore[attr-defined]
                 if bool(model.predict_language):
                     return _orig_fwd(example, return_language=return_language, prompt_ids=prompt_ids)
                 adaptor_dict = model.adaptors(example, inference=True)
@@ -261,6 +280,37 @@ class SimLingoNeuralRuntime:
                 # features already adaptor slice; reverse-perm split by adaptor sizes
                 outputs_by_adaptor = model.adaptors.split_outputs_by_adaptor(adaptor_dict, features)
                 logits_by = model.adaptors.split_outputs_by_adaptor(adaptor_dict, logits)
+                # Cache raw/full_pool/mean64 from same forward (X5A).
+                try:
+                    from driving_vla.model.driving_feature import extract_driving_feature_bundle
+
+                    raw_drive = outputs_by_adaptor.get("driving")
+                    bundle = extract_driving_feature_bundle(
+                        raw_drive, adaptor_name="driving", require=False
+                    )
+                    model._sdf_driving_feature_bundle = bundle  # type: ignore[attr-defined]
+                    # Keep one-step raw tokens for collect dump (CPU float16-friendly)
+                    try:
+                        from driving_vla.model.driving_feature import _to_numpy
+
+                        model._sdf_driving_raw_tokens = _to_numpy(raw_drive)  # type: ignore[attr-defined]
+                    except Exception:
+                        model._sdf_driving_raw_tokens = None  # type: ignore[attr-defined]
+                    if bundle.ok:
+                        model._sdf_driving_feature = list(bundle.mean64)  # type: ignore[attr-defined]
+                        model._sdf_driving_feature_hash = bundle.mean64_hash  # type: ignore[attr-defined]
+                    else:
+                        model._sdf_driving_feature = None  # type: ignore[attr-defined]
+                        model._sdf_driving_feature_hash = ""  # type: ignore[attr-defined]
+                except Exception as exc:  # noqa: BLE001
+                    from driving_vla.model.driving_feature import DrivingFeatureBundle
+
+                    model._sdf_driving_feature_bundle = DrivingFeatureBundle(  # type: ignore[attr-defined]
+                        ok=False, error=f"{type(exc).__name__}:{exc}"
+                    )
+                    model._sdf_driving_feature = None  # type: ignore[attr-defined]
+                    model._sdf_driving_feature_hash = ""  # type: ignore[attr-defined]
+                    model._sdf_driving_raw_tokens = None  # type: ignore[attr-defined]
                 predictions = model.adaptors.driving.get_predictions(
                     outputs_by_adaptor["driving"], logits_by.get("driving")
                 )
@@ -634,6 +684,29 @@ class SimLingoNeuralRuntime:
             peak = 0.0
             if use_cuda:
                 peak = float(torch.cuda.max_memory_allocated()) / (1024.0 * 1024.0)
+            bundle = getattr(self.model, "_sdf_driving_feature_bundle", None)
+            drive_tuple: tuple[float, ...] = ()
+            drive_hash = ""
+            full_tuple: tuple[float, ...] = ()
+            full_hash = ""
+            raw_shape: tuple[int, ...] = ()
+            raw_dtype = ""
+            raw_hash = ""
+            src = ""
+            feat_ok = False
+            feat_err = ""
+            if bundle is not None:
+                feat_ok = bool(getattr(bundle, "ok", False))
+                feat_err = str(getattr(bundle, "error", "") or "")
+                if feat_ok:
+                    drive_tuple = tuple(float(x) for x in bundle.mean64)
+                    drive_hash = str(bundle.mean64_hash)
+                    full_tuple = tuple(float(x) for x in bundle.full_pool)
+                    full_hash = str(bundle.full_pool_hash)
+                    raw_shape = tuple(int(x) for x in bundle.raw_shape)
+                    raw_dtype = str(bundle.raw_dtype)
+                    raw_hash = str(bundle.raw_content_hash)
+                    src = str(bundle.source_mean64)
             return NeuralForwardResult(
                 route_xy=route_np.astype(np.float64),
                 speed_wps_xy=speed_np.astype(np.float64),
@@ -641,6 +714,16 @@ class SimLingoNeuralRuntime:
                 latency_s=latency,
                 source="neural_simlingo",
                 peak_vram_mb=peak,
+                driving_feature=drive_tuple,
+                driving_feature_hash=drive_hash,
+                driving_feature_full_pool=full_tuple,
+                driving_feature_full_pool_hash=full_hash,
+                driving_feature_raw_shape=raw_shape,
+                driving_feature_raw_dtype=raw_dtype,
+                driving_feature_raw_hash=raw_hash,
+                driving_feature_source=src,
+                driving_feature_ok=feat_ok,
+                driving_feature_error=feat_err,
             )
         finally:
             # Only bounce to CPU in legacy borrow mode (not keep-on-GPU / resident).

@@ -1,5 +1,9 @@
 # World-V0 与最小效果实验
 
+> R3/R4 的数据字段、actor future collector、split、基线、网络、loss、验收和停止点，
+> 以 [R3/R4 实施规格](R3_R4_WORLD_DATA_MODEL.md) 为准。本文保留核心研究合同和
+> G5 连接关系。
+
 本文定义 G4A 选择空间量尺和 G5 World-V0。World 无论预期收益强弱都必须真实实现；
 标签只决定实验规模和结论强度。
 
@@ -55,6 +59,10 @@ comparability flag and failure reason
 
 训练必须包含非专家、保守、扰动和危险候选，不能只有 expert action。Oracle 字段与
 runtime Observable 字段物理隔离，Regression 不进入训练。
+
+现有 R2 aggregate 不能直接冒充该数据集：R3 必须另存每个 branch 的逐 actor
+2.5 秒真实 future trace，并将一个 anchor 的两条 branch 组装成一个 pair sample。
+candidate unavailable、incomparable 和 TIE 的 mask 语义见实施规格。
 
 ## 4. World-V0
 

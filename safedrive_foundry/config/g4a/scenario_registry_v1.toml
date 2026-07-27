@@ -1,0 +1,893 @@
+# R2 / G4A Scenario Registry V1
+# Snapped to Town03 driving waypoints BEFORE outcome observation.
+# Exact spawn only; simulation-time actor scripts; no free/fallback spawn.
+
+[registry]
+schema_version = "safedrive.g4a.scenario_registry.v1"
+registry_version = "v1"
+description = "R2 pilot: lead braking / cut-in / crossing on Town03 roads"
+
+[defaults]
+map_name = "Town03"
+sim_dt_s = 0.05
+duration_s = 5.0
+vla_config_ref = "config/vla/k2_v1.toml"
+mpc_config_ref = "config/control/mpc_pid_baseline.toml"
+executor_config_ref = "g3_stable_vla_mpc"
+expected_decision_anchor_time_s = 0.0
+
+[defaults.weather]
+preset = "ClearNoon"
+cloudiness = 10.0
+precipitation = 0.0
+precipitation_deposits = 0.0
+wind_intensity = 5.0
+sun_azimuth_angle = 0.0
+sun_altitude_angle = 70.0
+wetness = 0.0
+fog_density = 0.0
+fog_distance = 0.0
+
+[defaults.traffic_light]
+policy = "freeze_green"
+initial_state = "Green"
+
+[defaults.sensor_contract.front_rgb]
+width = 1024
+height = 512
+fov = 110.0
+attach = "ego"
+layout = "HWC_RGB_uint8"
+
+
+[scenarios.lead_brake_moderate]
+family = "lead_braking"
+map_name = "Town03"
+notes = "Lead moderate brake on Town03 snapped road"
+
+[scenarios.lead_brake_moderate.route]
+identity = "town03_lead_brake_moderate"
+target_speed_mps = 8.0
+waypoints = [
+  [17.101351, 193.488388, 0.500000],
+  [-7.898561, 193.550766, 0.500000],
+  [-32.898483, 193.613144, 0.500000],
+  [-53.960323, 191.120911, 0.500000],
+  [-68.521225, 178.243668, 0.500000]
+]
+
+[scenarios.lead_brake_moderate.seeds.seed_a.ego]
+name = "ego"
+role = "ego"
+blueprint = "vehicle.tesla.model3"
+spawn_order = 0
+bounding_box_extent_m = [2.3, 1.0, 0.75]
+
+[scenarios.lead_brake_moderate.seeds.seed_a.ego.transform]
+x = 17.101351
+y = 193.488388
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = 179.857025
+
+[scenarios.lead_brake_moderate.seeds.seed_a.ego.initial_velocity]
+vx = -7.999975
+vy = 0.019963
+vz = 0.000000
+
+[scenarios.lead_brake_moderate.seeds.seed_a.ego.script]
+script_type = "hold"
+
+[[scenarios.lead_brake_moderate.seeds.seed_a.actors]]
+name = "lead"
+role = "npc"
+blueprint = "vehicle.audi.a2"
+spawn_order = 1
+bounding_box_extent_m = [2.2, 1.0, 0.75]
+
+[scenarios.lead_brake_moderate.seeds.seed_a.actors.transform]
+x = -0.898583
+y = 193.533295
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -180.142944
+
+[scenarios.lead_brake_moderate.seeds.seed_a.actors.initial_velocity]
+vx = -6.999978
+vy = 0.017464
+vz = 0.000000
+
+[scenarios.lead_brake_moderate.seeds.seed_a.actors.script]
+script_type = "piecewise_vehicle_control"
+
+[[scenarios.lead_brake_moderate.seeds.seed_a.actors.script.knots]]
+t_s = 0.00
+throttle = 0.35
+brake = 0.00
+steer = 0.00
+
+[[scenarios.lead_brake_moderate.seeds.seed_a.actors.script.knots]]
+t_s = 0.80
+throttle = 0.00
+brake = 0.35
+steer = 0.00
+
+[[scenarios.lead_brake_moderate.seeds.seed_a.actors.script.knots]]
+t_s = 2.50
+throttle = 0.00
+brake = 0.20
+steer = 0.00
+
+[scenarios.lead_brake_moderate.seeds.seed_b.ego]
+name = "ego"
+role = "ego"
+blueprint = "vehicle.tesla.model3"
+spawn_order = 0
+bounding_box_extent_m = [2.3, 1.0, 0.75]
+
+[scenarios.lead_brake_moderate.seeds.seed_b.ego.transform]
+x = 17.101351
+y = 193.488388
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = 179.857025
+
+[scenarios.lead_brake_moderate.seeds.seed_b.ego.initial_velocity]
+vx = -7.999975
+vy = 0.019963
+vz = 0.000000
+
+[scenarios.lead_brake_moderate.seeds.seed_b.ego.script]
+script_type = "hold"
+
+[[scenarios.lead_brake_moderate.seeds.seed_b.actors]]
+name = "lead"
+role = "npc"
+blueprint = "vehicle.audi.a2"
+spawn_order = 1
+bounding_box_extent_m = [2.2, 1.0, 0.75]
+
+[scenarios.lead_brake_moderate.seeds.seed_b.actors.transform]
+x = 2.101407
+y = 193.525818
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -180.142944
+
+[scenarios.lead_brake_moderate.seeds.seed_b.actors.initial_velocity]
+vx = -6.999978
+vy = 0.017464
+vz = 0.000000
+
+[scenarios.lead_brake_moderate.seeds.seed_b.actors.script]
+script_type = "piecewise_vehicle_control"
+
+[[scenarios.lead_brake_moderate.seeds.seed_b.actors.script.knots]]
+t_s = 0.00
+throttle = 0.35
+brake = 0.00
+steer = 0.00
+
+[[scenarios.lead_brake_moderate.seeds.seed_b.actors.script.knots]]
+t_s = 0.60
+throttle = 0.00
+brake = 0.40
+steer = 0.00
+
+[[scenarios.lead_brake_moderate.seeds.seed_b.actors.script.knots]]
+t_s = 2.50
+throttle = 0.00
+brake = 0.25
+steer = 0.00
+
+[scenarios.lead_brake_hard]
+family = "lead_braking"
+map_name = "Town03"
+notes = "Lead hard brake shorter headway"
+
+[scenarios.lead_brake_hard.route]
+identity = "town03_lead_brake_hard"
+target_speed_mps = 8.0
+waypoints = [
+  [-22.898516, 193.588196, 0.500000],
+  [-46.509727, 193.272812, 0.500000],
+  [-63.536228, 184.585449, 0.500000],
+  [-73.358086, 167.010941, 0.500000],
+  [-74.645027, 144.279984, 0.500000]
+]
+
+[scenarios.lead_brake_hard.seeds.seed_a.ego]
+name = "ego"
+role = "ego"
+blueprint = "vehicle.tesla.model3"
+spawn_order = 0
+bounding_box_extent_m = [2.3, 1.0, 0.75]
+
+[scenarios.lead_brake_hard.seeds.seed_a.ego.transform]
+x = -22.898516
+y = 193.588196
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = 179.857025
+
+[scenarios.lead_brake_hard.seeds.seed_a.ego.initial_velocity]
+vx = -7.999975
+vy = 0.019963
+vz = 0.000000
+
+[scenarios.lead_brake_hard.seeds.seed_a.ego.script]
+script_type = "hold"
+
+[[scenarios.lead_brake_hard.seeds.seed_a.actors]]
+name = "lead"
+role = "npc"
+blueprint = "vehicle.lincoln.mkz_2017"
+spawn_order = 1
+bounding_box_extent_m = [2.2, 1.0, 0.75]
+
+[scenarios.lead_brake_hard.seeds.seed_a.actors.transform]
+x = -34.898476
+y = 193.618134
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -180.142944
+
+[scenarios.lead_brake_hard.seeds.seed_a.actors.initial_velocity]
+vx = -7.499977
+vy = 0.018711
+vz = 0.000000
+
+[scenarios.lead_brake_hard.seeds.seed_a.actors.script]
+script_type = "piecewise_vehicle_control"
+
+[[scenarios.lead_brake_hard.seeds.seed_a.actors.script.knots]]
+t_s = 0.00
+throttle = 0.30
+brake = 0.00
+steer = 0.00
+
+[[scenarios.lead_brake_hard.seeds.seed_a.actors.script.knots]]
+t_s = 0.40
+throttle = 0.00
+brake = 0.70
+steer = 0.00
+
+[[scenarios.lead_brake_hard.seeds.seed_a.actors.script.knots]]
+t_s = 2.50
+throttle = 0.00
+brake = 0.50
+steer = 0.00
+
+[scenarios.lead_brake_hard.seeds.seed_b.ego]
+name = "ego"
+role = "ego"
+blueprint = "vehicle.tesla.model3"
+spawn_order = 0
+bounding_box_extent_m = [2.3, 1.0, 0.75]
+
+[scenarios.lead_brake_hard.seeds.seed_b.ego.transform]
+x = -22.898516
+y = 193.588196
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = 179.857025
+
+[scenarios.lead_brake_hard.seeds.seed_b.ego.initial_velocity]
+vx = -7.999975
+vy = 0.019963
+vz = 0.000000
+
+[scenarios.lead_brake_hard.seeds.seed_b.ego.script]
+script_type = "hold"
+
+[[scenarios.lead_brake_hard.seeds.seed_b.actors]]
+name = "lead"
+role = "npc"
+blueprint = "vehicle.lincoln.mkz_2017"
+spawn_order = 1
+bounding_box_extent_m = [2.2, 1.0, 0.75]
+
+[scenarios.lead_brake_hard.seeds.seed_b.actors.transform]
+x = -32.898483
+y = 193.613144
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = 179.857025
+
+[scenarios.lead_brake_hard.seeds.seed_b.actors.initial_velocity]
+vx = -7.499977
+vy = 0.018715
+vz = 0.000000
+
+[scenarios.lead_brake_hard.seeds.seed_b.actors.script]
+script_type = "piecewise_vehicle_control"
+
+[[scenarios.lead_brake_hard.seeds.seed_b.actors.script.knots]]
+t_s = 0.00
+throttle = 0.30
+brake = 0.00
+steer = 0.00
+
+[[scenarios.lead_brake_hard.seeds.seed_b.actors.script.knots]]
+t_s = 0.30
+throttle = 0.00
+brake = 0.80
+steer = 0.00
+
+[[scenarios.lead_brake_hard.seeds.seed_b.actors.script.knots]]
+t_s = 2.50
+throttle = 0.00
+brake = 0.55
+steer = 0.00
+
+[scenarios.cut_in_early]
+family = "cut_in"
+map_name = "Town03"
+notes = "Adjacent lane merge early"
+
+[scenarios.cut_in_early.route]
+identity = "town03_cut_in_early"
+target_speed_mps = 8.0
+waypoints = [
+  [241.093887, 42.230099, 0.500000],
+  [241.701721, 17.237488, 0.500000],
+  [242.309570, -7.755121, 0.500000],
+  [242.917419, -32.747726, 0.500000],
+  [243.525253, -57.740334, 0.500000]
+]
+
+[scenarios.cut_in_early.seeds.seed_a.ego]
+name = "ego"
+role = "ego"
+blueprint = "vehicle.tesla.model3"
+spawn_order = 0
+bounding_box_extent_m = [2.3, 1.0, 0.75]
+
+[scenarios.cut_in_early.seeds.seed_a.ego.transform]
+x = 241.093887
+y = 42.230099
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -88.606750
+
+[scenarios.cut_in_early.seeds.seed_a.ego.initial_velocity]
+vx = 0.194515
+vy = -7.997635
+vz = 0.000000
+
+[scenarios.cut_in_early.seeds.seed_a.ego.script]
+script_type = "hold"
+
+[[scenarios.cut_in_early.seeds.seed_a.actors]]
+name = "cutter"
+role = "npc"
+blueprint = "vehicle.toyota.prius"
+spawn_order = 1
+bounding_box_extent_m = [2.2, 1.0, 0.75]
+
+[scenarios.cut_in_early.seeds.seed_a.actors.transform]
+x = 244.884613
+y = 30.318745
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = 271.393188
+
+[scenarios.cut_in_early.seeds.seed_a.actors.initial_velocity]
+vx = 0.182350
+vy = -7.497783
+vz = 0.000000
+
+[scenarios.cut_in_early.seeds.seed_a.actors.script]
+script_type = "piecewise_vehicle_control"
+
+[[scenarios.cut_in_early.seeds.seed_a.actors.script.knots]]
+t_s = 0.00
+throttle = 0.40
+brake = 0.00
+steer = -0.15
+
+[[scenarios.cut_in_early.seeds.seed_a.actors.script.knots]]
+t_s = 0.70
+throttle = 0.35
+brake = 0.00
+steer = 0.00
+
+[[scenarios.cut_in_early.seeds.seed_a.actors.script.knots]]
+t_s = 2.50
+throttle = 0.30
+brake = 0.00
+steer = 0.00
+
+[scenarios.cut_in_early.seeds.seed_b.ego]
+name = "ego"
+role = "ego"
+blueprint = "vehicle.tesla.model3"
+spawn_order = 0
+bounding_box_extent_m = [2.3, 1.0, 0.75]
+
+[scenarios.cut_in_early.seeds.seed_b.ego.transform]
+x = 241.093887
+y = 42.230099
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -88.606750
+
+[scenarios.cut_in_early.seeds.seed_b.ego.initial_velocity]
+vx = 0.194515
+vy = -7.997635
+vz = 0.000000
+
+[scenarios.cut_in_early.seeds.seed_b.ego.script]
+script_type = "hold"
+
+[[scenarios.cut_in_early.seeds.seed_b.actors]]
+name = "cutter"
+role = "npc"
+blueprint = "vehicle.toyota.prius"
+spawn_order = 1
+bounding_box_extent_m = [2.2, 1.0, 0.75]
+
+[scenarios.cut_in_early.seeds.seed_b.actors.transform]
+x = 244.835999
+y = 32.318153
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = 271.393188
+
+[scenarios.cut_in_early.seeds.seed_b.actors.initial_velocity]
+vx = 0.182350
+vy = -7.497783
+vz = 0.000000
+
+[scenarios.cut_in_early.seeds.seed_b.actors.script]
+script_type = "piecewise_vehicle_control"
+
+[[scenarios.cut_in_early.seeds.seed_b.actors.script.knots]]
+t_s = 0.00
+throttle = 0.42
+brake = 0.00
+steer = -0.18
+
+[[scenarios.cut_in_early.seeds.seed_b.actors.script.knots]]
+t_s = 0.55
+throttle = 0.35
+brake = 0.00
+steer = 0.00
+
+[[scenarios.cut_in_early.seeds.seed_b.actors.script.knots]]
+t_s = 2.50
+throttle = 0.30
+brake = 0.00
+steer = 0.00
+
+[scenarios.cut_in_late]
+family = "cut_in"
+map_name = "Town03"
+notes = "Later merge narrower window"
+
+[scenarios.cut_in_late.route]
+identity = "town03_cut_in_late"
+target_speed_mps = 8.0
+waypoints = [
+  [241.823288, 12.238968, 0.500000],
+  [242.431137, -12.753642, 0.500000],
+  [243.038986, -37.746246, 0.500000],
+  [243.646820, -62.738853, 0.500000],
+  [244.254669, -87.731468, 0.500000]
+]
+
+[scenarios.cut_in_late.seeds.seed_a.ego]
+name = "ego"
+role = "ego"
+blueprint = "vehicle.tesla.model3"
+spawn_order = 0
+bounding_box_extent_m = [2.3, 1.0, 0.75]
+
+[scenarios.cut_in_late.seeds.seed_a.ego.transform]
+x = 241.823288
+y = 12.238968
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -88.606750
+
+[scenarios.cut_in_late.seeds.seed_a.ego.initial_velocity]
+vx = 0.194515
+vy = -7.997635
+vz = 0.000000
+
+[scenarios.cut_in_late.seeds.seed_a.ego.script]
+script_type = "hold"
+
+[[scenarios.cut_in_late.seeds.seed_a.actors]]
+name = "cutter"
+role = "npc"
+blueprint = "vehicle.mini.cooper_s"
+spawn_order = 1
+bounding_box_extent_m = [2.2, 1.0, 0.75]
+
+[scenarios.cut_in_late.seeds.seed_a.actors.transform]
+x = 245.808533
+y = -7.670022
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -88.606750
+
+[scenarios.cut_in_late.seeds.seed_a.actors.initial_velocity]
+vx = 0.194515
+vy = -7.997635
+vz = 0.000000
+
+[scenarios.cut_in_late.seeds.seed_a.actors.script]
+script_type = "piecewise_vehicle_control"
+
+[[scenarios.cut_in_late.seeds.seed_a.actors.script.knots]]
+t_s = 0.00
+throttle = 0.40
+brake = 0.00
+steer = 0.00
+
+[[scenarios.cut_in_late.seeds.seed_a.actors.script.knots]]
+t_s = 1.20
+throttle = 0.35
+brake = 0.00
+steer = -0.20
+
+[[scenarios.cut_in_late.seeds.seed_a.actors.script.knots]]
+t_s = 1.80
+throttle = 0.35
+brake = 0.00
+steer = 0.00
+
+[[scenarios.cut_in_late.seeds.seed_a.actors.script.knots]]
+t_s = 2.50
+throttle = 0.30
+brake = 0.00
+steer = 0.00
+
+[scenarios.cut_in_late.seeds.seed_b.ego]
+name = "ego"
+role = "ego"
+blueprint = "vehicle.tesla.model3"
+spawn_order = 0
+bounding_box_extent_m = [2.3, 1.0, 0.75]
+
+[scenarios.cut_in_late.seeds.seed_b.ego.transform]
+x = 241.823288
+y = 12.238968
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -88.606750
+
+[scenarios.cut_in_late.seeds.seed_b.ego.initial_velocity]
+vx = 0.194515
+vy = -7.997635
+vz = 0.000000
+
+[scenarios.cut_in_late.seeds.seed_b.ego.script]
+script_type = "hold"
+
+[[scenarios.cut_in_late.seeds.seed_b.actors]]
+name = "cutter"
+role = "npc"
+blueprint = "vehicle.mini.cooper_s"
+spawn_order = 1
+bounding_box_extent_m = [2.2, 1.0, 0.75]
+
+[scenarios.cut_in_late.seeds.seed_b.actors.transform]
+x = 245.905792
+y = -11.668839
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -88.606750
+
+[scenarios.cut_in_late.seeds.seed_b.actors.initial_velocity]
+vx = 0.194515
+vy = -7.997635
+vz = 0.000000
+
+[scenarios.cut_in_late.seeds.seed_b.actors.script]
+script_type = "piecewise_vehicle_control"
+
+[[scenarios.cut_in_late.seeds.seed_b.actors.script.knots]]
+t_s = 0.00
+throttle = 0.40
+brake = 0.00
+steer = 0.00
+
+[[scenarios.cut_in_late.seeds.seed_b.actors.script.knots]]
+t_s = 1.40
+throttle = 0.35
+brake = 0.00
+steer = -0.22
+
+[[scenarios.cut_in_late.seeds.seed_b.actors.script.knots]]
+t_s = 2.00
+throttle = 0.35
+brake = 0.00
+steer = 0.00
+
+[[scenarios.cut_in_late.seeds.seed_b.actors.script.knots]]
+t_s = 2.50
+throttle = 0.30
+brake = 0.00
+steer = 0.00
+
+[scenarios.cross_vehicle_clear]
+family = "crossing"
+map_name = "Town03"
+notes = "Crossing with larger margin"
+
+[scenarios.cross_vehicle_clear.route]
+identity = "town03_cross_vehicle_clear"
+target_speed_mps = 8.0
+waypoints = [
+  [-91.582008, -3.899701, 0.498737],
+  [-115.760582, -3.212584, 0.500000],
+  [-141.127121, -2.873540, 0.500000],
+  [-149.018784, 20.210835, 0.500000],
+  [-149.031815, 45.210831, 0.500000]
+]
+
+[scenarios.cross_vehicle_clear.seeds.seed_a.ego]
+name = "ego"
+role = "ego"
+blueprint = "vehicle.tesla.model3"
+spawn_order = 0
+bounding_box_extent_m = [2.3, 1.0, 0.75]
+
+[scenarios.cross_vehicle_clear.seeds.seed_a.ego.transform]
+x = -91.582008
+y = -3.899701
+z = 0.498737
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = 156.899490
+
+[scenarios.cross_vehicle_clear.seeds.seed_a.ego.initial_velocity]
+vx = -6.438726
+vy = 2.746417
+vz = 0.000000
+
+[scenarios.cross_vehicle_clear.seeds.seed_a.ego.script]
+script_type = "hold"
+
+[[scenarios.cross_vehicle_clear.seeds.seed_a.actors]]
+name = "crosser"
+role = "npc"
+blueprint = "vehicle.nissan.patrol"
+spawn_order = 1
+bounding_box_extent_m = [2.2, 1.0, 0.75]
+
+[scenarios.cross_vehicle_clear.seeds.seed_a.actors.transform]
+x = -123.701874
+y = -3.253418
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -179.705383
+
+[scenarios.cross_vehicle_clear.seeds.seed_a.actors.initial_velocity]
+vx = -5.999921
+vy = -0.030852
+vz = 0.000000
+
+[scenarios.cross_vehicle_clear.seeds.seed_a.actors.script]
+script_type = "piecewise_vehicle_control"
+
+[[scenarios.cross_vehicle_clear.seeds.seed_a.actors.script.knots]]
+t_s = 0.00
+throttle = 0.35
+brake = 0.00
+steer = 0.00
+
+[[scenarios.cross_vehicle_clear.seeds.seed_a.actors.script.knots]]
+t_s = 2.50
+throttle = 0.35
+brake = 0.00
+steer = 0.00
+
+[scenarios.cross_vehicle_clear.seeds.seed_b.ego]
+name = "ego"
+role = "ego"
+blueprint = "vehicle.tesla.model3"
+spawn_order = 0
+bounding_box_extent_m = [2.3, 1.0, 0.75]
+
+[scenarios.cross_vehicle_clear.seeds.seed_b.ego.transform]
+x = -91.582008
+y = -3.899701
+z = 0.498737
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = 156.899490
+
+[scenarios.cross_vehicle_clear.seeds.seed_b.ego.initial_velocity]
+vx = -6.438726
+vy = 2.746417
+vz = 0.000000
+
+[scenarios.cross_vehicle_clear.seeds.seed_b.ego.script]
+script_type = "hold"
+
+[[scenarios.cross_vehicle_clear.seeds.seed_b.actors]]
+name = "crosser"
+role = "npc"
+blueprint = "vehicle.nissan.patrol"
+spawn_order = 1
+bounding_box_extent_m = [2.2, 1.0, 0.75]
+
+[scenarios.cross_vehicle_clear.seeds.seed_b.actors.transform]
+x = -115.701981
+y = -3.212283
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -179.705383
+
+[scenarios.cross_vehicle_clear.seeds.seed_b.actors.initial_velocity]
+vx = -5.999921
+vy = -0.030852
+vz = 0.000000
+
+[scenarios.cross_vehicle_clear.seeds.seed_b.actors.script]
+script_type = "piecewise_vehicle_control"
+
+[[scenarios.cross_vehicle_clear.seeds.seed_b.actors.script.knots]]
+t_s = 0.00
+throttle = 0.38
+brake = 0.00
+steer = 0.00
+
+[[scenarios.cross_vehicle_clear.seeds.seed_b.actors.script.knots]]
+t_s = 2.50
+throttle = 0.38
+brake = 0.00
+steer = 0.00
+
+[scenarios.cross_vehicle_tight]
+family = "crossing"
+map_name = "Town03"
+notes = "Tight crossing timing"
+
+[scenarios.cross_vehicle_tight.route]
+identity = "town03_cross_vehicle_tight"
+target_speed_mps = 8.0
+waypoints = [
+  [-105.760712, -3.161166, 0.500000],
+  [-130.760376, -3.289712, 0.500000],
+  [-149.013580, 10.210836, 0.500000],
+  [-149.026596, 35.210835, 0.500000],
+  [-149.039627, 60.210827, 0.500000]
+]
+
+[scenarios.cross_vehicle_tight.seeds.seed_a.ego]
+name = "ego"
+role = "ego"
+blueprint = "vehicle.tesla.model3"
+spawn_order = 0
+bounding_box_extent_m = [2.3, 1.0, 0.75]
+
+[scenarios.cross_vehicle_tight.seeds.seed_a.ego.transform]
+x = -105.760712
+y = -3.161166
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -179.705383
+
+[scenarios.cross_vehicle_tight.seeds.seed_a.ego.initial_velocity]
+vx = -6.999907
+vy = -0.035994
+vz = 0.000000
+
+[scenarios.cross_vehicle_tight.seeds.seed_a.ego.script]
+script_type = "hold"
+
+[[scenarios.cross_vehicle_tight.seeds.seed_a.actors]]
+name = "crosser"
+role = "npc"
+blueprint = "vehicle.chevrolet.impala"
+spawn_order = 1
+bounding_box_extent_m = [2.2, 1.0, 0.75]
+
+[scenarios.cross_vehicle_tight.seeds.seed_a.actors.transform]
+x = -120.701912
+y = -3.237993
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -179.705383
+
+[scenarios.cross_vehicle_tight.seeds.seed_a.actors.initial_velocity]
+vx = -7.999894
+vy = -0.041136
+vz = 0.000000
+
+[scenarios.cross_vehicle_tight.seeds.seed_a.actors.script]
+script_type = "piecewise_vehicle_control"
+
+[[scenarios.cross_vehicle_tight.seeds.seed_a.actors.script.knots]]
+t_s = 0.00
+throttle = 0.45
+brake = 0.00
+steer = 0.00
+
+[[scenarios.cross_vehicle_tight.seeds.seed_a.actors.script.knots]]
+t_s = 2.50
+throttle = 0.45
+brake = 0.00
+steer = 0.00
+
+[scenarios.cross_vehicle_tight.seeds.seed_b.ego]
+name = "ego"
+role = "ego"
+blueprint = "vehicle.tesla.model3"
+spawn_order = 0
+bounding_box_extent_m = [2.3, 1.0, 0.75]
+
+[scenarios.cross_vehicle_tight.seeds.seed_b.ego.transform]
+x = -105.760712
+y = -3.161166
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -179.705383
+
+[scenarios.cross_vehicle_tight.seeds.seed_b.ego.initial_velocity]
+vx = -6.999907
+vy = -0.035994
+vz = 0.000000
+
+[scenarios.cross_vehicle_tight.seeds.seed_b.ego.script]
+script_type = "hold"
+
+[[scenarios.cross_vehicle_tight.seeds.seed_b.actors]]
+name = "crosser"
+role = "npc"
+blueprint = "vehicle.chevrolet.impala"
+spawn_order = 1
+bounding_box_extent_m = [2.2, 1.0, 0.75]
+
+[scenarios.cross_vehicle_tight.seeds.seed_b.actors.transform]
+x = -122.701889
+y = -3.248276
+z = 0.500000
+roll_deg = 0.000000
+pitch_deg = 0.000000
+yaw_deg = -179.705383
+
+[scenarios.cross_vehicle_tight.seeds.seed_b.actors.initial_velocity]
+vx = -8.499888
+vy = -0.043707
+vz = 0.000000
+
+[scenarios.cross_vehicle_tight.seeds.seed_b.actors.script]
+script_type = "piecewise_vehicle_control"
+
+[[scenarios.cross_vehicle_tight.seeds.seed_b.actors.script.knots]]
+t_s = 0.00
+throttle = 0.48
+brake = 0.00
+steer = 0.00
+
+[[scenarios.cross_vehicle_tight.seeds.seed_b.actors.script.knots]]
+t_s = 2.50
+throttle = 0.48
+brake = 0.00
+steer = 0.00

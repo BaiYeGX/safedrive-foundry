@@ -32,8 +32,9 @@ archive/2026-07-23-repository-consolidation/
 | G1 classic/runtime | `COMPLETED_WITH_LIMITS` | 背景能力 |
 | G2 Safety offline | `COMPLETED_WITH_LIMITS` | optional engineering foundation |
 | G3 K1 pure VLA | `MEASURED_WITH_LIMITS` | 原始 run 已归档 |
-| G3 real K2 | `REPAIR_REQUIRED` | 当前任务 |
-| G4/G5 | `PENDING` | 无新 Evidence |
+| G3 real K2 / R1 | `COMPLETED_WITH_LIMITS` | 最新复验在 `docs/runtime-evidence/r1-real-k2-guard-fix2-2026-07-24/` |
+| R2/G4A | **`COMPLETED_WITH_LIMITS`** | `docs/runtime-evidence/r2-g4a-paired-pilot/`；11/12 comparable；pilot `NO_SELECTION_SPACE`；repeat 2/2 一致 |
+| World/G5 | `PENDING` | 无新 Evidence；**不得**因 R2 关闭自动启动 |
 
 ## 3. 新证据规则
 

@@ -35,7 +35,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import carla  # noqa: E402
 
 from driving_vla.adapter.policy_adapter import ObservationBundle  # noqa: E402
-from driving_vla.model.neural_policy import NeuralV0Policy  # noqa: E402
+from driving_vla.model.neural_policy import (  # noqa: E402
+    NeuralV0Policy,
+    NeuralV1Policy,
+    NeuralV2Policy,
+)
 from driving_vla.model.simlingo_contract import (  # noqa: E402
     SimLingoContractConfig,
     carla_bgra_to_bgr,
@@ -48,6 +52,13 @@ from driving_vla.model.simlingo_runtime import (  # noqa: E402
     SIMLINGO_CAMERA_NATIVE_SIZE,
     SIMLINGO_CAMERA_XYZ,
     SimLingoNeuralRuntime,
+)
+from driving_vla.runtime.k2_execution import (  # noqa: E402
+    K2SelectionError,
+    apply_k2_to_executors,
+    select_k2,
+    select_k2_spatial,
+    selection_event_fields,
 )
 from driving_vla.runtime.path_manager import (  # noqa: E402
     EgoPose,
@@ -1179,6 +1190,43 @@ def main() -> int:
     )
     parser.add_argument("--steer-sign", type=float, choices=(-1.0, 1.0), default=1.0)
     parser.add_argument("--seed", type=int, default=None, help="RNG seed for --map random")
+    parser.add_argument(
+        "--vla-version",
+        choices=("v0", "v1", "v2"),
+        default="v0",
+        help=(
+            "VLA policy version: v0 = K1; v1 = longitudinal K2; "
+            "v2 = learned Spatial K2 development endurance."
+        ),
+    )
+    parser.add_argument(
+        "--force-candidate-index",
+        type=int,
+        choices=(0, 1),
+        default=None,
+        help="K2 only: force candidate 0/1. Default: bundle top1.",
+    )
+    parser.add_argument(
+        "--spatial-head-checkpoint",
+        default="",
+        help="Required with --vla-version v2.",
+    )
+    parser.add_argument(
+        "--spatial-checkpoint-use",
+        choices=("development_live_smoke", "x5h_acceptance"),
+        default="development_live_smoke",
+        help="Spatial head checkpoint contract use (default: development smoke).",
+    )
+    parser.add_argument(
+        "--allow-v2-nominal-degraded-fallback",
+        action="store_true",
+        default=False,
+        help=(
+            "Development endurance only: when forced candidate 0 and the sole "
+            "Guard failure is defensive spatial collapse, execute the hash-checked "
+            "nominal candidate and record degraded_nominal_only."
+        ),
+    )
     parser.add_argument("--full-duration", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--debug-draw",
@@ -1271,6 +1319,17 @@ def main() -> int:
         parser.error("camera and server resolutions must be positive")
     if args.force_cold_start and args.no_map_restart:
         parser.error("--force-cold-start conflicts with --no-map-restart")
+    if args.force_candidate_index is not None and args.vla_version not in {"v1", "v2"}:
+        parser.error("--force-candidate-index requires --vla-version v1 or v2")
+    if args.vla_version == "v2" and not args.spatial_head_checkpoint:
+        parser.error("--vla-version v2 requires --spatial-head-checkpoint")
+    if args.allow_v2_nominal_degraded_fallback and not (
+        args.vla_version == "v2" and args.force_candidate_index == 0
+    ):
+        parser.error(
+            "--allow-v2-nominal-degraded-fallback requires "
+            "--vla-version v2 --force-candidate-index 0"
+        )
     evidence_dir = Path(args.evidence_dir)
     evidence_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1324,6 +1383,26 @@ def main() -> int:
         "startup_timeout_s": float(args.startup_timeout_s),
         "no_map_restart": bool(args.no_map_restart),
         "force_cold_start": bool(args.force_cold_start),
+        "vla_version": str(args.vla_version),
+        "force_candidate_index": args.force_candidate_index,
+        "spatial_head_checkpoint": (
+            str(Path(args.spatial_head_checkpoint))
+            if args.spatial_head_checkpoint
+            else None
+        ),
+        "spatial_checkpoint_use": str(args.spatial_checkpoint_use),
+        "allow_v2_nominal_degraded_fallback": bool(
+            args.allow_v2_nominal_degraded_fallback
+        ),
+        "branch_type": (
+            "longitudinal_temporal"
+            if str(args.vla_version) == "v1"
+            else (
+                "learned_spatial_semantic"
+                if str(args.vla_version) == "v2"
+                else "k1_single"
+            )
+        ),
         "wall_start_s": time.time(),
     }
     # Actual prompt contract (official target_point uses command_text=None at runtime).
@@ -1638,7 +1717,20 @@ def main() -> int:
             load = runtime.load()
             if not load.ok:
                 raise RuntimeError(f"SimLingo load failed: {load.error}")
-            policy = NeuralV0Policy(runtime=runtime, keep_on_gpu=True)
+            if str(args.vla_version) == "v1":
+                policy = NeuralV1Policy(runtime=runtime, keep_on_gpu=True)
+            elif str(args.vla_version) == "v2":
+                policy = NeuralV2Policy(
+                    runtime=runtime,
+                    spatial_head_checkpoint=str(args.spatial_head_checkpoint),
+                    keep_on_gpu=True,
+                    lazy=True,
+                    require_driving_feature=True,
+                    device="cuda",
+                    checkpoint_use=str(args.spatial_checkpoint_use),
+                )
+            else:
+                policy = NeuralV0Policy(runtime=runtime, keep_on_gpu=True)
             policy.ensure_loaded()
         cuda_alloc_mb = (
             float(torch.cuda.memory_allocated() / 1024**2) if torch is not None else 0.0
@@ -1910,8 +2002,417 @@ def main() -> int:
                         live_state["forward_start_sim_s"] = forward_sim_start
                         live_state["forward_start_wall_s"] = forward_wall_start
                         infer_start = time.perf_counter()
-                        native = policy.predict_native(obs)
-                        latency_ms = (time.perf_counter() - infer_start) * 1000.0
+                        k2_event_fields: dict[str, Any] = {}
+                        frame_id_str = f"carla-{camera_frame}"
+                        if str(args.vla_version) in {"v1", "v2"}:
+                            # K2: one forward → guarded bundle → force/top1 → same executors.
+                            bundle = policy.predict_bundle(obs)
+                            latency_ms = (time.perf_counter() - infer_start) * 1000.0
+                            sel_mode = (
+                                "force"
+                                if args.force_candidate_index is not None
+                                else "top1"
+                            )
+                            if str(args.vla_version) == "v2":
+                                assert isinstance(policy, NeuralV2Policy)
+                                degraded_nominal_only = False
+                                try:
+                                    selection = select_k2_spatial(
+                                        bundle,
+                                        mode=sel_mode,  # type: ignore[arg-type]
+                                        force_index=args.force_candidate_index,
+                                    )
+                                except K2SelectionError:
+                                    reasons = set(bundle.guard_reasons)
+                                    allow_nominal = bool(
+                                        args.allow_v2_nominal_degraded_fallback
+                                        and args.force_candidate_index == 0
+                                        and reasons
+                                        and reasons <= {"SPATIAL_COLLAPSE_ELIGIBLE"}
+                                    )
+                                    if not allow_nominal:
+                                        committed_hold = path_manager.committed
+                                        if (
+                                            args.inference_mode != "full"
+                                            or committed_hold is None
+                                            or tracker is None
+                                        ):
+                                            raise
+                                        # Rolling fail-closed behavior: never apply
+                                        # the rejected bundle. Track only the last
+                                        # previously accepted committed path and retry
+                                        # at the next VLA period. Existing stale-path
+                                        # limits stop the vehicle after 5 s without a
+                                        # valid refresh.
+                                        latency_ms = (
+                                            time.perf_counter() - infer_start
+                                        ) * 1000.0
+                                        reason_key = "v2_guard_hold_last:" + ",".join(
+                                            sorted(reasons)
+                                        )
+                                        reject_reasons[reason_key] += 1
+                                        inference_ms.append(latency_ms)
+                                        peak_vram_values.append(
+                                            float(policy.last_peak_vram_mb)
+                                        )
+                                        print(
+                                            f"VLA v2 Guard reject: hold_last "
+                                            f"reasons={sorted(reasons)} "
+                                            f"infer={latency_ms:.0f}ms",
+                                            flush=True,
+                                        )
+                                        command = tracker.step(
+                                            committed_hold,
+                                            pose,
+                                            measured_steer_rad=(
+                                                previous_steer_norm
+                                                * max_steer_rad
+                                                * float(args.steer_sign)
+                                            ),
+                                            now_s=sim_s,
+                                        )
+                                        solver_modes[command.mode] += 1
+                                        solver_statuses[command.solver_status] += 1
+                                        steer_norm = float(
+                                            np.clip(
+                                                float(args.steer_sign)
+                                                * command.steer_rad
+                                                / max(max_steer_rad, 1e-6),
+                                                -1.0,
+                                                1.0,
+                                            )
+                                        )
+                                        throttle = float(
+                                            np.clip(command.accel_mps2 / 2.5, 0.0, 1.0)
+                                        )
+                                        brake = float(
+                                            np.clip(-command.accel_mps2 / 3.0, 0.0, 1.0)
+                                        )
+                                        ego.apply_control(
+                                            carla.VehicleControl(
+                                                steer=steer_norm,
+                                                throttle=throttle,
+                                                brake=brake,
+                                            )
+                                        )
+                                        previous_steer_norm = steer_norm
+                                        steer_values.append(steer_norm)
+                                        cte_values.append(abs(command.lateral_error_m))
+                                        target_speed_values.append(command.target_speed_mps)
+                                        path_age_values.append(command.path_age_s)
+                                        control_seq_full.append(
+                                            {
+                                                "sim_s": sim_s,
+                                                "throttle": throttle,
+                                                "brake": brake,
+                                                "steer": steer_norm,
+                                                "ego_speed_mps": pose.speed_mps,
+                                                "mpc_mode": str(command.mode),
+                                                "solver_status": str(
+                                                    command.solver_status
+                                                ),
+                                                "solver_ms": float(command.solver_ms),
+                                                "path_age_s": float(command.path_age_s),
+                                                "guard_reject_hold_last": True,
+                                                "guard_reasons": sorted(reasons),
+                                            }
+                                        )
+                                        events.append(
+                                            {
+                                                "sim_s": sim_s,
+                                                "camera_frame": camera_frame,
+                                                "latency_ms": latency_ms,
+                                                "vla_version": "v2",
+                                                "accepted": False,
+                                                "reason": reason_key,
+                                                "guard_status": bundle.guard_status,
+                                                "guard_reasons": sorted(reasons),
+                                                "hold_last_committed": True,
+                                                "committed_source_id": str(
+                                                    getattr(
+                                                        committed_hold,
+                                                        "source_id",
+                                                        "",
+                                                    )
+                                                    or ""
+                                                ),
+                                            }
+                                        )
+                                        next_inference_sim_s = (
+                                            sim_s + float(args.vla_period_s)
+                                        )
+                                        world.tick()
+                                        if steps % spectator_period_steps == 0:
+                                            set_spectator_follow(
+                                                world,
+                                                ego,
+                                                last_good=spectator_state,
+                                            )
+                                        steps += 1
+                                        continue
+                                    selection = select_k2_spatial(
+                                        bundle,
+                                        mode="force",
+                                        force_index=0,
+                                        require_guard_ok=False,
+                                    )
+                                    degraded_nominal_only = True
+                                    print(
+                                        "VLA v2 defensive collapse: "
+                                        "degraded_nominal_only (candidate 0 hash-checked)",
+                                        flush=True,
+                                    )
+                            else:
+                                assert isinstance(policy, NeuralV1Policy)
+                                degraded_nominal_only = False
+                                selection = select_k2(
+                                    bundle,
+                                    mode=sel_mode,  # type: ignore[arg-type]
+                                    force_index=args.force_candidate_index,
+                                )
+                            nav1_map = tuple(nav_full.target_map_1)
+                            nav2_map = tuple(nav_full.target_map_2)
+                            applied = apply_k2_to_executors(
+                                selection,
+                                speed_planner=speed_planner,
+                                path_manager=path_manager,
+                                ego=pose,
+                                stamp_s=sim_s,
+                                frame_id=frame_id_str,
+                                dt_s=max(
+                                    float(args.sim_dt),
+                                    sim_s - last_speed_update_sim_s,
+                                ),
+                                ego_speed_mps=pose.speed_mps,
+                                nav_target_map_xy=nav1_map,
+                            )
+                            last_speed_update_sim_s = sim_s
+                            speed = applied.speed_decision
+                            update = applied.path_update
+                            # Native-shaped view for shared evidence fields
+                            native = type("NativeView", (), {})()
+                            native.path_map_xy = selection.execution_spec.spatial_path_xy
+                            native.speed_mps = selection.execution_spec.speed_samples_mps
+                            native.peak_vram_mb = float(policy.last_peak_vram_mb)
+                            native.latency_s = float(policy.last_latency_s)
+                            native.route_ego_xy = ()
+                            native.speed_wps_ego_xy = ()
+                            # Prefer resolved targets from obs meta (same as V0 path)
+                            t1 = (obs.meta or {}).get("resolved_target_ego_1") or (
+                                obs.meta or {}
+                            ).get("target_ego_1") or (0.0, 0.0)
+                            t2 = (obs.meta or {}).get("resolved_target_ego_2") or (
+                                obs.meta or {}
+                            ).get("target_ego_2") or (0.0, 0.0)
+                            native.target_ego_1 = (float(t1[0]), float(t1[1]))
+                            native.target_ego_2 = (float(t2[0]), float(t2[1]))
+                            if str(args.vla_version) == "v2":
+                                k2_event_fields = {
+                                    "generated_candidate_ids": list(bundle.candidate_ids()),
+                                    "top1_index": int(bundle.top1_index),
+                                    "selected_candidate_id": selection.candidate_id,
+                                    "selected_candidate_index": selection.candidate_index,
+                                    "selection_mode": selection.mode,
+                                    "native_path_hash": bundle.native_path_hash,
+                                    "timed_trajectory_hash": (
+                                        selection.execution_spec.timed_trajectory_hash
+                                    ),
+                                    "branch_type": bundle.branch_type,
+                                    "guard_status": bundle.guard_status,
+                                    "guard_reasons": list(bundle.guard_reasons),
+                                    "probability_source": bundle.probability_source,
+                                    "config_hash": bundle.config_hash,
+                                    "candidate_available": bool(
+                                        bundle.candidates[selection.candidate_index].available
+                                    ),
+                                    "degraded_nominal_only": bool(
+                                        degraded_nominal_only
+                                    ),
+                                }
+                            else:
+                                k2_event_fields = dict(
+                                    selection_event_fields(selection)
+                                )
+                            k2_event_fields["executed_candidate_id"] = (
+                                applied.executed_candidate_id
+                            )
+                            k2_event_fields["path_source_id"] = applied.source_id
+                            k2_event_fields["forward_count"] = int(
+                                policy.last_forward_count
+                            )
+                            requery_decision = StationaryRequeryDecision(False, "disabled_v1")
+                        else:
+                            assert hasattr(policy, "predict_native")
+                            native = policy.predict_native(obs)
+                            latency_ms = (time.perf_counter() - infer_start) * 1000.0
+                            speed = speed_planner.update(
+                                native.speed_mps,
+                                dt_s=max(
+                                    float(args.sim_dt), sim_s - last_speed_update_sim_s
+                                ),
+                                ego_speed_mps=pose.speed_mps,
+                            )
+                            last_speed_update_sim_s = sim_s
+                            # Coarse nav targets in map frame (for reanchor reverse veto).
+                            nav1_map = tuple(nav_full.target_map_1)
+                            nav2_map = tuple(nav_full.target_map_2)
+                            pre_reanchor_committed = (
+                                _path_xy_as_lists(path_manager.committed)
+                                if path_manager.committed is not None
+                                else None
+                            )
+                            pre_path_age = (
+                                max(0.0, sim_s - float(path_manager.committed.stamp_s))
+                                if path_manager.committed is not None
+                                else None
+                            )
+                            path_nav_aligned = True
+                            if path_manager.committed is not None:
+                                try:
+                                    path_nav_aligned = path_manager._nav_alignment_ok(  # noqa: SLF001
+                                        path_manager.committed, pose, nav1_map
+                                    )
+                                except Exception:
+                                    path_nav_aligned = True
+
+                            # --- optional stationary re-query (default OFF; v0 only) ---
+                            if (
+                                speed.stop_requested
+                                and pose.speed_mps <= requery_cfg.max_ego_speed_mps
+                            ):
+                                consecutive_vla_stop_frames += 1
+                            else:
+                                consecutive_vla_stop_frames = 0
+                            if enable_stationary_requery:
+                                requery_decision = evaluate_stationary_requery(
+                                    ego_speed_mps=pose.speed_mps,
+                                    stop_requested=bool(speed.stop_requested),
+                                    consecutive_stop_frames=consecutive_vla_stop_frames,
+                                    has_collided=bool(has_collided),
+                                    navigation_valid=bool(navigation_valid),
+                                    path_nav_aligned=bool(path_nav_aligned),
+                                    already_active=False,
+                                    last_trigger_sim_s=last_requery_sim_s,
+                                    sim_s=sim_s,
+                                    config=requery_cfg,
+                                )
+                            else:
+                                requery_decision = StationaryRequeryDecision(
+                                    False, "disabled"
+                                )
+                            update = None
+                            if requery_decision.trigger and enable_stationary_requery:
+                                prev_speed_cmd = float(speed_planner.target_speed_mps)
+                                meta_rq = dict(meta)
+                                meta_rq.update(
+                                    {
+                                        "vla_input_speed_mps": float(
+                                            requery_decision.hint_speed_mps
+                                        ),
+                                        "stationary_requery": True,
+                                    }
+                                )
+                                obs_rq = ObservationBundle(
+                                    run_id="g3_vla_mpc_stable",
+                                    frame_id=f"carla-{camera_frame}-requery",
+                                    scenario_id="pure_vla_straight_arc",
+                                    simulation_time_s=sim_s,
+                                    wall_time_s=time.time(),
+                                    carla_frame=camera_frame,
+                                    ego_x=pose.x,
+                                    ego_y=pose.y,
+                                    ego_yaw=pose.yaw,
+                                    ego_v=pose.speed_mps,
+                                    route_xy=tuple(route_xy),
+                                    front_rgb=image,
+                                    meta=meta_rq,
+                                )
+                                rq_t0 = time.perf_counter()
+                                native_rq = policy.predict_native(obs_rq)
+                                rq_latency_ms = (time.perf_counter() - rq_t0) * 1000.0
+                                speed_rq = speed_planner.update(
+                                    native_rq.speed_mps,
+                                    dt_s=max(float(args.sim_dt), 1e-3),
+                                )
+                                path_ok_candidate = (
+                                    (not speed_rq.stop_requested)
+                                    and float(speed_rq.target_speed_mps) >= 0.35
+                                )
+                                update_rq = None
+                                if path_ok_candidate:
+                                    update_rq = path_manager.update(
+                                        native_rq.path_map_xy,
+                                        ego=pose,
+                                        target_speed_mps=speed_rq.target_speed_mps,
+                                        stamp_s=sim_s,
+                                        source_id=f"simlingo-requery-{camera_frame}",
+                                        nav_target_map_xy=nav1_map,
+                                    )
+                                ok_rq = bool(
+                                    update_rq is not None
+                                    and requery_success(
+                                        path_accepted=bool(update_rq.accepted),
+                                        stop_requested_after=bool(
+                                            speed_rq.stop_requested
+                                        ),
+                                        target_speed_after=float(
+                                            speed_rq.target_speed_mps
+                                        ),
+                                    )
+                                )
+                                last_requery_sim_s = sim_s
+                                stationary_requery_log.append(
+                                    {
+                                        "sim_s": sim_s,
+                                        "vla_n_before": len(events) + 1,
+                                        "reason": requery_decision.reason,
+                                        "hint_speed_mps": requery_decision.hint_speed_mps,
+                                        "resolved_vla_input_speed_mps": (
+                                            obs_rq.meta or {}
+                                        ).get("resolved_vla_input_speed_mps"),
+                                        "raw_speed_samples": [
+                                            float(v) for v in native_rq.speed_mps
+                                        ],
+                                        "vla_speed_raw_mps": speed_rq.raw_speed_mps,
+                                        "desired_speed_mps": speed_rq.target_speed_mps,
+                                        "stop_requested": speed_rq.stop_requested,
+                                        "path_accepted": (
+                                            None
+                                            if update_rq is None
+                                            else update_rq.accepted
+                                        ),
+                                        "path_reason": (
+                                            None if update_rq is None else update_rq.reason
+                                        ),
+                                        "success": ok_rq,
+                                        "latency_ms": rq_latency_ms,
+                                    }
+                                )
+                                if ok_rq and update_rq is not None:
+                                    native = native_rq
+                                    speed = speed_rq
+                                    update = update_rq
+                                    latency_ms += rq_latency_ms
+                                    consecutive_vla_stop_frames = 0
+                                else:
+                                    speed_planner.reset(target_speed_mps=prev_speed_cmd)
+                                    speed = type(speed)(
+                                        raw_speed_mps=speed.raw_speed_mps,
+                                        calibrated_speed_mps=speed.calibrated_speed_mps,
+                                        target_speed_mps=prev_speed_cmd,
+                                        stop_requested=speed.stop_requested,
+                                        valid=speed.valid,
+                                    )
+                            if update is None:
+                                update = path_manager.update(
+                                    native.path_map_xy,
+                                    ego=pose,
+                                    target_speed_mps=speed.target_speed_mps,
+                                    stamp_s=sim_s,
+                                    source_id=f"simlingo-{camera_frame}",
+                                    nav_target_map_xy=nav1_map,
+                                )
+
                         forward_wall_end = time.time()
                         hang_trace["forwards"].append(
                             {
@@ -1928,167 +2429,17 @@ def main() -> int:
                         live_state["last_successful_forward_seq"] = forward_seq
                         inference_ms.append(latency_ms)
                         peak_vram_values.append(float(native.peak_vram_mb))
-                        speed = speed_planner.update(
-                            native.speed_mps,
-                            dt_s=max(float(args.sim_dt), sim_s - last_speed_update_sim_s),
-                            ego_speed_mps=pose.speed_mps,
-                        )
-                        last_speed_update_sim_s = sim_s
-                        # Coarse nav targets in map frame (for reanchor reverse veto).
-                        nav1_map = tuple(nav_full.target_map_1)
-                        nav2_map = tuple(nav_full.target_map_2)
-                        pre_reanchor_committed = (
-                            _path_xy_as_lists(path_manager.committed)
-                            if path_manager.committed is not None
-                            else None
-                        )
-                        pre_path_age = (
-                            max(0.0, sim_s - float(path_manager.committed.stamp_s))
-                            if path_manager.committed is not None
-                            else None
-                        )
-                        path_nav_aligned = True
-                        if path_manager.committed is not None:
-                            try:
-                                path_nav_aligned = path_manager._nav_alignment_ok(  # noqa: SLF001
-                                    path_manager.committed, pose, nav1_map
-                                )
-                            except Exception:
-                                path_nav_aligned = True
-
-                        # --- optional stationary re-query (default OFF; explicit CLI only) ---
-                        if speed.stop_requested and pose.speed_mps <= requery_cfg.max_ego_speed_mps:
-                            consecutive_vla_stop_frames += 1
-                        else:
-                            consecutive_vla_stop_frames = 0
-                        if enable_stationary_requery:
-                            requery_decision = evaluate_stationary_requery(
-                                ego_speed_mps=pose.speed_mps,
-                                stop_requested=bool(speed.stop_requested),
-                                consecutive_stop_frames=consecutive_vla_stop_frames,
-                                has_collided=bool(has_collided),
-                                navigation_valid=bool(navigation_valid),
-                                path_nav_aligned=bool(path_nav_aligned),
-                                already_active=False,
-                                last_trigger_sim_s=last_requery_sim_s,
-                                sim_s=sim_s,
-                                config=requery_cfg,
+                        # v0 pre_reanchor only; v1 still records path age from committed
+                        if str(args.vla_version) in {"v1", "v2"}:
+                            pre_reanchor_committed = (
+                                _path_xy_as_lists(path_manager.committed)
+                                if path_manager.committed is not None
+                                else None
                             )
-                        else:
-                            requery_decision = StationaryRequeryDecision(
-                                False, "disabled"
-                            )
-                        update = None
-                        if requery_decision.trigger and enable_stationary_requery:
-                            prev_speed_cmd = float(speed_planner.target_speed_mps)
-                            # Preserve the exact official image/prompt contract.
-                            # The former minimal dict silently dropped image_layout
-                            # and official_contract, so a BGR frame could be decoded
-                            # as RGB when this optional path was enabled.
-                            meta_rq = dict(meta)
-                            meta_rq.update(
-                                {
-                                    "vla_input_speed_mps": float(
-                                        requery_decision.hint_speed_mps
-                                    ),
-                                    "stationary_requery": True,
-                                }
-                            )
-                            obs_rq = ObservationBundle(
-                                run_id="g3_vla_mpc_stable",
-                                frame_id=f"carla-{camera_frame}-requery",
-                                scenario_id="pure_vla_straight_arc",
-                                simulation_time_s=sim_s,
-                                wall_time_s=time.time(),
-                                carla_frame=camera_frame,
-                                ego_x=pose.x,
-                                ego_y=pose.y,
-                                ego_yaw=pose.yaw,
-                                ego_v=pose.speed_mps,
-                                route_xy=tuple(route_xy),
-                                front_rgb=image,
-                                meta=meta_rq,
-                            )
-                            rq_t0 = time.perf_counter()
-                            native_rq = policy.predict_native(obs_rq)
-                            rq_latency_ms = (time.perf_counter() - rq_t0) * 1000.0
-                            # Snapshot planner; restore unless requery fully succeeds.
-                            speed_rq = speed_planner.update(
-                                native_rq.speed_mps,
-                                dt_s=max(float(args.sim_dt), 1e-3),
-                            )
-                            path_ok_candidate = (
-                                (not speed_rq.stop_requested)
-                                and float(speed_rq.target_speed_mps) >= 0.35
-                            )
-                            update_rq = None
-                            if path_ok_candidate:
-                                update_rq = path_manager.update(
-                                    native_rq.path_map_xy,
-                                    ego=pose,
-                                    target_speed_mps=speed_rq.target_speed_mps,
-                                    stamp_s=sim_s,
-                                    source_id=f"simlingo-requery-{camera_frame}",
-                                    nav_target_map_xy=nav1_map,
-                                )
-                            ok_rq = bool(
-                                update_rq is not None
-                                and requery_success(
-                                    path_accepted=bool(update_rq.accepted),
-                                    stop_requested_after=bool(speed_rq.stop_requested),
-                                    target_speed_after=float(speed_rq.target_speed_mps),
-                                )
-                            )
-                            last_requery_sim_s = sim_s
-                            stationary_requery_log.append(
-                                {
-                                    "sim_s": sim_s,
-                                    "vla_n_before": len(events) + 1,
-                                    "reason": requery_decision.reason,
-                                    "hint_speed_mps": requery_decision.hint_speed_mps,
-                                    "resolved_vla_input_speed_mps": (obs_rq.meta or {}).get(
-                                        "resolved_vla_input_speed_mps"
-                                    ),
-                                    "raw_speed_samples": [float(v) for v in native_rq.speed_mps],
-                                    "vla_speed_raw_mps": speed_rq.raw_speed_mps,
-                                    "desired_speed_mps": speed_rq.target_speed_mps,
-                                    "stop_requested": speed_rq.stop_requested,
-                                    "path_accepted": (
-                                        None if update_rq is None else update_rq.accepted
-                                    ),
-                                    "path_reason": (
-                                        None if update_rq is None else update_rq.reason
-                                    ),
-                                    "success": ok_rq,
-                                    "latency_ms": rq_latency_ms,
-                                }
-                            )
-                            if ok_rq and update_rq is not None:
-                                native = native_rq
-                                speed = speed_rq
-                                update = update_rq
-                                latency_ms += rq_latency_ms
-                                inference_ms[-1] = latency_ms
-                                consecutive_vla_stop_frames = 0
-                            else:
-                                # Restore speed command; commit path was only written if
-                                # update_rq.accepted (requery_success requires that).
-                                speed_planner.reset(target_speed_mps=prev_speed_cmd)
-                                speed = type(speed)(
-                                    raw_speed_mps=speed.raw_speed_mps,
-                                    calibrated_speed_mps=speed.calibrated_speed_mps,
-                                    target_speed_mps=prev_speed_cmd,
-                                    stop_requested=speed.stop_requested,
-                                    valid=speed.valid,
-                                )
-                        if update is None:
-                            update = path_manager.update(
-                                native.path_map_xy,
-                                ego=pose,
-                                target_speed_mps=speed.target_speed_mps,
-                                stamp_s=sim_s,
-                                source_id=f"simlingo-{camera_frame}",
-                                nav_target_map_xy=nav1_map,
+                            pre_path_age = (
+                                max(0.0, sim_s - float(path_manager.committed.stamp_s))
+                                if path_manager.committed is not None
+                                else None
                             )
 
                         if update.accepted:
@@ -2149,6 +2500,7 @@ def main() -> int:
                             "camera_frame": camera_frame,
                             "latency_ms": latency_ms,
                             "peak_vram_mb": float(native.peak_vram_mb),
+                            "vla_version": str(args.vla_version),
                             "ego": {
                                 "x": pose.x,
                                 "y": pose.y,
@@ -2240,6 +2592,8 @@ def main() -> int:
                                 else None
                             ),
                         }
+                        if k2_event_fields:
+                            event.update(k2_event_fields)
                         events.append(event)
                         driving_trace.append(event)
                         if offroad_now and first_offroad_snapshot is None:
@@ -2350,8 +2704,9 @@ def main() -> int:
                                 world,
                                 update.raw,
                                 update.committed,
-                                # Life ≤ update period so frames do not stack (was +0.35s).
-                                life_s=max(0.05, float(args.vla_period_s) * 0.95),
+                                # Keep two refresh periods so the watchable overlay
+                                # never blinks between rolling VLA updates.
+                                life_s=max(0.10, float(args.vla_period_s) * 2.0),
                                 speed_wps_map_xy=speed_wps_map,
                             )
                         print(

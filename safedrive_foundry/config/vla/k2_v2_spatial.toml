@@ -1,0 +1,67 @@
+# R2-X Spatial / Semantic K2 V2 — frozen contract thresholds (pre-outcome).
+# Independent of k2_v1.toml longitudinal_temporal Guard V1.
+
+[meta]
+version = "k2_v2_spatial"
+schema_version = "safedrive.k2.spatial.v2"
+branch_type = "learned_spatial_semantic"
+description = "Nominal/defensive mode queries + Frenet residual dual candidates"
+
+[proposal]
+# A learned score ranks proposals; it never grants or revokes executability.
+# Candidate validity remains fail-closed through diversity + Guard + PM/MPC.
+availability_semantics = "executability_only_v1"
+learned_confidence_non_blocking = true
+# Candidate 0 is the exact SimLingo/native proposal.  Only candidate 1 carries
+# a learned spatial residual, so two modes cannot pass by drifting together.
+nominal_anchor_exact = true
+
+[contract]
+k = 2
+t_steps = 10
+dt_s = 0.25
+horizon_s = 2.5
+top1_index = 0
+candidate_ids = ["v2_nominal_progress", "v2_defensive_alternative"]
+mode_ids = ["nominal_progress", "defensive_alternative"]
+
+[frenet]
+max_lateral_residual_m = 1.0
+first_step_position_residual_m = 0.05
+near_field_horizon_s = 0.5
+near_field_max_inter_candidate_lat_m = 0.20
+ambiguity_min_spatial_sep_m = 0.50
+# ramp_pts = round(envelope_ramp_s / dt_s); need i=1 env ≤ near_field max (0.20)
+# with dt=0.25 → ramp_s≥1.25 so pts≥5
+envelope_ramp_s = 1.5
+max_delta_s_per_step_m = 3.0
+
+[dynamics]
+max_accel_mps2 = 2.5
+max_decel_mps2 = 3.0
+stop_threshold_mps = 0.35
+
+[guard]
+require_shared_backbone_forward_id = true
+reject_fixed_bias_lineage = true
+reject_noise_lineage = true
+native_corridor_cross_track_max_m = 1.25
+proposal_path_min_points = 2
+timed_to_proposal_xtrack_max_m = 0.15
+signed_progress_min_m = -1.0e-6
+position_integral_tol_m = 0.35
+# Gross spoof reject (not soft pass); frozen, not magic in code
+position_integral_gross_reject_m = 3.0
+yaw_recompute_tol_rad = 0.75
+kappa_recompute_tol = 1.5
+forward_ratio_min = 0.55
+
+[eligibility]
+min_nominal_speed_mps = 0.75
+min_final_progress_m = 1.5
+
+[path_manager_align]
+max_switch_lateral_5m = 1.0
+# Anomaly hard reject (spikes/fold-backs) — NOT vehicle trackable κ.
+# MPC bicycle bound ≈ tan(0.60)/2.70 ≈ 0.253 m⁻¹; soft PM default 0.20; Q90/local-max stricter.
+hard_max_abs_curvature = 1.0

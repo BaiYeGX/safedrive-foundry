@@ -231,6 +231,45 @@ class CodexP0IdentityTests(unittest.TestCase):
 
 
 class CodexP0DeadlineTests(unittest.TestCase):
+    def test_osqp_infeasible_does_not_fall_through_to_slow_slsqp(self) -> None:
+        """An OSQP infeasible result must retain its class and return promptly."""
+        from unittest.mock import patch
+
+        from safety_kernel.repair.types import SolverTrace
+
+        n = 2
+        problem = QPProblem(
+            P=np.eye(n),
+            q=np.zeros(n),
+            A=np.eye(n),
+            l=np.ones(n),
+            u=-np.ones(n),
+        )
+        infeasible = SolverTrace(
+            status=SolverStatus.INFEASIBLE,
+            iterations=25,
+            primal_residual=1.0,
+            dual_residual=0.0,
+            objective=float("inf"),
+            latency_ms=0.1,
+            warm_started=False,
+            backend="osqp",
+            message="primal infeasible",
+        )
+        solver = LongitudinalQPSolver(deadline_ms=30.0, prefer_osqp=True)
+        with (
+            patch.object(solver, "_solve_osqp", return_value=(None, infeasible)),
+            patch.object(
+                solver,
+                "_solve_scipy",
+                side_effect=AssertionError("infeasible QP must not reach SLSQP"),
+            ),
+        ):
+            x, trace = solver.solve(problem, warm_start=False)
+        self.assertIsNone(x)
+        self.assertEqual(trace.status, SolverStatus.INFEASIBLE)
+        self.assertEqual(trace.backend, "osqp")
+
     def test_qp_solver_nonpositive_deadline_timeout(self) -> None:
         """P0-3: deadline <= 0 → TIMEOUT, no solution vector."""
         n = 4

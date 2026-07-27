@@ -1,140 +1,86 @@
-# 当前唯一任务：G3-04R 真实 VLA K2
+# 当前任务：修复 Spatial R2-X 的真实选择空间
 
-**状态**：`CURRENT / REPAIR_REQUIRED`
-
-**停止点**：完成并验证真实 K2 后停止；不得自动启动 G4A。
-
-## 1. 目标
-
-把现有“接口存在但两候选坍塌、只改速度且运动学不一致”的 V1 K2 修成：
-
-- 同一 Observation 的 candidate 0/1；
-- `K=2/T=10/dt=0.25s/horizon=2.5s`；
-- 可执行、可区分、运动学一致；
-- 可分别强制进入同一 PathManager/MPC；
-- 概率、margin、collapse 和谱系可查询；
-- 不破坏现有 K1 pure VLA+MPC 基线。
-
-## 2. 启动读取
-
-只读取：
-
-1. `AGENTS.md`；
-2. `PROGRESS.md`；
-3. `docs/PROJECT.md` 第 2–4 节；
-4. `docs/VLA.md`；
-5. `docs/RESOURCES.md`；
-6. 与 V1 residual/K2/candidate adapter 直接相关的代码和测试。
-
-不读取 archive 作为需求，不启动 CARLA，除非离线 K2 已通过且任务确实需要 live smoke。
-
-## 3. 已知根因
-
-旧实现：
-
-1. `_apply_residual` 的 lateral bias 为 0；
-2. candidate 空间位置相同；
-3. 只改 speed，没有重新积分/时间参数化位置；
-4. `x/y/yaw/v/a/kappa` 不完全一致；
-5. 位置型 oracle 无法区分候选。
-
-## 4. 最短允许实现
-
-首版允许：
+**状态指针（2026-07-27）**：
 
 ```text
-k0 = upstream nominal
-k1 = conservative speed/time branch
+R2  = COMPLETED_WITH_LIMITS / NO_SELECTION_SPACE          # 纵向，只读
+R2X = COMPLETED_WITH_LIMITS
+      / NOMINAL_TOWN12_60S_PASS
+      / DEFENSIVE_AVAILABILITY_UNRELIABLE
+      / WORLD_DEVELOPMENT_ONLY
+      / WORLD_GATE_NOT_MET
+R3  = NOT_AUTHORIZED
 ```
 
-但必须沿路径重新时间参数化，使相同时刻的 `x/y/v/a` 真正不同，并重新计算一致的
-yaw/kappa。若只有纵向差异，必须在 manifest 明确写出，不能伪装空间双路径。
+## 本轮目标
 
-本任务不要求：
+修复造成 spatial candidate 1 全部 `NO_ALTERNATIVE` 的标签、模型和
+R2-K provenance 根因；不改写冻结的 v4 pilot，不靠降低 0.50 m 门或 runtime
+模板制造选择空间。
 
-- 空间双头或复杂 residual；
-- K4/3s；
-- VLA-V2 FAST/REASON；
-- LoRA；
-- World；
-- Safety live；
-- G4 场景基础设施。
+## 已完成
 
-若真实 conservative 分支不能在现有接口内成立，再停止并报告是否需要空间 residual，
-不得静默扩架构。
+| 项 | 当前事实 |
+|---|---|
+| R2-K provenance | 新 manifest 可绑定 spatial policy/head/config；失败行不再伪装成 V1 candidate |
+| Teacher Guard | defensive candidate 必须通过 exact Guard；Guard reject 不再 fail-open |
+| Teacher legal pool | 先逐候选执行 0.50 m/progress/comfort/direction/improvement 合同，再在合法集合内排序 |
+| Teacher identity | `safedrive.k2_spatial_teacher.v4` / `spatial_defensive_lattice_v4_legal_pool` |
+| v9 development | 74 条；train/val=52/22；available=29；subfloor available=0；episode leakage=false |
+| v9 head | Guard 8/8、eligible sep 7/8、availability recall 7/8；specificity 11/14，未过 0.80 |
+| proposal semantics | learned confidence 非阻塞；candidate validity 由 diversity + Guard + PM/MPC 决定 |
+| offline v3 | eligible proposal valid 7/8；eligible Guard 8/8；`head_status=OK` |
+| development live | 3/3 PASS；cut-in/crossing dual-force 2/3；所有 branch MPC solved、0 collision |
+| Guard diversity repair | 只用相同 Frenet-s 上的 `max\|d0-d1\|`；native excursion 独立诊断 |
+| nominal slot | candidate 0 绑定 exact native anchor；learned nominal geometry 仅审计 |
+| v10 development head | eligible Guard 8/8；sep/proposal-valid 7/8；defensive speed gap 加强 |
+| paired cold start | SpeedPlanner 从实测 ego speed 初始化，不再从 0 m/s 把两分支锁成满刹 |
+| MPC feasibility | 速度收紧 `a_y` 转角门时保留物理可达 recovery envelope；OSQP infeasible 不再落入慢 SLSQP |
+| MPC tail/验收 | tracker OSQP 禁用 polishing；development smoke 必须 `timeout=0`，不再漏计 |
+| v12 development head | diversity floor 改为逐样本 hinge；低学习率续训，eligible Guard/sep/proposal-valid = 8/8、7/8、7/8 |
+| post-repair CARLA | lead/crossing 2/2 dual-force PASS；4 branch 共 MPC 200/200，0 timeout/fallback/collision |
 
-## 5. 允许修改
+## 当前结论
 
-```text
-safedrive_foundry/driving_vla/
-safedrive_foundry/config/vla/
-tests/g3/
-docs/VLA.md
-PROGRESS.md
-START_TASK.md（只更新断点/状态）
-```
+1. v4 formal 的 `IMPROVE_VLA` 仍是有效冻结结果。
+2. 旧 teacher 会让 d=0/低于 0.50 m/Guard reject candidate 污染监督；已修复且版本化。
+3. v9 已证明 head 可以输出可执行的合法左右 residual；learned confidence 的空路
+   specificity=0.786 继续保留为非阻塞诊断。
+4. v12 checkpoint 仅允许 `development_live_smoke`，仍禁止 formal/X5H/R2-K。
+5. lead-brake 与 crossing 已证明真实闭环选择空间；这不能覆盖冻结 v5，也不能单独授权 R3。
+6. crossing 原 timeout 已定位为瞬时不可达硬约束 + fallback 误分类；修复后同一 Evidence
+   离线重放 100/100 OSQP solved，CARLA v12 smoke 100/100 solved。
+7. 正式下一步是建立全新 blind registry；
+   不能复用已看过结果的 v2 blind registry。
+8. 2026-07-27 复验已修复正式入口：post-v1 registry 可使用全新 6 个
+   scenario ID；promotion 必须绑定 frozen blind registry hash、offline v3
+   gates，并验证训练集与 blind `(scenario_id, seed_id)` 零重叠；formal X5H
+   必须显式传 frozen registry manifest 与 1–3 个预声明 pair。
+9. CARLA 一次 `ensure` 后恢复 `READY`；本轮只创建 development smoke
+   Evidence，没有创建或消耗新的 blind Evidence。
 
-需要修改公共 schema、PathManager/MPC 或范围外目录时，先证明必要性；不得计划外重构。
+## 冻结 v5 正式终态（不得改写）
 
-## 6. 必做测试
+1. 新 blind registry 已 dry-run 12/12 并冻结，训练 pair 重叠为 0。
+2. formal X5H v8：`PASS_WITH_LIMITS`，2/3 dual-force；唯一失败为 Guard
+   `SPATIAL_COLLAPSE_ELIGIBLE`。
+3. formal R2-K v5：12/12 已执行；8 comparable、8 TIE、4 incomparable。
+4. 18 个实际 branch × 50 ticks；MPC 900/900，0 fallback、0 collision、
+   0 offroad。
+5. 冻结门 `comparable>=10` 未过，且 decisive=0，因此 `WORLD_GATE_NOT_MET`。
+6. 按“获得一个可用模型、不继续过度强化”的用户目标，R2-X 工程以
+   `COMPLETED_WITH_LIMITS` 结束；formal pilot 的 `PILOT_INCONCLUSIVE /
+   REPAIR_REQUIRED` 原始报告保持不改写。
 
-至少新增/更新：
+## 停止点
 
-1. K2 shape/time/identity；
-2. fixed input determinism；
-3. candidate 0/1 差异度；
-4. 位置、速度、加速度、yaw、kappa 一致性；
-5. collapse detector；
-6. 强制 candidate 0/1 分别进入同一执行接口；
-7. K1 baseline 回归；
-8. invalid/NaN/stale rejection；
-9. 最小训练或 forward smoke 无 OOM。
-
-建议命令：
-
-```bash
-source /home/sdf/.venvs/sdf/bin/activate
-python -m unittest discover -s tests/g3 -t . -v
-python -m compileall -q safedrive_foundry/driving_vla
-git diff --check
-```
-
-只有需要真实 CARLA 时才先运行：
-
-```bash
-python scripts/sdf.py sim preflight --json
-```
-
-## 7. 完成标准
-
-以下全部满足才能关闭：
-
-- 两候选不是静默复制；
-- T10 每个点运动学一致；
-- candidate 0/1 可分别强制执行；
-- 同输入可复现；
-- collapse/margin/provenance 可查询；
-- K1 测试不回归；
-- 无 OOM/NaN；
-- 实际测试结果写入 `PROGRESS.md`；
-- `git diff --check` 通过。
-
-允许 `COMPLETED_WITH_LIMITS` 的唯一情况：K2 真实且可执行，但 G4A 尚未证明纵向
-选择空间。不能用该状态掩盖坍塌或运动学错误。
-
-## 8. 中断记录
-
-中断时在 `PROGRESS.md` 写：
-
-- 最后状态；
-- 已完成代码；
-- 失败测试原文；
-- 修改文件；
-- 精确恢复命令；
-- 是否需要空间 residual 决策。
-
-## 9. 固定口令
-
-```text
-读取 START_TASK.md，开始当前任务。
-```
+- R2/R2-X 工程按“获得一个可用模型、不继续过度强化”目标正式停止；
+  nominal 可用，defensive availability 限制必须保留。
+- 不降低 0.50 m；不改 Oracle；不使用 runtime rescue。
+- 不覆盖 `r2-spatial-k2-pilot-v4-formal/`。
+- 当前 development smoke 不得冒充 formal X5H/R2-K。
+- 不启动 R3；不 commit/push（未要求）。
+- 当前停止于 post-v5 development repair；v12 不是 formal checkpoint。
+- 下一轮用全新 blind registry 做 formal X5H/R2-K；不得复用 v2 blind outcome。
+- 不启动 R3；lead-brake 的单个 decisive development pair 只能证明修复方向，
+  不能单独推导 World 有效。

@@ -20,7 +20,7 @@ windows_working_directory = "E:\\CARLA_0.9.16"
 wsl_path = "/mnt/e/CARLA_0.9.16/CarlaUE4.exe"
 launch_mode = "default_engine"
 # Used when `sdf sim ensure` is called without --map.
-default_map = "Town03"
+default_map = "Town12"
 # G3 live evidence on 2026-07-19 established DX12 as the stable RHI for sharing
 # this RTX 4080 between CARLA rendering and SimLingo CUDA forward. DX11 is the
 # known-failing D3D baseline; do not revert without rerunning the isolated E0 test.
@@ -30,4 +30,4 @@ default_map = "Town03"
 rhi = "dx12"
 render_offscreen = false
 # explicit_arguments mode only (ignored as ArgumentList when launch_mode=default_engine).
-arguments = "/Game/Carla/Maps/Town03 -windowed -ResX=640 -ResY=360 -quality-level=Low -nosound -dx12 -carla-rpc-port=2000"
+arguments = "/Game/Carla/Maps/Town12/Town12 -windowed -ResX=640 -ResY=360 -quality-level=Low -nosound -dx12 -carla-rpc-port=2000"

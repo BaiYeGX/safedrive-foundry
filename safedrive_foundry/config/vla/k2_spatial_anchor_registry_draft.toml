@@ -1,0 +1,55 @@
+# X5B DRAFT registry — NOT FROZEN until X5A_REAL_PASS
+# Do not use for train splits until feature probe full pass + leakage audit.
+
+schema_version = "safedrive.k2_spatial_anchor_registry.draft.v1"
+status = "DRAFT_NOT_FROZEN"
+freeze_gate = "X5A_REAL_PASS"
+exclude_from_train = [
+  "r2-g4a-paired-pilot",
+  "r1-real-k2",
+  "r2-spatial-k2-pilot-v2",
+]
+
+# Target mix for first real train set (episode-level splits)
+[targets]
+feature_probe_n = 32
+teacher_pilot_n = 256
+train_n = 1500
+val_n = 250
+holdout_n = 150
+empty_or_no_alt_frac = 0.30
+
+[[families]]
+id = "left_cut_in"
+target_frac = 0.15
+probe_min = 5
+
+[[families]]
+id = "right_cut_in"
+target_frac = 0.15
+probe_min = 5
+
+[[families]]
+id = "lead_brake"
+target_frac = 0.15
+probe_min = 5
+
+[[families]]
+id = "obstruction"
+target_frac = 0.12
+probe_min = 4
+
+[[families]]
+id = "crossing_merge"
+target_frac = 0.13
+probe_min = 4
+
+[[families]]
+id = "empty"
+target_frac = 0.30
+probe_min = 8
+
+[split]
+unit = "episode"
+forbid_frame_random_split = true
+seed_algo = "sha256_path_group"

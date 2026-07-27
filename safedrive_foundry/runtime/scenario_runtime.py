@@ -8,7 +8,6 @@ All tick, control, sensor admission and cleanup ownership is kept here.
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import hashlib
 import json
 import queue
@@ -18,6 +17,11 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
+
+try:
+    import fcntl  # type: ignore
+except ImportError:  # Windows — file locks use msvcrt or no-op for preflight
+    fcntl = None  # type: ignore
 
 from .identity import RunIdentity
 from .profiles import RuntimeProfile
@@ -101,7 +105,19 @@ class TickLease:
                 raise TickLeaseUnavailable(f"tick lease already held: {resolved}")
             handle = self.path.open("a+", encoding="utf-8")
             try:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                if fcntl is not None:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                else:
+                    # Windows: process-local set already guards same-process double-acquire.
+                    try:
+                        import msvcrt
+
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    except OSError as exc:
+                        handle.close()
+                        raise TickLeaseUnavailable(
+                            f"tick lease already held: {resolved}"
+                        ) from exc
             except BlockingIOError as exc:
                 handle.close()
                 raise TickLeaseUnavailable(f"tick lease already held: {resolved}") from exc
@@ -117,7 +133,16 @@ class TickLease:
             return
         resolved = self.path.resolve()
         with self._guard:
-            fcntl.flock(self._handle.fileno(), fcntl.LOCK_UN)
+            if fcntl is not None:
+                fcntl.flock(self._handle.fileno(), fcntl.LOCK_UN)
+            else:
+                try:
+                    import msvcrt
+
+                    self._handle.seek(0)
+                    msvcrt.locking(self._handle.fileno(), msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass
             self._handle.close()
             self._held_paths.discard(resolved)
             self._handle = None

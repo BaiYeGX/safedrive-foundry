@@ -1,0 +1,39 @@
+# Frozen R1 K2 config: deterministic longitudinal temporal branches.
+# branch_type = longitudinal_temporal (NOT learned multimodal K2)
+
+[meta]
+version = "k2_v1"
+retimer_version = "safedrive.k2_retimer.v1"
+branch_type = "longitudinal_temporal"
+probability_source = "fixed_equal_prior_unscaled"
+description = "Real SimLingo one-forward K2 via path retiming"
+
+[contract]
+k = 2
+t_steps = 10
+dt_s = 0.25
+horizon_s = 2.5
+top1_index = 0
+candidate_ids = ["v1_nominal", "v1_conservative"]
+
+[dynamics]
+conservative_speed_ratio = 0.65
+max_accel_mps2 = 2.5
+max_decel_mps2 = 3.0
+stop_threshold_mps = 0.35
+probability_prior = [0.5, 0.5]
+
+[eligibility]
+min_nominal_speed_mps = 0.75
+min_final_progress_m = 1.5
+
+[collapse]
+mean_speed_gap_min_mps = 0.25
+final_progress_gap_min_m = 0.50
+max_position_separation_min_m = 0.50
+
+[residuals]
+position_integration_error_max_m = 0.05
+acceleration_error_max_mps2 = 1.0e-6
+yaw_tangent_error_max_rad = 0.05
+native_path_cross_track_error_max_m = 0.05

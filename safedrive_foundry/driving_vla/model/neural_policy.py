@@ -5,14 +5,21 @@ from __future__ import annotations
 import math
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from driving_vla.adapter.policy_adapter import ObservationBundle, TrajectoryArray
 from driving_vla.model.canonicalizer import TrajectoryCanonicalizer, UpstreamPathSpeed
+from driving_vla.model.k2_builder import (
+    K2Builder,
+    K2BuilderConfig,
+    K2PredictionBundle,
+    attach_guard,
+    load_k2_config,
+)
 from driving_vla.model.simlingo_runtime import SimLingoNeuralRuntime
-from driving_vla.model.v1_policy import _apply_residual, _history_features
 
 
 def backend_name() -> str:
@@ -21,7 +28,10 @@ def backend_name() -> str:
 
 @dataclass(frozen=True)
 class NativePathPrediction:
-    """Unmodified SimLingo action heads in the project map frame."""
+    """Unmodified SimLingo action heads in the project map frame.
+
+    X5A: same-forward driving features must be plumbed (not dropped).
+    """
 
     path_map_xy: tuple[tuple[float, float], ...]
     speed_mps: tuple[float, ...]
@@ -32,6 +42,17 @@ class NativePathPrediction:
     # Optional dual-head ego-frame dumps for debug-draw / evidence.
     route_ego_xy: tuple[tuple[float, float], ...] = ()
     speed_wps_ego_xy: tuple[tuple[float, float], ...] = ()
+    # Same-forward Spatial K2 features (mean64 + lineage)
+    driving_feature: tuple[float, ...] = ()
+    driving_feature_hash: str = ""
+    driving_feature_full_pool: tuple[float, ...] = ()
+    driving_feature_full_pool_hash: str = ""
+    driving_feature_raw_shape: tuple[int, ...] = ()
+    driving_feature_raw_dtype: str = ""
+    driving_feature_raw_hash: str = ""
+    driving_feature_source: str = ""
+    driving_feature_ok: bool = False
+    driving_feature_error: str = ""
 
 
 class NeuralV0Policy:
@@ -265,43 +286,269 @@ class NeuralV0Policy:
             peak_vram_mb=float(result.peak_vram_mb),
             route_ego_xy=route_ego,
             speed_wps_ego_xy=speed_ego,
+            driving_feature=tuple(
+                float(x) for x in (getattr(result, "driving_feature", ()) or ())
+            ),
+            driving_feature_hash=str(getattr(result, "driving_feature_hash", "") or ""),
+            driving_feature_full_pool=tuple(
+                float(x) for x in (getattr(result, "driving_feature_full_pool", ()) or ())
+            ),
+            driving_feature_full_pool_hash=str(
+                getattr(result, "driving_feature_full_pool_hash", "") or ""
+            ),
+            driving_feature_raw_shape=tuple(
+                int(x) for x in (getattr(result, "driving_feature_raw_shape", ()) or ())
+            ),
+            driving_feature_raw_dtype=str(
+                getattr(result, "driving_feature_raw_dtype", "") or ""
+            ),
+            driving_feature_raw_hash=str(
+                getattr(result, "driving_feature_raw_hash", "") or ""
+            ),
+            driving_feature_source=str(
+                getattr(result, "driving_feature_source", "") or ""
+            ),
+            driving_feature_ok=bool(getattr(result, "driving_feature_ok", False)),
+            driving_feature_error=str(
+                getattr(result, "driving_feature_error", "") or ""
+            ),
         )
 
 
-class NeuralV1Policy:
-    model_id = "sdf-vla-v1-neural@0.1.0"
-    source = "neural_simlingo"
-    k = 2
+class NeuralV2Policy:
+    """Spatial K2: one SimLingo forward → real driving feature → dual residual heads.
 
-    def __init__(self, runtime: SimLingoNeuralRuntime | None = None) -> None:
-        self.v0 = NeuralV0Policy(runtime=runtime)
+    Does **not** change V1 longitudinal semantics. Fail-closed on missing feature.
+    """
+
+    model_id = "sdf-vla-v2-spatial@0.2.0"
+    source = "neural_simlingo_spatial_k2"
+    k = 2
+    branch_type = "learned_spatial_semantic"
+
+    def __init__(
+        self,
+        runtime: SimLingoNeuralRuntime | None = None,
+        *,
+        spatial_head_checkpoint: str | Path | None = None,
+        keep_on_gpu: bool = False,
+        lazy: bool = True,
+        require_driving_feature: bool = True,
+        device: str = "cpu",
+        checkpoint_use: str = "formal_offline",
+        skip_checkpoint_contract: bool = False,
+    ) -> None:
+        from pathlib import Path as _Path
+
+        from driving_vla.model.k2_spatial_builder import build_spatial_k2_bundle_from_residuals
+        from driving_vla.model.k2_spatial_guard import attach_spatial_guard
+        from driving_vla.model.spatial_mode_heads import SpatialK2HeadRuntime
+
+        self.v0 = NeuralV0Policy(runtime=runtime, lazy=lazy, keep_on_gpu=keep_on_gpu)
+        self.require_driving_feature = bool(require_driving_feature)
+        ckpt = str(spatial_head_checkpoint) if spatial_head_checkpoint else None
+        if ckpt and not _Path(ckpt).is_file():
+            ckpt = None
+        self.head = SpatialK2HeadRuntime(
+            device=device,
+            checkpoint_path=ckpt,
+            checkpoint_use=checkpoint_use,
+            skip_checkpoint_contract=skip_checkpoint_contract,
+        )
+        self._build = build_spatial_k2_bundle_from_residuals
+        self._guard = attach_spatial_guard
+        self.last_bundle = None
+        self.last_forward_count: int = 0
+        self.last_latency_s: float = 0.0
+        self.last_peak_vram_mb: float = 0.0
+        self.last_native: NativePathPrediction | None = None
 
     def ensure_loaded(self) -> None:
         self.v0.ensure_loaded()
 
+    def predict_bundle(self, obs: ObservationBundle):
+        """One neural forward + spatial heads + Guard V2."""
+        from driving_vla.model.driving_feature import DrivingFeatureError
+
+        native = self.v0.predict_native(obs)
+        self.last_native = native
+        self.last_forward_count = 1
+        self.last_latency_s = float(native.latency_s)
+        self.last_peak_vram_mb = float(native.peak_vram_mb)
+        if self.require_driving_feature and not native.driving_feature_ok:
+            raise DrivingFeatureError(
+                native.driving_feature_error or "driving_feature_not_ok_for_v2"
+            )
+        if self.require_driving_feature and not native.driving_feature:
+            raise DrivingFeatureError("driving_feature_empty_for_v2")
+
+        path = list(native.path_map_xy)
+        if len(path) < 2:
+            raise RuntimeError("native_path_too_short_for_spatial_k2")
+        ego_v = float(self.v0.resolve_vla_input_speed_mps(obs))
+        base_speed = float(max(native.speed_mps)) if native.speed_mps else ego_v
+        o0, o1 = self.head.predict_modes(
+            path,
+            ego_v=ego_v,
+            base_speed_mps=base_speed,
+            driving_feature=list(native.driving_feature),
+        )
+        # Contract (R2-X repair A): learned path is raw head residual only +
+        # declared deterministic codec. NO runtime lattice/hump rescue.
+        # Collapse → mark unavailable; Guard may still enforce diversity.
+        import hashlib
+        from driving_vla.model.spatial_mode_heads import (
+            decoded_peak_lateral_separation,
+        )
+
+        # Candidate 0 is the exact native anchor.  Diversity is therefore the
+        # defensive residual relative to zero, never two learned modes drifting
+        # together in the same direction.
+        nominal_anchor_d = [0.0] * len(o1.raw_d)
+        peak_sep = decoded_peak_lateral_separation(nominal_anchor_d, o1.raw_d)
+        d0_list = [float(x) for x in o0.raw_d]
+        d1_list = [float(x) for x in o1.raw_d]
+        # Fail-closed on spatial collapse: never invent lateral templates.
+        # Frozen selection-space floor = Guard ambiguity_min_spatial_sep_m = 0.50 m.
+        # Do NOT lower this to "manufacture" dual-force / selection-space claims.
+        COLLAPSE_SEP_M = 0.50
+        sep_ok = peak_sep >= COLLAPSE_SEP_M
+        # Proposal validity is executability-only. Learned availability remains
+        # a non-blocking confidence for downstream ranking and diagnostics.
+        def_avail = bool(sep_ok)
+        if def_avail:
+            def_reason = "PROPOSAL_SPATIALLY_DISTINCT"
+        else:
+            def_reason = "HEAD_COLLAPSE_SEP"
+        # Diversity eligibility tracks availability; Guard enforces SPATIAL_COLLAPSE
+        # when eligible — do not mark available while disabling diversity checks.
+        diversity_eligible = bool(def_avail)
+        from driving_vla.model.k2_spatial_types import canonical_sha256
+
+        raw_head_payload = {
+            "d0": d0_list,
+            "d1": d1_list,
+            "ds0": [float(x) for x in o0.raw_delta_s],
+            "ds1": [float(x) for x in o1.raw_delta_s],
+            "sp0": float(o0.speed_scale),
+            "sp1": float(o1.speed_scale),
+            "avail": bool(o1.available),
+            "avail_prob": float(o1.avail_prob),
+        }
+        raw_head_hash = canonical_sha256(raw_head_payload)
+        _ = hashlib  # keep import used if needed
+        fwd_id = f"v2-{native.driving_feature_hash}-{native.driving_feature_raw_hash}"
+        bundle = self._build(
+            native_path_xy=path,
+            ego_xy=(float(path[0][0]), float(path[0][1])),
+            ego_v=ego_v,
+            base_speed_mps=base_speed,
+            residual_nominal={
+                "raw_delta_s": [0.0] * len(path),
+                "raw_d": [0.0] * len(path),
+                "speed_scale": 1.0,
+                "head_lineage": "native_nominal_anchor",
+                "raw_head_hash": raw_head_hash,
+            },
+            residual_defensive={
+                "raw_delta_s": o1.raw_delta_s,
+                "raw_d": d1_list,
+                "speed_scale": o1.speed_scale,
+                "head_lineage": "spatial_mode_head",
+                "raw_head_hash": raw_head_hash,
+            },
+            observation_identity={
+                "feature_hash": native.driving_feature_hash,
+                "raw_feature_hash": native.driving_feature_raw_hash,
+                "feature_source": native.driving_feature_source,
+            },
+            backbone_forward_id=fwd_id,
+            model_id=self.model_id,
+            spatial_head_checkpoint_hash=self.head.spatial_head_checkpoint_hash,
+            defensive_available=def_avail,
+            defensive_reason=def_reason,
+            nominal_probability=1.0 - float(o1.avail_prob),
+            defensive_probability=float(o1.avail_prob),
+            probability_source="learned_mode_confidence_non_blocking",
+        )
+        from dataclasses import replace
+
+        bundle = replace(
+            bundle,
+            set_diagnostics={
+                **dict(bundle.set_diagnostics),
+                "eligible_for_diversity": diversity_eligible,
+                "peak_residual_lat_sep": peak_sep,
+                "collapse_sep_m": COLLAPSE_SEP_M,
+                "raw_head_hash": raw_head_hash,
+                "learned_defensive_confidence": float(o1.avail_prob),
+                "learned_availability_decision": bool(o1.available),
+                "availability_semantics": "executability_only_v1",
+                "learned_confidence_non_blocking": True,
+                "runtime_rescue": False,
+                "nominal_anchor_exact": True,
+                "nominal_head_output_audit_only": True,
+                "driving_feature_ok": native.driving_feature_ok,
+                "driving_feature_hash": native.driving_feature_hash,
+            },
+        )
+        guarded = self._guard(
+            bundle, require_diversity_if_eligible=diversity_eligible
+        )
+        self.last_bundle = guarded
+        return guarded
+
     def predict_arrays(self, obs: ObservationBundle) -> list[TrajectoryArray]:
-        base = self.v0.predict_arrays(obs)[0]
-        cur = (obs.ego_x, obs.ego_y, obs.ego_yaw, obs.ego_v)
-        feats = _history_features(obs.ego_history, cur)
-        hist_v = feats[3::4]
-        mean_v = sum(hist_v) / len(hist_v)
-        nom_scale = max(0.7, min(1.15, mean_v / max(obs.ego_v, 0.5) if obs.ego_v > 0.1 else 1.0))
-        cons_scale = 0.65 * nom_scale
-        nom = _apply_residual(base, nom_scale, 0.0)
-        cons = _apply_residual(base, cons_scale, 0.0)
-        return [
-            TrajectoryArray(
-                points_xy_yaw_v_a_kappa=nom.points_xy_yaw_v_a_kappa,
-                probability=0.62,
-                uncertainty=0.12,
-                candidate_id="v1_nominal",
-                intended_action="nominal",
-            ),
-            TrajectoryArray(
-                points_xy_yaw_v_a_kappa=cons.points_xy_yaw_v_a_kappa,
-                probability=0.38,
-                uncertainty=0.22,
-                candidate_id="v1_conservative",
-                intended_action="conservative",
-            ),
-        ]
+        bundle = self.predict_bundle(obs)
+        # V2 candidates are not TrajectoryArray; return empty for V1-compat callers
+        _ = bundle
+        return []
+
+
+class NeuralV1Policy:
+    """Real SimLingo K2: one ``predict_native`` then longitudinal path retiming.
+
+    branch_type=longitudinal_temporal (deterministic; not learned multimodal K2).
+    """
+
+    model_id = "sdf-vla-v1-neural@0.1.0"
+    source = "neural_simlingo"
+    k = 2
+    branch_type = "longitudinal_temporal"
+
+    def __init__(
+        self,
+        runtime: SimLingoNeuralRuntime | None = None,
+        *,
+        k2_config: K2BuilderConfig | None = None,
+        keep_on_gpu: bool = False,
+        lazy: bool = True,
+    ) -> None:
+        self.v0 = NeuralV0Policy(runtime=runtime, lazy=lazy, keep_on_gpu=keep_on_gpu)
+        self.k2_config = k2_config or load_k2_config()
+        self._builder = K2Builder(self.k2_config)
+        self.last_bundle: K2PredictionBundle | None = None
+        self.last_forward_count: int = 0
+        self.last_latency_s: float = 0.0
+        self.last_peak_vram_mb: float = 0.0
+
+    def ensure_loaded(self) -> None:
+        self.v0.ensure_loaded()
+
+    def predict_bundle(self, obs: ObservationBundle) -> K2PredictionBundle:
+        """One neural forward → K2 bundle + Contract Guard."""
+        native = self.v0.predict_native(obs)
+        self.last_forward_count = 1
+        self.last_latency_s = float(getattr(native, "latency_s", self.v0.last_latency_s))
+        self.last_peak_vram_mb = float(
+            getattr(native, "peak_vram_mb", self.v0.last_peak_vram_mb)
+        )
+        bundle = self._builder.build(native, obs, model_id=self.model_id)
+        bundle = attach_guard(bundle, self.k2_config)
+        self.last_bundle = bundle
+        return bundle
+
+    def predict_arrays(self, obs: ObservationBundle) -> list[TrajectoryArray]:
+        """Compatibility wrapper: candidates from :meth:`predict_bundle`."""
+        bundle = self.predict_bundle(obs)
+        return list(bundle.candidates)

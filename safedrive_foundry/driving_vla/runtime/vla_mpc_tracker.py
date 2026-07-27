@@ -15,6 +15,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from driving_vla.runtime.curve_limits import (
+    curve_speed_limit_from_kappa_window,
+    path_end_horizon_speed_limit,
+    prediction_horizon_distances,
+)
 from driving_vla.runtime.path_manager import EgoPose, SpatialPath, wrap_angle
 from safety_kernel.repair.qp_solver import LongitudinalQPSolver, QPProblem
 from safety_kernel.repair.types import SolverStatus
@@ -112,6 +117,11 @@ class ConstrainedVLAMPC:
             abs_tol=1e-4,
             rel_tol=1e-4,
             prefer_osqp=True,
+            # The 20 Hz tracker already validates residuals and warm-starts
+            # every tick. OSQP polishing rebuilds/refines a solution but does
+            # not improve the control contract enough to justify its observed
+            # 30+ ms tail spikes under sequential live runs.
+            polish=False,
         )
         self._steer_rad = 0.0
         self._steer_rate_rps = 0.0
@@ -143,9 +153,12 @@ class ConstrainedVLAMPC:
 
     def _reference(self, path: SpatialPath, s0: float, speed: float) -> tuple[np.ndarray, np.ndarray]:
         cfg = self.config
-        distances = np.arange(1, cfg.horizon + 1, dtype=float) * max(
-            speed, cfg.min_linearization_speed_mps
-        ) * cfg.prediction_dt_s
+        distances = prediction_horizon_distances(
+            linearization_speed_mps=speed,
+            horizon=cfg.horizon,
+            prediction_dt_s=cfg.prediction_dt_s,
+            min_linearization_speed_mps=cfg.min_linearization_speed_mps,
+        )
         _x, _y, _yaw, kappa = path.sample(s0 + distances)
         delta_ff = np.arctan(cfg.wheelbase_m * np.asarray(kappa, dtype=float))
         delta_ff = np.clip(delta_ff, -cfg.max_steer_rad, cfg.max_steer_rad)
@@ -227,18 +240,61 @@ class ConstrainedVLAMPC:
         upper.extend([cfg.max_steer_rate_rps] * n)
 
         # Predicted steering angle bounds, tightened by lateral acceleration.
+        #
+        # The v^2*kappa limit may shrink faster than the physical steering
+        # state can recover as speed rises.  Applying the new bound as an
+        # immediate hard constraint makes the QP infeasible even when the
+        # controller is already steering back as fast as its rate/acceleration
+        # limits allow.  Build one zero-seeking, dynamically reachable recovery
+        # sequence and minimally widen each angle bound to contain it.  This
+        # preserves the lateral-acceleration limit whenever reachable and gives
+        # the optimizer a guaranteed path back inside it otherwise.
         lat_delta = cfg.max_steer_rad
         if speed > 0.3:
             lat_delta = min(
                 lat_delta,
                 math.atan(cfg.max_lateral_accel_mps2 * cfg.wheelbase_m / max(speed * speed, 1e-6)),
             )
+        recovery_rate = float(
+            np.clip(
+                self._steer_rate_rps,
+                -cfg.max_steer_rate_rps,
+                cfg.max_steer_rate_rps,
+            )
+        )
+        recovery_delta = float(self._steer_rad)
+        recovery_deltas: list[float] = []
+        accel_step = cfg.max_steer_accel_rps2 * cfg.prediction_dt_s
+        for _ in range(n):
+            desired_rate = float(
+                np.clip(
+                    -recovery_delta / max(cfg.prediction_dt_s, 1e-6),
+                    -cfg.max_steer_rate_rps,
+                    cfg.max_steer_rate_rps,
+                )
+            )
+            recovery_rate = float(
+                np.clip(
+                    desired_rate,
+                    recovery_rate - accel_step,
+                    recovery_rate + accel_step,
+                )
+            )
+            recovery_delta = float(
+                np.clip(
+                    recovery_delta + recovery_rate * cfg.prediction_dt_s,
+                    -cfg.max_steer_rad,
+                    cfg.max_steer_rad,
+                )
+            )
+            recovery_deltas.append(recovery_delta)
         for k in range(n):
             row = influence[3 * k + 2]
             bias = float(base[3 * k + 2])
             rows.append(row)
-            lower.append(-lat_delta - bias)
-            upper.append(lat_delta - bias)
+            reachable = recovery_deltas[k]
+            lower.append(min(-lat_delta, reachable) - bias)
+            upper.append(max(lat_delta, reachable) - bias)
 
         # Steering acceleration bounds; first row is relative to last applied rate.
         accel_bound = cfg.max_steer_accel_rps2 * cfg.prediction_dt_s
@@ -268,16 +324,19 @@ class ConstrainedVLAMPC:
         cfg = self.config
         # A single interpolation spike must not collapse straight-line speed.
         # Sustained curvature still survives this robust percentile unchanged.
-        max_kappa = (
-            float(np.quantile(np.abs(kappa_ref), np.clip(cfg.curve_limit_quantile, 0.0, 1.0)))
-            if kappa_ref.size
-            else 0.0
+        # Shared with offline executability prefilter (curve_limits.py).
+        curve_limit, _k_q = curve_speed_limit_from_kappa_window(
+            kappa_ref,
+            max_lat_accel_mps2=cfg.max_lateral_accel_mps2,
+            max_speed_mps=cfg.max_speed_mps,
+            curve_limit_quantile=cfg.curve_limit_quantile,
         )
-        curve_limit = cfg.max_speed_mps
-        if max_kappa > 1e-4:
-            curve_limit = math.sqrt(cfg.max_lateral_accel_mps2 / max_kappa)
-        remaining = max(0.0, path.length_m - progress_s - cfg.path_end_margin_m)
-        horizon_limit = math.sqrt(2.0 * cfg.max_brake_mps2 * remaining)
+        horizon_limit = path_end_horizon_speed_limit(
+            path_length_m=path.length_m,
+            progress_s=progress_s,
+            path_end_margin_m=cfg.path_end_margin_m,
+            max_brake_mps2=cfg.max_brake_mps2,
+        )
 
         path_age = 0.0 if now_s is None else max(0.0, float(now_s) - path.stamp_s)
         soft = float(cfg.path_stale_soft_s)

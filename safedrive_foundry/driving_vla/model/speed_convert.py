@@ -74,3 +74,70 @@ def speed_wps_to_planner_samples(
         v = official_desired_speed_mps(speed_wps_xy)
         return (v, v, v, v, v)
     return speed_wps_2d_to_mps(speed_wps_xy, n_out=10)
+
+
+K2_SPEED_NORMALIZE_VERSION = "safedrive.k2_speed_normalize.v1"
+
+
+def _representative_nonneg_scalar(speed_mps: Sequence[float]) -> float:
+    """Pick a single non-negative cruise scalar from planner samples or series."""
+    vals = [max(0.0, float(v)) for v in speed_mps if math.isfinite(float(v))]
+    if not vals:
+        return 0.0
+    # Official path: five identical planner samples → all equal.
+    if len(vals) >= 2 and max(vals) - min(vals) <= 1e-9:
+        return float(vals[0])
+    # Legacy / mixed series: robust near-field median (same spirit as planner).
+    near = sorted(vals[: min(5, len(vals))])
+    mid = len(near) // 2
+    if len(near) % 2:
+        return float(near[mid])
+    return float(0.5 * (near[mid - 1] + near[mid]))
+
+
+def normalize_k2_target_speed_profile(
+    speed_mps: Sequence[float],
+    *,
+    t_steps: int = 10,
+    mode: str = "official",
+    version: str = K2_SPEED_NORMALIZE_VERSION,
+) -> tuple[float, ...]:
+    """Versioned T10 target profile for R1 K2 (not K1 planner samples).
+
+    - official: expand a single desired-speed scalar to length ``t_steps``.
+    - legacy: if ``len(speed_mps) >= t_steps`` finite samples, pad/truncate
+      explicitly without skipping index 0; otherwise fall back to scalar expand.
+
+    Does not change :func:`speed_wps_to_planner_samples` K1 semantics.
+    """
+    if version != K2_SPEED_NORMALIZE_VERSION:
+        raise ValueError(f"unsupported k2 speed normalize version: {version}")
+    if t_steps < 1:
+        raise ValueError("t_steps must be >= 1")
+    mode_l = str(mode).strip().lower()
+    if mode_l not in {"official", "legacy", "auto"}:
+        raise ValueError(f"unsupported k2 speed mode: {mode}")
+
+    samples = [float(v) for v in speed_mps]
+    if mode_l == "auto":
+        if len(samples) >= t_steps and max(samples) - min(samples) > 1e-9:
+            mode_l = "legacy"
+        else:
+            mode_l = "official"
+
+    if mode_l == "legacy" and len(samples) >= t_steps:
+        out = [max(0.0, float(v)) if math.isfinite(float(v)) else 0.0 for v in samples[:t_steps]]
+        return tuple(out)
+
+    scalar = _representative_nonneg_scalar(samples)
+    return tuple(float(scalar) for _ in range(t_steps))
+
+
+def planner_samples_from_cruise_scalar(
+    cruise_mps: float,
+    *,
+    n: int = 5,
+) -> tuple[float, ...]:
+    """Repeat a cruise scalar for VLASpeedPlanner (K1-compatible sample shape)."""
+    v = max(0.0, float(cruise_mps))
+    return tuple(v for _ in range(max(1, int(n))))

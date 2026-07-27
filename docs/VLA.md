@@ -1,7 +1,8 @@
-# VLA-V1 设计与当前修复合同
+# VLA-V1 设计与冻结 R1 合同
 
 本文只保留当前 VLA 实施所需的模型、接口、训练和验收规则。项目目标与完成定义见
-`PROJECT.md`，当前唯一任务见根目录 `START_TASK.md`。
+`PROJECT.md`，当前唯一任务见根目录 `START_TASK.md`，R1 文件级实施方案见
+`R1_REAL_K2.md`。
 
 ## 1. 已有基线
 
@@ -27,7 +28,7 @@ CARLA RGB + ego + coarse navigation
 - path 与 speed head 分离；
 - 地图中心线不作为 MPC 跟踪参考。
 
-## 2. 当前缺口
+## 2. R1 修复前缺口（历史，已关闭）
 
 旧 V1 residual 接口不能作为真实 K2：
 
@@ -37,7 +38,9 @@ CARLA RGB + ego + coarse navigation
 4. 位置型 oracle 无法区分两候选；
 5. candidate 0/1 尚无正式强制执行证据。
 
-因此当前状态是 `G3-04 / CURRENT / REPAIR_REQUIRED`。
+上述缺口已由 R1 的真实 `K2Builder`、Contract Guard、force 0/1 和 CARLA Evidence
+关闭。当前状态是 `R1 / COMPLETED_WITH_LIMITS`；最新动态事实见 `PROGRESS.md`。
+R2 只评估现有纵向 K2 的 paired outcome，不在本阶段重开 VLA 结构。
 
 ## 3. 最短 K2 实现
 
@@ -48,6 +51,10 @@ CARLA RGB + ego + coarse navigation
 - 相同空间几何可以作为起步，但必须沿路径按新速度重新时间参数化，使每个相同时刻
   的 `x/y/v/a` 真正不同且一致；
 - 若 G4A pilot 证明仅纵向差异没有选择空间，再训练空间 residual 或双轨迹头。
+
+当前冻结实现采用一次真实 SimLingo forward、显式 top-1、equal uncalibrated prior 和
+动力学 retiming；不得继续用 fingerprint anchor 测试或固定 lateral bias 代表正式
+Neural K2。具体公式、Guard 和执行绑定见 `R1_REAL_K2.md`。
 
 禁止：
 

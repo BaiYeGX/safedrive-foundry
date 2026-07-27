@@ -35,6 +35,7 @@
 | `ROADMAP.md` | 后续最短路线 |
 | `PROGRESS.md` | 已确认动态事实 |
 | `docs/PROJECT.md` | 系统边界、成功口径和证据合同 |
+| `docs/R1_REAL_K2.md` | 当前 R1 的代码分析、实现设计和分层验收 |
 | `docs/VLA.md` | VLA/K2 设计 |
 | `docs/WORLD_MODEL.md` | G4A/G5 World 设计 |
 | `docs/RESOURCES.md` | 本机资产与资源预算 |

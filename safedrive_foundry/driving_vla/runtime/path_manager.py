@@ -694,13 +694,17 @@ class VLAPathManager:
             x_new = (1.0 - alpha) * old_x + alpha * x_latest
             y_new = (1.0 - alpha) * old_y + alpha * y_latest
 
+        # Propagate the latest raw path source_id so K2 force evidence can bind
+        # generated/selected/executed IDs through PathManager (R1). Fallbacks keep
+        # a stable suffix without dropping the candidate tag.
+        commit_sid = str(getattr(latest, "source_id", "") or "vla_committed")
         dense = self._dense_from_xy(
             x_new,
             y_new,
             ego=ego,
             target_speed_mps=target_speed,
             stamp_s=stamp_s,
-            source_id="vla_committed",
+            source_id=commit_sid,
         )
         if (
             self._committed is not None
@@ -714,7 +718,7 @@ class VLAPathManager:
                 ego=ego,
                 target_speed_mps=target_speed,
                 stamp_s=stamp_s,
-                source_id="vla_committed_latest_fallback",
+                source_id=f"{commit_sid}:latest_fallback",
             )
         return dense
 
