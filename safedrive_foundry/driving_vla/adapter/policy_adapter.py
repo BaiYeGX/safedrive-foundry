@@ -1,10 +1,10 @@
-"""Policy adapter: model arrays → Safety PolicyCandidateSet (G3-02/03)."""
+"""Policy adapter: H-route trajectory arrays to Safety candidates."""
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence  # Any used by validate_k2_bundle re-export
+from typing import Any, Mapping, Sequence
 
 from safety_kernel.contracts.schema import SCHEMA_VERSION
 from safety_kernel.contracts.types import (
@@ -35,7 +35,7 @@ class ObservationBundle:
     route_xy: tuple[tuple[float, float], ...] = ()
     # Optional front image bytes or path; baselines may ignore.
     front_rgb: Any = None
-    # Low-dim history: list of (x,y,yaw,v) oldest→newest, max 4 for V1
+    # Low-dim history: list of (x,y,yaw,v) oldest to newest.
     ego_history: tuple[tuple[float, float, float, float], ...] = ()
     meta: dict[str, Any] = field(default_factory=dict)
 
@@ -67,13 +67,6 @@ def validate_trajectory_array(arr: TrajectoryArray, *, require_t: int = T_STEPS)
         for j, v in enumerate(row):
             if not math.isfinite(float(v)):
                 raise ValueError(f"non-finite value at point {i} field {j}")
-
-
-def validate_k2_bundle(bundle: Any, config: Any = None) -> Any:
-    """Set-level K2 Contract Guard entry (see ``driving_vla.model.k2_builder``)."""
-    from driving_vla.model.k2_builder import validate_k2_bundle as _validate
-
-    return _validate(bundle, config)
 
 
 def _to_points(arr: TrajectoryArray, *, t0: float = 0.0, dt: float = DT_S) -> tuple[TrajectoryPoint, ...]:

@@ -36,7 +36,7 @@ safedrive_foundry/config/runtime/carla_start.toml
 
 ## 3. Python 环境
 
-G3+ 唯一默认：
+H 路线唯一默认：
 
 ```text
 /home/sdf/.venvs/sdf
@@ -64,8 +64,8 @@ Windows `carla0916` conda 仅用于 Windows 侧 Server/API smoke。
 
 | Profile | GPU 主任务 | 必须关闭 |
 |---|---|---|
-| `vla_train` | VLA heads/LoRA | CARLA、World train |
-| `world_train` | World-V0 | CARLA、VLA train |
+| `vla_eval` | nominal VLA 离线/在线评估 | World train |
+| `world_train` | H World scorer | CARLA、VLA eval |
 | `online_eval` | CARLA + VLA + World | 所有训练优化器 |
 | `data_collect` | CARLA + 轻量采集 | 训练 |
 | `regression` | CARLA + 单配置 | 其他配置与训练 |
@@ -78,26 +78,24 @@ Windows `carla0916` conda 仅用于 Windows 侧 Server/API smoke。
 |---|---:|
 | CARLA Low/No Rendering | 约 4–5GB，必须实测 |
 | 量化 VLA | 约 5–6GB |
-| World-V0 增量 | ≤约 1.5GB |
+| H World 增量 | ≤约 1.5GB |
 | context/cache/余量 | ≥约 2GB |
 | whole-GPU peak | ≤约 14–14.5GB |
 
 这些是 admission target，不是已经验证的结果。资源不足时依次降低渲染质量、图像
-分辨率、历史长度和 World batch；核心 K2 不能降为 K1。
+分辨率、历史长度和 World batch；不得改变 H candidate contract。
 
 ## 6. 训练预算
 
 VLA：
 
-- heads-only 或少量 LoRA；
-- BF16/FP16，必要时 8-bit；
-- micro-batch 1、gradient accumulation/checkpointing；
-- 先做 20–100 step smoke；
-- 单配置训练目标不超过 24h，超出则缩小数据/步数。
+- H 主线使用冻结 nominal SimLingo，不训练候选生成模块；
+- BF16/FP16，必要时量化，仅优化推理资源；
+- 如未来研究 VLA 微调，必须作为独立任务授权，不能改变 H1 候选合同。
 
 World：
 
-- K2/T10/N8/M1；
+- 两候选、T10；history/actor 数按显存预算冻结；
 - 4M–8M object/vector model；
 - mixed precision；
 - 小样本过拟合、action permutation 和恢复 smoke 后再正式训练；
@@ -117,7 +115,7 @@ World：
 |---|---:|
 | 共享 Observation/split/Evidence | 25–35GB |
 | VLA 独占 | 55–90GB |
-| World-V0 独占 | 25–45GB |
+| H World 独占 | 25–45GB |
 | 有 World 常态目标 | 105–170GB |
 
 200GB 是软上限。达到配额先停止采集、去重和清理可重建 cache，不自动删除冻结证据。

@@ -1,0 +1,22 @@
+[contract]
+schema_version = "safedrive.k2.mixed_semantic.v3"
+k = 2
+t_steps = 10
+dt_s = 0.25
+branch_type = "learned_route_bound_mixed_semantic"
+
+[dynamics]
+max_accel_mps2 = 2.5
+max_decel_mps2 = 3.0
+max_abs_curvature = 0.253
+max_lateral_accel_mps2 = 1.5
+stop_threshold_mps = 0.35
+
+[guard]
+min_spatial_separation_m = 0.50
+max_temporal_shared_path_error_m = 0.25
+min_temporal_speed_gap_mps = 0.50
+min_temporal_progress_gap_m = 0.50
+route_exit_max_error_m = 3.0
+union_corridor_margin_m = 0.20
+vehicle_half_width_m = 1.0

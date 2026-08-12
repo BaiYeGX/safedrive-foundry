@@ -343,6 +343,37 @@ class VLAPathManager:
         self._raw_history.clear()
         self._committed = None
 
+    def update_committed_execution(
+        self,
+        *,
+        target_speed_mps: float,
+        stamp_s: float | None = None,
+    ) -> bool:
+        """Update execution metadata for the already committed VLA path.
+
+        A native maneuver commitment intentionally suppresses a second VLA
+        forward while one Guard-approved path is being executed.  The speed
+        planner still has to slew the *same-forward* speed head and the
+        execution layer needs a heartbeat while the vehicle is demonstrably
+        moving.  This method changes neither path geometry nor source identity;
+        it only updates the bounded speed reference and, when supplied, the
+        execution freshness stamp.
+        """
+        if self._committed is None:
+            return False
+        speed = max(0.0, float(target_speed_mps))
+        stamp = (
+            float(self._committed.stamp_s)
+            if stamp_s is None
+            else float(stamp_s)
+        )
+        self._committed = replace(
+            self._committed,
+            target_speed_mps=speed,
+            stamp_s=stamp,
+        )
+        return True
+
     @staticmethod
     def _forward_ratio(path: SpatialPath, ego: EgoPose) -> float:
         c, s = math.cos(ego.yaw), math.sin(ego.yaw)
@@ -694,8 +725,8 @@ class VLAPathManager:
             x_new = (1.0 - alpha) * old_x + alpha * x_latest
             y_new = (1.0 - alpha) * old_y + alpha * y_latest
 
-        # Propagate the latest raw path source_id so K2 force evidence can bind
-        # generated/selected/executed IDs through PathManager (R1). Fallbacks keep
+        # Propagate the latest raw path source_id so evidence can bind
+        # generated/selected/executed IDs through PathManager. Fallbacks keep
         # a stable suffix without dropping the candidate tag.
         commit_sid = str(getattr(latest, "source_id", "") or "vla_committed")
         dense = self._dense_from_xy(

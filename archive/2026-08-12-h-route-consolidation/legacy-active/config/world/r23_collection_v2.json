@@ -1,0 +1,59 @@
+{
+  "schema_version": "safedrive.r23_collection_config.v2",
+  "campaign_version": "v2",
+  "history_count": 5,
+  "history_dt_s": 0.2,
+  "maps": [
+    "Town03",
+    "Town04",
+    "Town05",
+    "Town06",
+    "Town07",
+    "Town10HD",
+    "Town12"
+  ],
+  "families": [
+    "lead_braking",
+    "cut_in",
+    "crossing",
+    "merge",
+    "obstruction",
+    "clear"
+  ],
+  "conditions": [
+    "mild_fixed_dry_day",
+    "medium_fixed_wet_day",
+    "hard_fixed_rain_dusk",
+    "mild_reactive_dry_night",
+    "medium_reactive_wet_dusk",
+    "hard_reactive_rain_night"
+  ],
+  "condition_matrix_version": "r23-condition-matrix-v2",
+  "phase_specs": {
+    "r2_calibration": {
+      "base_lineages": 84,
+      "base_slots": 1008,
+      "reserve_lineages": 0,
+      "completed_target": 1008
+    },
+    "world_formal": {
+      "base_lineages": 168,
+      "base_slots": 2016,
+      "reserve_lineages": 42,
+      "reserve_slots": 504,
+      "completed_target": 2000
+    }
+  },
+  "fixed_actor_fraction": 0.5,
+  "reactive_actor_fraction": 0.5,
+  "full_backbone_token_audit_fraction": 0.05,
+  "spatial_separation_m": 0.5,
+  "oracle_deadband_policy": "unchanged",
+  "world_handoff_gates": {
+    "candidate_1_available_min": 56,
+    "comparable_min": 52,
+    "decisive_min": 20,
+    "candidate_0_wins_min": 6,
+    "candidate_1_wins_min": 6
+  }
+}

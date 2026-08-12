@@ -341,7 +341,7 @@ def _cmd_sim(args: argparse.Namespace) -> int:
     root = _root_from_args(args)
     try:
         resolver = _connection_resolver(root, timeout_seconds=args.timeout)
-        from runtime.carla_connection import exit_code
+        from runtime.carla_connection import FAILED_FINAL, exit_code
         if args.sim_command == "status":
             report = resolver.status(host=args.carla_host, port=args.carla_port)
         elif args.sim_command == "preflight":

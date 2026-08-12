@@ -493,8 +493,23 @@ class G102ConnectionTests(unittest.TestCase):
             "/Game/Carla/Maps/Town04 -windowed -dx12 -carla-rpc-port=2000",
             "Town03",
         )
-        self.assertTrue(rewritten.startswith("/Game/Carla/Maps/Town03"))
+        self.assertTrue(rewritten.startswith("/Game/Carla/Maps/Town03.Town03"))
         self.assertIn("-dx12", rewritten)
+
+    def test_explicit_start_spec_uses_packaged_unreal_asset_map(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_start_toml(root, launch_mode="explicit_arguments", default_map="Town12")
+            resolver = ConnectionResolver(root, process_query=lambda: "NOT_RUNNING")
+            spec = resolver._start_spec(
+                map_name="Town05", rhi="dx12", launch_mode="explicit_arguments"
+            )
+            assert spec is not None
+            self.assertTrue(
+                str(spec["effective_launch_arguments"]).startswith(
+                    "/Game/Carla/Maps/Town05.Town05 "
+                )
+            )
 
     def test_request_map_mismatch_rejects_without_auto_pin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

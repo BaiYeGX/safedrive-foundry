@@ -1,4 +1,4 @@
-"""Frozen K/T/dt/horizon contract for V0/V1."""
+"""Trajectory shape contract shared by the H-route candidate sources."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from dataclasses import dataclass
 DT_S = 0.25
 T_STEPS = 10
 HORIZON_S = 2.5  # T_STEPS * DT_S
-V0_K = 1
-V1_K = 2
+NOMINAL_K = 1
+HYBRID_K = 2
 
 
 @dataclass(frozen=True)
@@ -28,5 +28,5 @@ class TrajectoryContract:
             raise ValueError("horizon must be 2.5s; no 2.5→3.0 extrapolation")
 
 
-V0_CONTRACT = TrajectoryContract(k=V0_K)
-V1_CONTRACT = TrajectoryContract(k=V1_K)
+NOMINAL_CONTRACT = TrajectoryContract(k=NOMINAL_K)
+HYBRID_CONTRACT = TrajectoryContract(k=HYBRID_K)

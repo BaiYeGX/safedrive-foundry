@@ -1,0 +1,41 @@
+[model]
+schema_version = "safedrive.world_v0.config.v0"
+d_model = 192
+n_heads = 6
+dim_feedforward = 768
+scene_layers = 3
+temporal_layers = 1
+candidate_layers = 2
+decoder_layers = 2
+dropout = 0.10
+max_history = 5
+max_road_points = 16
+future_steps = 10
+no_action = false
+
+[loss]
+trajectory = 1.0
+collision = 1.0
+offroad = 0.5
+ttc = 0.5
+rank = 1.0
+tie = 0.25
+consistency = 0.1
+tie_margin = 0.10
+
+[training]
+seed = 3407
+epochs = 80
+batch_size = 16
+learning_rate = 0.0003
+weight_decay = 0.0001
+gradient_clip_norm = 1.0
+patience = 12
+precision = "mixed"
+
+[gates]
+min_parameters = 4000000
+max_parameters = 8000000
+swap_max_abs_error = 0.00001
+checkpoint_max_abs_error = 0.0
+action_sensitivity_min = 0.0001

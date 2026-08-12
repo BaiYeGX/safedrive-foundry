@@ -9,6 +9,8 @@
 #   default_engine     — manual-compatible cold start (no ArgumentList); map/RHI
 #                        come from DefaultEngine.ini (preferred / current default).
 #   explicit_arguments — experimental: pass map/RHI/resolution on the command line.
+#                        The packaged Windows Shipping build may ignore the map URL;
+#                        default_engine is authoritative for this installation.
 #
 # Always set windows_working_directory to the CARLA install root so Start-Process
 # does not inherit the WSL project cwd (a known source of shader pipeline fatals).
@@ -30,4 +32,4 @@ default_map = "Town12"
 rhi = "dx12"
 render_offscreen = false
 # explicit_arguments mode only (ignored as ArgumentList when launch_mode=default_engine).
-arguments = "/Game/Carla/Maps/Town12/Town12 -windowed -ResX=640 -ResY=360 -quality-level=Low -nosound -dx12 -carla-rpc-port=2000"
+arguments = "/Game/Carla/Maps/Town12/Town12.Town12 -windowed -ResX=640 -ResY=360 -quality-level=Low -nosound -dx12 -carla-rpc-port=2000"

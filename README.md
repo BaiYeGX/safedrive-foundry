@@ -1,89 +1,57 @@
 # SafeDrive Foundry
 
-SafeDrive Foundry 是单机 CARLA–ROS 2 纯软件在环自动驾驶研发平台。当前核心是：
+SafeDrive Foundry 是面向单机 CARLA–ROS 2 软件在环研究的 Hybrid 驾驶项目。活动项目
+只使用 H 路线：Classic Expert 与 nominal VLA 独立提议轨迹，逐候选 Guard 先过滤，
+candidate-conditioned World 只负责排序或 defer，最终由 Safety 与 MPC/PID 执行。
 
-```text
-VLA 真实 K2 → World Model 动作条件软排序 → MPC/PID → CARLA
+```mermaid
+flowchart LR
+    O["Observable history"] --> E["Classic Expert"]
+    O --> L["nominal VLA"]
+    E --> C["Canonical candidates"]
+    L --> C
+    C --> G["Per-candidate Guard"]
+    G --> W["World rank or defer"]
+    W --> S["Safety"]
+    S --> M["MPC / PID"]
 ```
 
-项目重点是 VLA 驾驶质量与 World on/off 的真实效果，不把 Classic 或独立 Safety
-当作核心效果前置；二者保留为基线、标签和可选工程扩展。
-
-## 当前状态
-
-| 能力 | 状态 |
-|---|---|
-| G0 environment | `COMPLETED / FROZEN` |
-| G1 classic/runtime | `COMPLETED_WITH_LIMITS` |
-| G2 Safety offline | `COMPLETED_WITH_LIMITS` |
-| G3 K1 pure VLA+MPC | `MEASURED_WITH_LIMITS` |
-| G3 real K2 / R1 | `COMPLETED_WITH_LIMITS` |
-| R2 / G4A paired oracle | **`COMPLETED_WITH_LIMITS`**（纵向；`NO_SELECTION_SPACE`） |
-| R2-X Spatial/Semantic K2 | **`COMPLETED_WITH_LIMITS`**（nominal 可用；defensive availability 不可靠） |
-| World / G5 | `PENDING`（不得自动启动） |
-
-纵向 R2 已关闭；R2-X 以“可用但非 World-ready”收尾，不覆盖旧 Evidence。
-R3/R4 已有实施规格，但仍未授权。详见 `START_TASK.md` / `PROGRESS.md`。
+当前状态：`H0 CONSOLIDATED`。活动源码保留 nominal VLA、Classic/Safety、轨迹合同和
+控制器；旧候选生成、旧 World 实验、旧阶段脚本与冻结证据均已移入可恢复归档。
+`H1` 尚未实现，不能把路线文档当成已测功能。
 
 ## 从这里开始
 
-1. [当前任务](START_TASK.md)
-2. [后续最短路线](ROADMAP.md)
-3. [项目合同](docs/PROJECT.md)
-4. [当前进度](PROGRESS.md)
+1. 读取 [START_TASK.md](START_TASK.md)，只执行当前任务。
+2. 用 [ROADMAP.md](ROADMAP.md) 查看 H0–H6 顺序。
+3. 用 [PROGRESS.md](PROGRESS.md) 查看已确认事实。
+4. 设计边界见 [PROJECT](docs/PROJECT.md)、[Hybrid candidates](docs/HYBRID_CANDIDATES.md)
+   与 [World](docs/WORLD_MODEL.md)。
+5. 环境、资源、证据分别见 [ENVIRONMENT](docs/ENVIRONMENT.md)、
+   [RESOURCES](docs/RESOURCES.md)、[EVIDENCE](docs/EVIDENCE.md)。
 
-实现参考：
+## 固定边界
 
-- [R1 真实 K2 实施任务](docs/R1_REAL_K2.md)
-- [R2 Paired Outcome + Oracle](docs/R2_PAIRED_ORACLE.md)
-- [R2-X Spatial/Semantic K2](docs/R2X_SPATIAL_K2.md)
-- [VLA/K2](docs/VLA.md)
-- [World Model/G4A](docs/WORLD_MODEL.md)
-- [R3/R4 World 数据与模型实施规格](docs/R3_R4_WORLD_DATA_MODEL.md)
-- [本机资产与预算](docs/RESOURCES.md)
-- [环境与运行](docs/ENVIRONMENT.md)
-- [K1 基线](docs/G3_BASELINE.md)
-- [Evidence/Archive](docs/EVIDENCE.md)
+- 仅限 CARLA 软件在环；不涉及实车、公共道路或生产控制。
+- Windows 运行 CARLA Server，WSL2 运行 ROS 2、客户端、模型和训练。
+- 固定硬件为 RTX 4080 16GB 与 i5-13600KF。
+- 两个候选必须来自独立生成器，不能由 learned head 从同一轨迹扰动伪造多样性。
+- Guard 在 World 之前逐候选执行；World 不得覆盖 Safety。
+- Oracle、特权未来与 Regression 只用于离线标注/验收。
+- `archive/` 只用于历史恢复，不能作为新任务来源。
 
-## 目录
-
-```text
-safedrive_foundry/  核心 Python/ROS 2/runtime/VLA/Safety 代码
-scripts/            sdf 入口、环境维护和 smoke
-tests/              单元、集成和 live runner
-models/             本机模型权重（Git 忽略）
-simlingo-main/      上游 VLA 代码（Git 忽略）
-tools/              本机工具链（Git 忽略）
-docs/               仅保留活动权威文档
-archive/            本机历史归档，不是活动路线
-```
-
-## 最短环境入口
+## 最小离线检查
 
 ```bash
 cd "/mnt/e/autonomous driving"
 source /home/sdf/.venvs/sdf/bin/activate
-python scripts/sdf.py doctor
-python scripts/sdf.py sim preflight --json
+python -m unittest discover -s tests/hybrid -t . -v
+python -m compileall -q safedrive_foundry
+git diff --check
 ```
 
-CARLA 未运行且 preflight 为 `RETRYABLE_FAILURE` 时只执行一次：
+真实 CARLA 任务必须先运行：
 
 ```bash
-python scripts/sdf.py sim ensure --map Town03 --rhi dx12 --startup-timeout 180 --json
-```
-
-## 关键边界
-
-- CARLA SIL ≠ 实车或道路安全证明；
-- VLA/World 不直接发无约束底盘控制；
-- World 只排序同一 K2，异常回到 VLA 原始 top-1；
-- 核心 A/B 固定 VLA、候选、场景、seed、initial-state 和 MPC；
-- Safety 启用后，学习模块不能覆盖硬约束、MRM 或 Emergency；
-- 大型权重、安装包、运行 Evidence 和历史文档不放在活动源码目录。
-
-当前执行口令：
-
-```text
-读取 START_TASK.md，开始当前任务。
+python scripts/sdf.py sim preflight --json
 ```

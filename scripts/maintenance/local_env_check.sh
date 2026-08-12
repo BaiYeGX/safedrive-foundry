@@ -112,12 +112,10 @@ for p in \
   "START_TASK.md" \
   "PROGRESS.md" \
   "docs/PROJECT.md" \
-  "docs/R1_REAL_K2.md" \
-  "docs/VLA.md" \
+  "docs/HYBRID_CANDIDATES.md" \
   "docs/WORLD_MODEL.md" \
   "docs/RESOURCES.md" \
   "docs/ENVIRONMENT.md" \
-  "docs/G3_BASELINE.md" \
   "docs/EVIDENCE.md" \
   "safedrive_foundry/README.md" \
   "safedrive_foundry" \

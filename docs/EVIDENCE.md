@@ -1,54 +1,87 @@
-# Evidence 与归档索引
+# H Evidence 与归档索引
 
-活动目录只保留当前运行入口和精简结论。历史安装记录、任务文档、运行日志、视频、
-轨迹和原始 Evidence 均保存在：
+## 1. 活动 Evidence 规则
+
+H 路线只承认新建且 provenance 完整的 Evidence：
 
 ```text
-archive/2026-07-23-repository-consolidation/
+PLANNED → IMPLEMENTED → MEASURED → VERIFIED
 ```
 
-该目录为本机可恢复归档，默认被 Git 忽略；Git 中已追踪过的历史文件仍可从版本历史
-恢复。归档内容不得改写成新的测量结果。
+每个正式 artifact 必须绑定 worktree/commit、config、split、seed、CARLA/模型版本、输入
+observation、candidate、Guard、selector、Safety、executed trajectory、outcome、延迟与资源。
+没有实际运行的数字不能进入 `MEASURED`，没有冻结复核不能进入 `VERIFIED`。
 
-## 1. 归档分区
+H0 仅是仓库收敛，不产生驾驶性能数字。H1 尚未开始，当前没有 H World 数据、checkpoint
+或 on/off 结果。
 
-| 路径 | 内容 |
-|---|---|
-| `docs/` | 被新核心文档替代的原架构、环境、设计、审计与日志 |
-| `tasks/` | 原 G0–G8 48 份微任务文件 |
-| `evidence/` | G0–G3 原始 Evidence 与运行产物 |
-| `temp/` | 根目录一次性分析/运行/检查脚本 |
-| `runtime_outputs/` | 可重建的 build/install/log 和旧本地 venv |
-| `installers/` | CARLA 与 AdditionalMaps 安装压缩包 |
-| `tooling/` | 非核心协作/任务目录检查工具 |
+## 2. 2026-08-12 路线收敛归档
 
-归档内 `README.md` 记录原路径到新位置的映射。
+归档根：
 
-## 2. 当前证据状态
+```text
+archive/2026-08-12-h-route-consolidation/
+```
 
-| 能力 | 状态 | 说明 |
+| 内容 | 状态 | 恢复方式 |
 |---|---|---|
-| G0 environment | `COMPLETED / FROZEN` | 原始报告已归档 |
-| G1 classic/runtime | `COMPLETED_WITH_LIMITS` | 背景能力 |
-| G2 Safety offline | `COMPLETED_WITH_LIMITS` | optional engineering foundation |
-| G3 K1 pure VLA | `MEASURED_WITH_LIMITS` | 原始 run 已归档 |
-| G3 real K2 / R1 | `COMPLETED_WITH_LIMITS` | 最新复验在 `docs/runtime-evidence/r1-real-k2-guard-fix2-2026-07-24/` |
-| R2/G4A | **`COMPLETED_WITH_LIMITS`** | `docs/runtime-evidence/r2-g4a-paired-pilot/`；11/12 comparable；pilot `NO_SELECTION_SPACE`；repeat 2/2 一致 |
-| World/G5 | `PENDING` | 无新 Evidence；**不得**因 R2 关闭自动启动 |
+| 旧设计文档 | Git 版本化的可恢复历史 | 按 archive README 的原相对路径复制 |
+| runtime Evidence/checkpoint | 本机只读，不进入普通 Git | 从本机 `legacy-active/docs/runtime-evidence/` 恢复 |
+| 旧候选生成/训练/World 源码 | Git 版本化，不参与活动 import | 从 `legacy-active/source/` 恢复 |
+| 旧脚本、配置与测试 | Git 版本化，不是活动入口 | 从对应 `legacy-active/` 子目录恢复 |
+| 本轮开始时 tracked dirty worktree | patch 快照 | `recovery/tracked-worktree.patch` |
+| 本轮开始时 untracked 文件 | tar 快照 | `recovery/untracked-worktree.tar.gz` |
+| 本地生成环境/runtime 输出 | 本机只读，可恢复或重建 | `generated/` |
 
-## 3. 新证据规则
+恢复前必须先阅读
+[`archive/2026-08-12-h-route-consolidation/README.md`](../archive/2026-08-12-h-route-consolidation/README.md)，
+在临时目录验证，不得直接覆盖活动 H 文件。
 
-临时运行输出先写：
+工作树快照校验：
 
 ```text
-docs/runtime-evidence/<task-or-run>/
+tracked-worktree.patch
+sha256 1cd44ae9f0f5bcea4589dcbf1f90087259e9d969817110b0521d9155436272aa
+
+untracked-worktree.tar.gz
+sha256 0d1fde09623dceb11527bae5cb33ed817630b1a417e5ba78a79011259c828fe7
 ```
 
-任务关闭后：
+完整归档冻结边界：25097 个常规 payload、3100957261 bytes，另有 868 个符号链接。
+`MANIFEST.sha256` 覆盖全部常规 payload；`SYMLINKS.tsv` 冻结符号链接路径与目标：
 
-1. 生成 manifest/hash；
-2. 在 `PROGRESS.md` 登记结论和限制；
-3. 把冻结包移动到 `archive/evidence/` 或新的日期归档；
-4. 活动目录只保留索引，不长期堆放大文件。
+```text
+MANIFEST.sha256
+sha256 a313ccaf5e2d37f14901b9830ed29125243d9710f3a7de6b4ceb905fd86dc251
 
-禁止选择性删除失败 run、改写原始 JSON 或把未验证结果写成 VERIFIED。
+SYMLINKS.tsv
+sha256 bff2e26a9c7ff86a55ddb38fd4e2e09482468587e4dfc53c827ec9e4d00c53fb
+```
+
+可移植归档为 272 个 legacy 文件、8860549 bytes；
+20122 个 runtime Evidence 文件（2960996577 bytes）和 4572 个 generated 文件
+（126980647 bytes）只保存在本机。
+
+干净 clone 可以恢复可移植旧源码/文档/配置/测试和两个工作树快照，但不会包含 3GB
+历史 runtime Evidence。`evaluation/` 与 `evaluation-remaining/` 的合并恢复规则，以及
+迁移到 `tests/hybrid/` 的回归边界，以 archive README 为准。
+
+## 3. 历史材料的解释边界
+
+- archive 保存失败、负收益、冻结阈值和旧实现，内容不重写；
+- archive 不是活动任务、接口、数字或门槛来源；
+- 历史候选生成失败只支持“该旧方法停止”，不证明 H World 有效；
+- 历史 World 无收益只支持“旧数据/旧条件化不足”，不等同于 H3 的结果；
+- 若未来需要引用历史事实，必须同时引用原 artifact、状态和限制，不能改名为 H 指标。
+
+## 4. H 当前状态
+
+| 阶段 | Evidence 状态 |
+|---|---|
+| H0 route consolidation | `VERIFIED / STOPPED` |
+| H1 independent candidates | `NOT_IMPLEMENTED` |
+| H2 paired outcomes | `NOT_STARTED` |
+| H3 World development | `NOT_STARTED` |
+| H4 locked evaluation | `NOT_STARTED` |
+| H5 World on/off | `NOT_STARTED` |
+| H6 closure | `NOT_STARTED` |

@@ -1,0 +1,27 @@
+{
+  "schema_version": "safedrive.r23_collection_config.v1",
+  "history_count": 5,
+  "history_dt_s": 0.2,
+  "maps": [
+    "Town03",
+    "Town10HD",
+    "Town12"
+  ],
+  "families": [
+    "lead_braking",
+    "cut_in",
+    "crossing",
+    "merge",
+    "obstruction",
+    "clear"
+  ],
+  "fixed_actor_fraction": 0.6666666667,
+  "reactive_actor_fraction": 0.3333333333,
+  "r2_base_slots": 360,
+  "world_base_slots": 1008,
+  "world_reserve_slots": 192,
+  "world_completed_target": 1000,
+  "full_backbone_token_audit_fraction": 0.05,
+  "spatial_separation_m": 0.5,
+  "oracle_deadband_policy": "unchanged"
+}

@@ -1,0 +1,49 @@
+{
+  "schema_version": "safedrive.r2_world_ready.v3",
+  "calibration": {
+    "maps": ["Town03", "Town04", "Town05", "Town10HD", "Town12"],
+    "templates": 12,
+    "conditions": ["mild", "medium", "hard"],
+    "seeds": ["seed_a", "seed_b"],
+    "slots": 360,
+    "pilot_maps": ["Town03", "Town04"],
+    "pilot_slots": 144,
+    "split_slots": {"train": 252, "dev": 60, "test": 48}
+  },
+  "long_smoke": {
+    "duration_s": 20.0,
+    "teacher_contract_cases": 16,
+    "learned_cases": 16,
+    "required_passes_each": 16
+  },
+  "core_blind": {
+    "pairs": 12,
+    "comparable_min": 10,
+    "decisive_min": 4,
+    "candidate_0_wins_min": 2,
+    "candidate_1_wins_min": 2,
+    "candidate_1_win_families_min": 2
+  },
+  "world_ready_audit": {
+    "maps": 7,
+    "templates_per_map": 12,
+    "cases": 84,
+    "candidate_1_available_min": 50,
+    "comparable_min": 48,
+    "decisive_min": 18,
+    "candidate_0_wins_min": 6,
+    "candidate_1_wins_min": 6,
+    "safe_candidate_pair_rate_min": 0.95,
+    "both_bad_rate_strict_max": 0.10
+  },
+  "oracle": {
+    "version": "oracle_v2_clearance_saturated",
+    "clearance_saturation_m": 2.0,
+    "minimum_intervention_after_safety": true
+  },
+  "world_campaign": {
+    "slots": 1008,
+    "formal_checkpoint_binding_required": true,
+    "authority": "rank_guard_accepted_candidates_only"
+  }
+}

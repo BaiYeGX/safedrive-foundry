@@ -1,5 +1,9 @@
 * text=auto
 
+# Archived bytes are frozen recovery material; do not reinterpret historical
+# whitespace as an active-tree defect.
+archive/** -whitespace
+
 # Linux/WSL source files
 *.sh text eol=lf
 *.py text eol=lf

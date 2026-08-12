@@ -31,6 +31,10 @@ class SimLingoContractConfig:
     # RoutePlanner (agent_simlingo)
     route_planner_min_distance_m: float = 7.5
     route_planner_max_distance_m: float = 50.0
+    # The official Leaderboard plan is sparse (downsampled and additionally
+    # anchored at RoadOption changes).  Locally authored map routes are dense,
+    # so locally authored scenarios resample them before applying the
+    # same RoutePlanner [1]/[2] pop contract.
     densify_ds_m: float = 1.0
     # Legacy fixed arc targets (only when official_contract=False)
     legacy_target_d1_m: float = 15.0
@@ -54,7 +58,8 @@ class SimLingoContractConfig:
             else "RGB → PIL JPEG → crop_bottom(4.8/16) → InternVL2 448 (legacy)"
         )
         d["target_source"] = (
-            "RoutePlanner[1],[2] after densify~1m + min_distance pop"
+            f"RoutePlanner[1],[2] after resample~{self.densify_ds_m:g}m "
+            "+ min_distance pop"
             if self.official_contract
             else f"legacy arc +{self.legacy_target_d1_m}/+{self.legacy_target_d2_m}m"
         )
@@ -64,12 +69,90 @@ class SimLingoContractConfig:
 
 
 def legacy_contract_config() -> SimLingoContractConfig:
-    """Previous G3 defaults for offline A/B (640-class targets + RGB-JPEG path)."""
+    """Compatibility defaults for archived offline comparisons."""
     return SimLingoContractConfig(
         official_contract=False,
         camera_width=640,
         camera_height=320,
         lateral_mode_flip_enabled=True,
+    )
+
+
+@dataclass(frozen=True)
+class NavigationPromptConditioning:
+    """Auditable SimLingo navigation conditioning for one forward.
+
+    The released SimLingo checkpoint was trained with both GPS target points
+    and CARLA high-level language commands.  Route changes need the explicit
+    HLC because two coarse target points can under-specify which adjacent lane
+    must be entered.  Geometry still comes exclusively from ``pred_route``.
+    """
+
+    eval_route_as: str
+    command_text: str | None
+    reason: str
+    target_lane_reached: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def resolve_navigation_prompt_conditioning(
+    *,
+    maneuver: Any,
+    target_distance_m: float,
+    current_road_id: int | None = None,
+    current_lane_id: int | None = None,
+    target_road_id: int | None = None,
+    target_lane_id: int | None = None,
+) -> NavigationPromptConditioning:
+    """Select the released checkpoint's native navigation input mode.
+
+    Ordinary road following and junction manoeuvres keep the released
+    ``target_point`` evaluation contract.  A navigation lane change uses the
+    same HLC wording as SimLingo's official ``agent_simlingo.py`` command mode,
+    including the following ``LANEFOLLOW`` command.  Once the ego centre is on
+    the registered target lane, target-point conditioning resumes so a static
+    route mission cannot repeatedly request additional lane changes.
+    """
+
+    raw = getattr(maneuver, "value", maneuver)
+    value = str(raw or "").strip().upper()
+    if value not in {"ROUTE_CHANGE_LEFT", "ROUTE_CHANGE_RIGHT"}:
+        return NavigationPromptConditioning(
+            eval_route_as="target_point",
+            command_text=None,
+            reason="TARGET_POINT_DEFAULT",
+        )
+
+    lane_known = current_lane_id is not None and target_lane_id is not None
+    road_matches = target_road_id is None or (
+        current_road_id is not None
+        and int(current_road_id) == int(target_road_id)
+    )
+    target_lane_reached = bool(
+        lane_known
+        and road_matches
+        and int(current_lane_id) == int(target_lane_id)
+    )
+    if target_lane_reached:
+        return NavigationPromptConditioning(
+            eval_route_as="target_point",
+            command_text=None,
+            reason="TARGET_LANE_REACHED",
+            target_lane_reached=True,
+        )
+
+    side = "left" if value == "ROUTE_CHANGE_LEFT" else "right"
+    distance_m = max(0, int(float(target_distance_m)))
+    command = (
+        f"Command: do a lane change to the {side} in {distance_m} meter "
+        "then follow the road."
+    )
+    return NavigationPromptConditioning(
+        eval_route_as="command",
+        command_text=command,
+        reason=f"ROUTE_CHANGE_{side.upper()}_HLC",
     )
 
 
@@ -496,7 +579,12 @@ def build_official_prompt(
     command_text explicitly for non-target_point experiments.
     """
     speed = float(round(speed_mps, 1))
-    if eval_route_as in {"target_point", "target_point_command"} or command_text is None:
+    mode = str(eval_route_as).strip().lower()
+    if mode not in {"target_point", "target_point_command", "command"}:
+        raise ValueError(f"unsupported SimLingo navigation conditioning: {eval_route_as}")
+    if mode == "command" and not str(command_text or "").strip():
+        raise ValueError("SimLingo command conditioning requires command_text")
+    if mode in {"target_point", "target_point_command"}:
         prompt_tp = "Target waypoint: <TARGET_POINT><TARGET_POINT>."
     else:
         cmd = str(command_text).strip()
@@ -510,6 +598,8 @@ def build_official_prompt(
 
 __all__ = [
     "SimLingoContractConfig",
+    "NavigationPromptConditioning",
+    "resolve_navigation_prompt_conditioning",
     "legacy_contract_config",
     "RoutePlannerXY",
     "NavigationTargetResult",

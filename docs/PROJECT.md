@@ -1,181 +1,103 @@
-# SafeDrive Foundry 核心项目合同
+# H 项目定义
 
-本文是项目范围、系统边界、研究完成口径和证据规则的唯一权威说明。执行顺序见
-根目录 `ROADMAP.md`，当前唯一任务见 `START_TASK.md`，动态事实见 `PROGRESS.md`。
+## 1. 研究问题
 
-## 1. 项目目标
+在单机 CARLA 软件在环中，比较两个独立、可执行的候选来源：Classic Expert 与
+nominal VLA。先逐候选执行硬合同检查，再让 candidate-conditioned World 预测相对结果
+并排序。研究目标不是证明 World “会开车”，而是回答：
 
-SafeDrive Foundry 是运行在单台工作站上的 CARLA–ROS 2 纯软件在环（SIL）平台。
-当前研究问题只有一个：
+> 在候选、Safety、控制器和场景相同的条件下，World 排序是否比冻结的非学习 selector
+> 带来可复现的闭环净收益？
 
-> 轻量驾驶 VLA 能否稳定产生有真实选择空间的 K2 定时轨迹，动作条件 World Model
-> 能否比 VLA 原始 top-1 更好地选择闭环动作？
-
-核心交付：
-
-1. Observable 输入上的真实 VLA K2；
-2. 固定场景、paired replay 和 oracle best-of-K；
-3. 可开关的 World-V0 软排序；
-4. `VLA-Top1 / VLA+World / Oracle-Best-of-K` 同协议证据；
-5. World 故障时确定性回到 VLA 原始 top-1；
-6. 可复现的配置、资源、失败和限制。
-
-项目不宣称实车、公共道路或量产安全。Classic、完整 Safety、自动场景搜索、Agent
-和后训练均不能替代核心 VLA+World 证据。
-
-## 2. 系统边界
-
-### 2.1 核心研究链
+## 2. 固定系统边界
 
 ```text
-CARLA camera + ego + navigation
-  → VLA-V1 K2 timed trajectories
-  → Contract Guard
-  → World-V0 on/off
-  → selected trajectory
-  → MPC/PID
-  → CARLA vehicle
+CARLA/ROS observable snapshot
+        ├── Classic Expert ── candidate_expert ── Guard ──┐
+        └── nominal VLA ───── candidate_vla ───── Guard ──┤
+                                                          ▼
+                                            World rank or defer
+                                                          ▼
+                                            Safety → MPC/PID
 ```
 
-- VLA 提出轨迹，不直接发未经约束的 steering/throttle/brake。
-- Contract Guard 检查 schema、身份、freshness、有限值、时间单调、候选差异和
-  运动学一致性；它不冒充完整 Safety。
-- World 只重新排序同一 K2，不修改轨迹、不直接控车、不拥有 CARLA tick。
-- World off、timeout、OOM、NaN 或 invalid 时执行 VLA 原始 top-1。
-- MPC/PID 只跟踪已选择轨迹，不重做行为决策。
-- 核心 A/B 使用相同 VLA、K2、场景、seed、initial-state 和 MPC。
+- 两个 generator 只读同一决策时刻的可观测输入。
+- candidate 必须统一坐标、采样间隔、时域与 provenance。
+- Guard 对候选逐条运行，发生在 World 之前。
+- World 共享同一 scorer 参数逐候选计算，不依赖槽位顺序。
+- World 可排序或 defer，不生成候选、不修改硬安全结果。
+- Safety 与 MPC/PID 是执行边界，学习模块不直接输出 throttle/brake/steer。
+- 仅限 CARLA SIL；不声明实车安全性。
 
-### 2.2 可选工程链
+## 3. 数据隔离
+
+| 数据 | 可用于 generator | 可用于 World | 可用于 Oracle | 可用于回归 |
+|---|---:|---:|---:|---:|
+| 当前图像/ego/route/history | 是 | 是 | 是 | 是 |
+| 当前可观测 actor/light 状态 | 是 | 是 | 是 | 是 |
+| 候选轨迹与 Guard 结果 | 不回灌 | 是 | 是 | 是 |
+| rollout actor future/碰撞/最终进度 | 否 | 仅训练标签 | 是 | 是 |
+| 场景答案、Regression 注入、测试标签 | 否 | 否 | 否 | 是 |
+
+Oracle 与 online package 必须物理隔离导入；测试 split 在 H4 前锁定。
+
+## 4. 候选合同
+
+每个候选至少包含：
 
 ```text
-VLA K2 → hard pre-validation → World rank → final Safety → MPC/PID
+candidate_id
+source = expert | vla
+observation_id / frame_id / simulation_time
+model_or_config_hash
+coordinate_frame
+T=10, dt=0.25 s, horizon=2.5 s
+trajectory[x,y,yaw,v,a,kappa]
+generation_latency
+guard_status / reject_reasons
 ```
 
-G2 Safety 启用后，学习模块不能覆盖硬约束、slack、MRM 或 Emergency。Classic 可作
-基线、修正标签、Shadow 或 Hybrid 候选，但不得偷偷进入核心 VLA/World A/B。
+source id 只用于 provenance 和分层报告；World 训练默认不把 source id 作为捷径特征。
 
-无完整 Safety 的核心链仅用于 CARLA SIL 研究，不能外推为道路安全系统。
+## 5. 选择逻辑
 
-## 3. 冻结接口
+1. 两候选都未通过 Guard：调用现有 Safety 回退。
+2. 仅一个通过：直接把该候选交给 Safety，World 不制造选择。
+3. 两个通过且 World defer：使用冻结的非学习 selector。
+4. 两个通过且 World 有效：按 World score 排序，再交给 Safety。
+5. Safety 可拒绝或降级最终选择；World 无权覆盖。
 
-### 3.1 Observation
+## 6. 成功口径
 
-正式策略输入只允许 Observable：
+H1/H2 先证明真实选择空间：
 
-- 当前前视图像；
-- ego 当前状态和至多 4 个低维历史时刻；
-- route/navigation、可行驶区域和交通灯可观测状态；
-- actor 可观测状态、协方差、时间戳和丢失标志；
-- run/frame/scenario/model/config/schema identity。
+- 候选几何/速度差异可测且不是数值噪声；
+- 两来源均有通过 Guard 并胜出的样本；
+- paired reset、actor/light phase 与执行控制可比；
+- label 不受 source/slot 泄漏支配。
 
-CARLA actor 真实未来、真实 TTC、隐藏意图、测试集专家轨迹只能用于训练标签、oracle
-或评价，不能进入正式 VLA/World runtime 输入。
+H3/H4 再证明 World 学到了 action-conditioned 差异：
 
-### 3.2 PolicyCandidateSet V1
+- 优于 no-action、CV/CTRV、手写 reward 与简单 MLP；
+- candidate swap 后预测随 trajectory 而不是槽位移动；
+- calibration、regret、defer 曲线和跨 split 泛化达标；
+- 单机 16GB 资源与在线 deadline 可接受。
 
-```text
-K=2
-T=10
-dt=0.25 s
-horizon=2.5 s
-fields=x,y,yaw,v,a,kappa,time,candidate_id,probability,source,identity
-```
+H5 最终以闭环 on/off 判定：安全指标不退化，路线完成/进度或效率有可复现净收益，
+且尾延迟、显存、回退率没有抵消收益。未满足即记录负结果，不能只凭离线 accuracy
+宣称 World 有效。
 
-要求：
+## 7. 非目标
 
-- candidate 0/1 来自同一 Observation；
-- 两条轨迹可执行、可区分、运动学一致；
-- 能分别强制执行并回溯；
-- 静默复制或只改 speed 字段但不重新参数化位置不算 K2；
-- 记录 collapse、margin、生成时间和模型/配置 hash。
+- 不重训候选生成 head；
+- 不让 World 直接规划或控制底盘；
+- 不用像素视频生成作为首个 World 目标；
+- 不用 Oracle/Regression 进入训练输入；
+- 不为得到正结果修改冻结测试门；
+- 不把 archive 中的旧数字改名为 H 指标。
 
-### 3.3 WorldRolloutBatch V0
+## 8. Evidence 合同
 
-```text
-K=2, T=10, horizon=2.5 s
-N actors <= 8
-M modes = 1
-model size target = 4M–8M parameters
-outputs = actor future + collision + TTC + off-road + pairwise score
-```
-
-每条输出必须绑定 candidate_id 和 frame identity。缺失、超时、未校准和非法输入必须
-显式返回错误，禁止用缺失输出表示低风险。
-
-## 4. 两级完成定义
-
-### 4.1 `VLA_WORLD_RESEARCH_COMPLETE`
-
-以下全部满足即可关闭核心研究主线：
-
-1. 真实 K2 合同通过；
-2. 6–8 个固定 pilot 场景、至少 2 个 seed 可 paired replay；
-3. top-1 与 oracle best-of-K 可比较；
-4. World-V0 真实接入并有 on/off；
-5. VLA-Top1、VLA+World、oracle 使用同协议；
-6. World 异常确定性回到 top-1；
-7. 原始 run、hash、资源和限制可追溯。
-
-World 正收益、无稳定净收益或负收益都允许。负结果不能用来删除模块或伪造结论。
-
-### 4.2 `FULL_PROJECT_COMPLETE_WITH_SAFETY`
-
-只有核心完成后，再满足下列条件才使用该标签：
-
-- `VLA+Safety` 与 `VLA+World+Safety` 可重复运行；
-- World 异常时退化为 `VLA+Safety`；
-- Safety 批准/修复/MRM/Emergency 与 executed trajectory 可审计；
-- Safety 工程回归和 Evidence Bundle 完成。
-
-## 5. 核心主张
-
-| ID | 问题 | 必须对照 |
-|---|---|---|
-| C1 | VLA 是否产生真实、非坍塌 K2 | K1、K2、强制 candidate 0/1、collapse |
-| C2 | World 是否改善排序和闭环 | top-1、oracle、CV/CTRV、Reward、no-action、World off |
-| C4 | paired replay 是否能量化选择空间 | 同 seed/initial-state、不可比分支、同步失败 |
-| C5 | 条件式 G6 是否改善候选且不遗忘 | base/posttrain、K2、oracle gap、World on/off |
-
-C3 Safety、C0 Classic 和 C6 Agent 是独立背景或扩展主张，不阻塞核心完成。
-
-## 6. 核心发布配置
-
-1. `VLA-Top1`；
-2. `VLA+World`；
-3. `Oracle-Best-of-K`，只作离线评价上限；
-4. `PostTrained VLA+World`，仅 G6 被证据触发并完成时加入。
-
-Classic、Hybrid、VLA+Safety 和 VLA+World+Safety 单列，不混入核心因果比较。
-
-## 7. 统一证据规则
-
-每个结论至少绑定：
-
-```text
-run_id / scenario_id / seed / initial_state_hash
-code/config/model/data hash
-candidate_id / selected_id / executed_id
-hardware/profile/precision
-latency P50/P95/P99 / deadline miss / VRAM/RAM
-collision/TTC/off-road/progress/comfort
-failure classification / limitations
-```
-
-证据状态：
-
-```text
-PLANNED → IMPLEMENTED → MEASURED → VERIFIED
-```
-
-只有 `VERIFIED` 可作为无保留量化表述。未运行测试不得写通过；CARLA 结果不得写成
-真实道路安全证明。
-
-## 8. 可选模块的启用条件
-
-- G6：只有 G5 证明两条候选经常双双失败或 VLA 质量限制 oracle/World 上限时启用。
-- G3-05 Safety：核心效果完成后按工程需要补做。
-- G4B Search：只有固定 paired set 不足以回答问题时启用。
-- G7 Agent：只在确定性工作流已成立且确有研发效率问题时启用。
-
-所有 optional 未执行时保持 `PENDING`，Evidence 标记 `OPTIONAL_NOT_RUN` 或
-`DEFERRED`。
+每次正式运行保存 config、commit/worktree hash、split、seed、输入/候选/选择/执行链、
+Guard/Safety 决策、outcome、P50/P95/P99、deadline miss 与资源。证据状态只允许
+`PLANNED → IMPLEMENTED → MEASURED → VERIFIED`。失败和负收益必须与正结果同等保留。

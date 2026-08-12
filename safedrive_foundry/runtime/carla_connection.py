@@ -248,18 +248,25 @@ def build_carla_launch_arguments(
 
 
 def rewrite_arguments_map(arguments: str, map_name: str) -> str:
-    """Replace the leading map content token with the requested town path."""
+    """Replace the leading map token with the packaged Unreal map asset path.
 
-    from runtime.carla_engine_config import map_content_path
+    The Windows packaged CARLA 0.9.16 executable accepts the first argument as
+    an Unreal asset identifier.  A bare content package such as
+    ``/Game/Carla/Maps/Town05`` can be ignored and cause the executable to fall
+    back to ``DefaultEngine.ini``.  The explicit cold-start path therefore uses
+    the same ``<package>.<asset>`` form as the map settings in that file.
+    """
 
-    content = map_content_path(map_name)
+    from runtime.carla_engine_config import map_asset_path
+
+    asset = map_asset_path(map_name)
     tokens = [token for token in str(arguments).split() if token]
     if not tokens:
-        return content
+        return asset
     if tokens[0].startswith("/Game/") or tokens[0].startswith("Game/"):
-        tokens[0] = content
+        tokens[0] = asset
     else:
-        tokens.insert(0, content)
+        tokens.insert(0, asset)
     return " ".join(tokens)
 
 
@@ -808,7 +815,14 @@ def _linux_carla_process_running() -> str | None:
 
     try:
         completed = subprocess.run(
-            ["pgrep", "-f", r"CarlaUE4(\.sh)?|CarlaUE4-Linux"],
+            [
+                "pgrep",
+                "-x",
+                (
+                    "CarlaUE4|CarlaUE4.sh|CarlaUE4-Linux|"
+                    "CarlaUE4-Linux-Shipping"
+                ),
+            ],
             capture_output=True,
             text=True,
             timeout=2.0,
@@ -970,6 +984,8 @@ class ConnectionResolver:
         if not path.exists():
             return None
         try:
+            from runtime.carla_engine_config import map_asset_path
+
             data = tomllib.loads(path.read_text(encoding="utf-8"))
             spec = dict(data.get("carla_start", {}))
             if spec.get("expected_version") != self.expected_version:
@@ -1000,7 +1016,7 @@ class ConnectionResolver:
             if requested_map:
                 arguments = rewrite_arguments_map(arguments, requested_map) if arguments else (
                     build_carla_launch_arguments(
-                        map_content=f"/Game/Carla/Maps/{requested_map}",
+                        map_content=map_asset_path(requested_map),
                         rhi=effective_rhi,
                         render_offscreen=effective_offscreen,
                     )
