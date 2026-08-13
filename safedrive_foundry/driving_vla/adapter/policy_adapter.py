@@ -72,7 +72,10 @@ def validate_trajectory_array(arr: TrajectoryArray, *, require_t: int = T_STEPS)
 def _to_points(arr: TrajectoryArray, *, t0: float = 0.0, dt: float = DT_S) -> tuple[TrajectoryPoint, ...]:
     """Stamp times as t0+(i+1)*dt → 0.25..2.5 for default contract (matches canonicalizer)."""
     pts: list[TrajectoryPoint] = []
+    previous_a: float | None = None
     for i, (x, y, yaw, v, a, kappa) in enumerate(arr.points_xy_yaw_v_a_kappa):
+        a_value = float(a)
+        jerk = 0.0 if previous_a is None else (a_value - previous_a) / dt
         pts.append(
             TrajectoryPoint(
                 t=t0 + (i + 1) * dt,
@@ -81,10 +84,11 @@ def _to_points(arr: TrajectoryArray, *, t0: float = 0.0, dt: float = DT_S) -> tu
                 yaw=float(yaw),
                 kappa=float(kappa),
                 v=float(v),
-                a=float(a),
-                jerk=0.0,
+                a=a_value,
+                jerk=jerk,
             )
         )
+        previous_a = a_value
     return tuple(pts)
 
 

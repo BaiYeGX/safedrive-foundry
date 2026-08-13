@@ -150,13 +150,14 @@ def _parser() -> argparse.ArgumentParser:
         ("status", "read-only CARLA endpoint and world status"),
         ("preflight", "read-only CARLA version/map/settings/tick-owner gate"),
         ("ensure", "reuse or start the validated CARLA 0.9.16 instance"),
+        ("restart", "gracefully cold-restart the sole verified CARLA process"),
     ):
         command = sim_subparsers.add_parser(name, help=help_text)
         command.add_argument("--carla-host", help="explicit host override (otherwise unified resolver precedence applies)")
         command.add_argument("--carla-port", type=int, help="explicit RPC port override")
         command.add_argument("--timeout", type=float, default=3.0, help="TCP/RPC timeout in seconds")
         command.add_argument("--json", action="store_true", help="emit one structured JSON object")
-        if name == "ensure":
+        if name in {"ensure", "restart"}:
             command.add_argument(
                 "--startup-timeout",
                 type=float,
@@ -167,6 +168,7 @@ def _parser() -> argparse.ArgumentParser:
             command.add_argument(
                 "--map",
                 dest="map_name",
+                required=name == "restart",
                 default=None,
                 help="Requested startup map (e.g. Town03). Must match DefaultEngine.ini "
                 "in default_engine mode; READY actual_map is verified (no load_world).",
@@ -184,6 +186,13 @@ def _parser() -> argparse.ArgumentParser:
                 help="default_engine=manual-compatible (no ArgumentList); "
                 "explicit_arguments=experimental command-line map/RHI flags",
             )
+            if name == "restart":
+                command.add_argument(
+                    "--shutdown-timeout",
+                    type=float,
+                    default=30.0,
+                    help="Seconds to wait for normal CloseMainWindow shutdown (no force kill)",
+                )
             command.add_argument(
                 "--no-auto-pin-default-engine",
                 action="store_true",
@@ -346,7 +355,7 @@ def _cmd_sim(args: argparse.Namespace) -> int:
             report = resolver.status(host=args.carla_host, port=args.carla_port)
         elif args.sim_command == "preflight":
             report = resolver.preflight(host=args.carla_host, port=args.carla_port)
-        else:
+        elif args.sim_command == "ensure":
             report = resolver.ensure(
                 host=args.carla_host,
                 port=args.carla_port,
@@ -357,6 +366,16 @@ def _cmd_sim(args: argparse.Namespace) -> int:
                 map_name=getattr(args, "map_name", None),
                 launch_mode=getattr(args, "launch_mode", None),
                 auto_pin_default_engine=not bool(getattr(args, "no_auto_pin_default_engine", False)),
+            )
+        else:
+            report = resolver.restart(
+                host=args.carla_host,
+                port=args.carla_port,
+                shutdown_timeout_seconds=args.shutdown_timeout,
+                startup_timeout_seconds=args.startup_timeout,
+                poll_interval_seconds=args.poll_interval,
+                rhi=args.rhi or "dx12",
+                map_name=args.map_name,
             )
         _print_connection_report(report, as_json=args.json)
         return exit_code(report)

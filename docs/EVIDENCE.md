@@ -12,8 +12,89 @@ PLANNED → IMPLEMENTED → MEASURED → VERIFIED
 observation、candidate、Guard、selector、Safety、executed trajectory、outcome、延迟与资源。
 没有实际运行的数字不能进入 `MEASURED`，没有冻结复核不能进入 `VERIFIED`。
 
-H0 仅是仓库收敛，不产生驾驶性能数字。H1 尚未开始，当前没有 H World 数据、checkpoint
-或 on/off 结果。
+H0 仅是仓库收敛，不产生驾驶性能数字。H1 Evidence 只验证独立候选、Guard、选择和
+一个控制 tick 的合同，不是驾驶性能评估或 H2 训练数据。H2 runtime Evidence 与数据按
+dataset id 分别位于 `docs/runtime-evidence/h2/` 和 `generated/h2/paired-outcomes/`；二者
+均为本机 Git-ignored artifact。当前没有 H World checkpoint 或 on/off 结果。
+
+### H2 Evidence 边界
+
+H2 每个 dataset 必须包含三地图 restart smoke、物理 scenario manifest、逐地图 pilot/full
+collector Evidence、每 pair live shard、独立 offline label 和最终 audit。`manifest.json`
+覆盖 dataset 内全部 artifact；Evidence 同时绑定 HEAD、tracked diff SHA256、untracked
+manifest SHA256、CARLA/config/model/route/candidate hashes、执行链、延迟和显存。
+
+H2 状态只有在 120 个固定 anchor 全部 terminal 并完成 offline label/audit 后才可写为
+`VERIFIED`。Pilot 或环境阻塞不能借用 H1 smoke、archive 或合成数据升级为 H2 证据；门失败
+也必须冻结为负结果并关闭 H3。
+
+### H2 最终验收（负结果）
+
+最终 dataset `h2-final-20260813-scenariov2-cleanup` 已完成 Town01、Town03、Town05 冷重启、
+restart smoke、15-anchor pilot 和完整 120-anchor 固定矩阵。pilot 通过后才扩大；完整数据门
+按冻结规则失败，因此状态为 `H2 COMPLETED / VERIFIED / GATE_FAILED / STOPPED`，H3 关闭。
+
+本机 artifact（均 Git-ignored）：
+
+```text
+generated/h2/paired-outcomes/h2-final-20260813-scenariov2-cleanup/
+docs/runtime-evidence/h2/h2-final-20260813-scenariov2-cleanup/
+```
+
+冻结 hash：
+
+```text
+physical_manifest_sha256 f89a2f8a039144b089ae27c2584aa112a3d35d061d6a22cc6d12359fabd11a9f
+store_manifest_sha256    b63f4f63de12aa0a84762c398fecc7bb78ffbcc4d59f22b3552da1ba2c82727e
+config_sha256            9ff604d7d3d64122af76b41df58533d722de3f27c8d0c9dbe7e89e6a7552ceaa
+offline_audit_sha256     e72db6ff4a185007008a8905855568554b384bad4ad8d1a49c4616dae3549338
+final_delivery_sha256    6ceb3c74aede8c3895cbefb302a10f9ec98f0b5425af616fe1e9da77ec163f23
+```
+
+门指标：120/120 terminal；58 valid/distinct；Town01/Town03/Town05 为 21/23/14；family
+为 14/12/4/13/15；weather 为 33/25；58 decisive；Expert/VLA wins 为 58/0；slot Expert=0
+比例 0.4827586；swap/source/branch permutation 通过；trajectory hash 100%；source-only
+baseline 100%；整卡 GPU peak 8.3945 GiB；dataset 1,443,906,253 bytes。manifest、artifact
+hash、执行绑定和 cleanup 全通过。失败门为 valid/distinct 数量、地图/family/weather 配额、
+VLA wins 和 source-only baseline，均按原阈值记录，没有补采或改门槛。
+
+正式 Evidence 包含每地图 pilot/full collector、冷重启/smoke、pair shard、label shard、
+store manifest、full offline audit 和历次失败/中断记录。Town01 一次残留 actor 清场失败被
+保留；随后一次安全冷重启、只读清场核验后在同一物理 manifest 上恢复，未伪造或重写成功记录。
+
+### H1 Town03 live smoke
+
+验证 Evidence（UTC run id `20260812T161321Z`）：
+
+```text
+docs/runtime-evidence/h1/h1-smoke-20260812T161321Z/h1_smoke.json
+sha256 2be0a5171856848bf52fb1ac48bbc88e714d65b8ff7c1811b89baae0bc857db7
+```
+
+- CARLA 0.9.16 / Town03 / RTX 4080，anchor、front camera 与两候选共同绑定 frame
+  `112794`；
+- Classic 与真实 SimLingo 各生成一次，wall latency 分别为 `0.817646 s`、`1.111187 s`，
+  VLA forward count 为 `1`；
+- 两条候选均为 Guard `PASS`，差异为最大位置 `2.833430 m`、RMS 速度 `1.174353 m/s`，
+  因而是 `DISTINCT`；
+- H1 冻结 selector 选择 Expert，Safety 为 `ACCEPT`，selected/final/post-repair/executed/
+  applied id 连贯，实际控制为 `TRACK_APPROVED`；
+- VLA forward peak 为 `2218.178 MB`，运行结束 registry 为 `COMPLETED`；复查 CARLA 已恢复
+  asynchronous、tick owner free。
+
+失败 Evidence 同样保留：
+
+```text
+h1-smoke-20260812T160549Z/h1_smoke.json
+sha256 6384affd3afbe47d1f81d076ea7b5df572c1d5a23085f4b2d32567ca839cd898
+
+h1-smoke-20260812T160859Z/h1_smoke.json
+sha256 9c281cd69a88880acc4a1f7ad3508477144f27e729ac2d542add7a56b5c2d803
+```
+
+两次都因相机首帧 barrier timeout 中止，registry 为 `INTERRUPTED`。根因是相机额外
+`sensor_tick=0.05` 在同步 world 首帧未发回精确 frame；最终让相机随唯一 20 Hz world
+tick 每帧采样后通过。失败没有改名为成功或删除。
 
 ## 2. 2026-08-12 路线收敛归档
 
@@ -79,8 +160,8 @@ sha256 bff2e26a9c7ff86a55ddb38fd4e2e09482468587e4dfc53c827ec9e4d00c53fb
 | 阶段 | Evidence 状态 |
 |---|---|
 | H0 route consolidation | `VERIFIED / STOPPED` |
-| H1 independent candidates | `NOT_IMPLEMENTED` |
-| H2 paired outcomes | `NOT_STARTED` |
+| H1 independent candidates | `VERIFIED / STOPPED` |
+| H2 paired outcomes | `COMPLETED / VERIFIED / GATE_FAILED / STOPPED` |
 | H3 World development | `NOT_STARTED` |
 | H4 locked evaluation | `NOT_STARTED` |
 | H5 World on/off | `NOT_STARTED` |

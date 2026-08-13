@@ -35,11 +35,15 @@ CARLA/ROS observable snapshot
 |---|---:|---:|---:|---:|
 | 当前图像/ego/route/history | 是 | 是 | 是 | 是 |
 | 当前可观测 actor/light 状态 | 是 | 是 | 是 | 是 |
-| 候选轨迹与 Guard 结果 | 不回灌 | 是 | 是 | 是 |
+| 候选轨迹 | 不回灌 | 是 | 是 | 是 |
+| Guard 结果/provenance/source/slot/order | 不回灌 | 否 | 是 | 是 |
 | rollout actor future/碰撞/最终进度 | 否 | 仅训练标签 | 是 | 是 |
 | 场景答案、Regression 注入、测试标签 | 否 | 否 | 否 | 是 |
 
-Oracle 与 online package 必须物理隔离导入；测试 split 在 H4 前锁定。
+Oracle 与 online package 必须物理隔离导入；H2 live collector 不导入 Oracle。H2 暴露给
+H3 的 feature view 只含 observable history、route 与 candidate trajectory，source、slot、
+branch order、actor future、outcome、Oracle 和 Regression 字段物理缺席。测试 split 在
+H4 前锁定。
 
 ## 4. 候选合同
 
@@ -63,9 +67,14 @@ source id 只用于 provenance 和分层报告；World 训练默认不把 source
 
 1. 两候选都未通过 Guard：调用现有 Safety 回退。
 2. 仅一个通过：直接把该候选交给 Safety，World 不制造选择。
-3. 两个通过且 World defer：使用冻结的非学习 selector。
+3. 两个通过且 World defer：使用冻结 Safety soft score，并以 Classic、candidate id 稳定
+   破平；H1 中 World 恒为 defer。
 4. 两个通过且 World 有效：按 World score 排序，再交给 Safety。
 5. Safety 可拒绝或降级最终选择；World 无权覆盖。
+
+H1 的近重复门冻结为最大逐点位置差 `0.5 m` 与 RMS 速度差 `0.5 m/s`；两者同时不超过
+阈值才标记 `NO_SELECTION_SPACE`。生成 wall deadline 冻结为 `2.5 s`，Safety 原有
+simulation freshness `0.25 s` 不变。
 
 ## 6. 成功口径
 

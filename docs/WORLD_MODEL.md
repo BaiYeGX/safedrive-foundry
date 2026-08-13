@@ -21,17 +21,17 @@ s_i = RankHead(y_i)
 - 当前/历史图像或其冻结特征；
 - ego history、route、导航命令；
 - 当前可观测 actor、traffic-light、lane/topology；
-- candidate trajectory、动力学量与 Guard 结果摘要。
+- candidate trajectory 及由该 trajectory 本身可重算的动力学量。
 
 禁止：
 
 - rollout future、碰撞结果、Oracle winner；
 - 场景 family 答案、Regression 注入、测试标签；
-- 候选槽位作为语义；
+- Guard 结果、provenance、source、候选槽位或 branch order；
 - World 输出修改 Guard/Safety 权限。
 
-source id 可用于审计和分层指标，但默认不能进入主 scorer。若实验使用 source embedding，
-必须单独做 source-only baseline 并证明模型不是在背候选来源先验。
+source id 只保留在 H2 审计和分层指标中，不能进入 H3 scorer feature view。source-only
+baseline 只能从隔离的审计表计算，不能成为训练特征或模型变体。
 
 ## 3. 预测目标
 

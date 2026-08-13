@@ -1,0 +1,27 @@
+schema_version = "safedrive.h2.config.v1"
+matrix_algorithm = "h2-fixed-matrix-v1"
+maps = ["Town01", "Town03", "Town05"]
+families = ["free_flow", "slow_lead", "stopped_lead", "cut_in", "red_light_hold"]
+seeds = [0, 1, 2, 3]
+weather = ["ClearNoon", "CloudyNoon"]
+
+[timing]
+fixed_delta_seconds = 0.05
+history_ticks = 20
+branch_ticks = 50
+trajectory_stamp_refresh_ticks = 4
+
+[reset]
+position_delta_m = 0.05
+yaw_delta_deg = 0.5
+speed_delta_mps = 0.10
+
+[oracle]
+off_corridor_unsafe_seconds = 0.25
+progress_margin_m = 1.0
+jerk_margin_mps3 = 1.0
+comfort_progress_tolerance_m = 0.25
+
+[resources]
+dataset_limit_gib = 15.0
+whole_gpu_peak_limit_gib = 14.5

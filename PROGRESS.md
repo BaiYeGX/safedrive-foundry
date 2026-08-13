@@ -1,5 +1,157 @@
 # SafeDrive Foundry 进度
 
+## 2026-08-13 — H2 完整验收与交付终态
+
+状态：`H2 COMPLETED / VERIFIED / GATE_FAILED / STOPPED`。H3、World、训练和在线 Oracle
+关闭/未授权。本轮没有通过改变矩阵、标签阈值或补挑场景制造通过。
+
+在真实 CARLA 0.9.16、RTX 4080/CUDA 和 Town01 → Town03 → Town05 冷重启序列上完成：
+
+- 三地图 restart smoke、唯一物理 manifest、15-anchor pilot；pilot 通过（15/15 terminal，
+  9 valid/distinct，9 decisive），随后才扩大正式矩阵；
+- 固定 `3 × 5 × 4 × 2 = 120` anchors 全部 terminal，三地图 full collector 均 `ok=true`；
+- 离线 Oracle、slot/source/branch permutation、执行绑定轨迹 hash、CAS/Parquet manifest
+  与 artifact hash audit 全部完成；
+- dataset `h2-final-20260813-scenariov2-cleanup` 写入本机 Git-ignored 的
+  `generated/h2/paired-outcomes/`，Evidence 写入 `docs/runtime-evidence/h2/`。
+
+冻结身份：物理 manifest `f89a2f8a039144b089ae27c2584aa112a3d35d061d6a22cc6d12359fabd11a9f`；
+store manifest `b63f4f63de12aa0a84762c398fecc7bb78ffbcc4d59f22b3552da1ba2c82727e`；配置
+`9ff604d7d3d64122af76b41df58533d722de3f27c8d0c9dbe7e89e6a7552ceaa`；最终 audit Evidence
+`docs/runtime-evidence/h2/h2-final-20260813-scenariov2-cleanup/offline-label-audit-full.json`
+（Evidence SHA256 `e72db6ff4a185007008a8905855568554b384bad4ad8d1a49c4616dae3549338`）。最终
+terminal summary `final-delivery.json` 的 Evidence SHA256 为
+`6ceb3c74aede8c3895cbefb302a10f9ec98f0b5425af616fe1e9da77ec163f23`。
+
+最终门指标：120 terminal；58 valid/distinct（目标 ≥72）；Town01/Town03/Town05 为
+21/23/14（每张 ≥18）；family `cut_in/free_flow/red_light_hold/slow_lead/stopped_lead`
+为 14/12/4/13/15（每个 ≥8）；weather ClearNoon/CloudyNoon 为 33/25（每种 ≥30）；
+58 decisive；Expert/VLA wins 为 58/0（VLA 目标 ≥5）；slot Expert=0 比例 0.4827586；
+swap/source/branch permutation 通过；trajectory hash 保持 100%；source-only baseline 1.0
+（目标 ≤0.8）；整卡 GPU peak 8.3945 GiB（目标 ≤14.5）；dataset 1,443,906,253 bytes
+（目标 ≤15 GiB）。门失败项为 `eligible_distinct`、`valid_pairs`、`per_map_valid_pairs`、
+`per_family_valid_pairs`、`per_weather_valid_pairs`、`vla_wins`、`source_only_majority`；
+manifest、执行绑定、cleanup 和 artifact hash 均通过。该负结果关闭 H3，不进入 World/训练。
+
+QP 时序修复已完成：OSQP algebra 仅探测并冻结一次；全量串行测试现为 `327 tests: 326
+passed, 1 skipped, 0 failed`。H2 专项 `111 tests: 110 passed, 1 skipped`；compileall、文档
+链接检查与 `git diff --check` 通过。label 批量写入支持延迟 manifest 扫描，但最终 manifest
+仍完成全量校验；中断 audit 的 18 个 labels 通过不可变内容复用安全恢复。
+
+CARLA 过程中一次 Town01 残留 actor 触发硬清场门；保留失败 Evidence，执行一次受控冷重启
+并确认仅剩内建 traffic light/speed-limit actors 后从同一冻结 manifest 恢复，未改变数据身份。
+未使用 `load_world`、第二 tick master、在线 Oracle 或 fake GPU/CARLA。
+
+## 2026-08-13 — H2 Paired Outcomes 实现与验证阻塞（已被上方最终验收记录取代）
+
+状态：`H2_IMPLEMENTED / NOT_VERIFIED / BLOCKED`。H3、World、训练和在线 Oracle 均未
+授权。按 H2 全量测试硬门，本轮在 CARLA restart/smoke/pilot/120 矩阵之前停止。
+
+本轮从未提交的 H1 工作树创建 `codex/h2-paired-outcomes`，完成：
+
+- 固定 `3 maps × 5 families × 4 seeds × 2 weather = 120` 矩阵和 15-anchor pilot；
+  pair hash 冻结 branch order 与 Expert slot，完整矩阵严格 60/60；
+- 新增 H2 pair/branch/outcome/reset 合同、内容寻址 PNG、Zstd Parquet timeline/event/
+  actor-future、每 pair 原子 shard、独立 offline label 和全 artifact manifest/resume 校验；
+- H3 feature view 以 allowlist 新建，只含 observable anchor/history、route 和 candidate
+  trajectory/hash；source、slot、order、future、outcome、Oracle、Regression、label/winner
+  字段物理缺席；
+- 离线 Oracle 按冻结 unsafe/completion/progress/comfort 规则只引用 candidate id/hash，
+  branch/slot/source 置换测试保持结果不变；
+- `ScenarioRuntime` 新增稀疏 collision/lane event buffer、锁保护范围读取和 ego/NPC 同 tick
+  控制；地图不匹配 fail-closed，不再隐式 `client.load_world()`；
+- 新增 `sdf sim restart`：只接受 READY、async、tick-owner-free、唯一且 executable/cmd/
+  DefaultEngine 配置匹配的 Windows CARLA；仅请求 `CloseMainWindow`，验证 PID/TCP 退出，
+  原子 pin 后 bounded ensure 和一次最终 preflight，不 force kill；
+- 新增三地图物理 manifest、restart smoke、同 anchor 一次双来源生成、强制单候选 Safety、
+  50-tick MPC/PID branch、offline label/audit 和断点恢复编排；live collector 不导入 Oracle，
+  不创建第二 client/tick master，不调用 `world.tick()` 或 `load_world()`。
+
+已运行验证：
+
+- H2 专项：12/12 passed；完整 `tests/hybrid`：108 passed、1 个真实 GPU forward 门 skipped；
+- Runtime/连接：47/47 passed；Classic/Safety/Control 专项：97/97 passed；
+- 受影响 QP/RATO 模块隔离复跑：30/30 passed；
+- `compileall` 和 `git diff --check`：通过；
+- 干净串行全量：325 tests 中 312 passed、1 skipped、12 failed。失败包括 11 个不在计划
+  允许清单内的 longitudinal-QP deadline timeout（约 `54.39–56.62 ms`），以及既有
+  `test_static_obstacle_lateral_repair` RATO timeout（`69.48 ms`）。隔离复跑全部通过，说明
+  是全套负载时序敏感，但 H2 计划只豁免既有 RATO 单项，不能把新增 11 项改名为允许失败。
+
+停止结果：没有运行 CARLA preflight/restart，没有创建 H2 dataset 或 runtime Evidence，
+没有修改 Safety deadline/阈值或测试来掩盖失败，没有 commit/push。后续必须先由单独任务
+解决或明确处置全量 QP timing gate，再从全新 dataset id 执行三地图 restart smoke、pilot
+和固定 120-anchor 矩阵；不得直接进入 H3。
+
+当前研究事实：
+
+```text
+H0 = VERIFIED / STOPPED
+H1 = VERIFIED / STOPPED
+H2 = IMPLEMENTED / NOT_VERIFIED / BLOCKED
+H3 = NOT_STARTED / NOT_AUTHORIZED
+H4 = NOT_STARTED
+H5 = NOT_STARTED
+H6 = NOT_STARTED
+```
+
+## 2026-08-13 — H1 独立 HybridCandidateSet
+
+状态：`H1_VERIFIED / STOPPED`。H2、World、Oracle 在线路径、训练和 paired rollout 均未
+授权、未实施。
+
+本轮在分支 `codex/h1-hybrid-candidates` 完成：
+
+- 新增强绑定 observation/frame/CARLA frame/simulation time、ego、route revision、
+  actor/light snapshot 与传感器帧/时间戳的 `ObservableAnchor`；
+- Classic Frenet/ST 与 nominal SimLingo 各自独立生成一条候选，VLA 每个 anchor 只做一次
+  `predict_native`；公开 `expert | vla` 与 Safety v1 的 `CLASSIC | VLA_FAST` 映射兼容；
+- 严格 canonicalize 为 `map / T=10 / dt=0.25 s / horizon=2.5 s`，退化、覆盖不足与外推
+  fail-closed，并冻结 raw/canonical/generator/route hashes 与 resampling provenance；
+- 新增按合同、binding/freshness、route/navigation、dynamics/trackability、observable
+  collision、isolated controller dry-run 排序的逐候选 Guard；
+- 新增 0/1/2 PASS router、`0.5 m / 0.5 m/s` 近重复门、冻结 Safety soft score 与稳定
+  tie-break；Safety 只收到选中的单候选，控制链禁止 first-available；
+- `ScenarioRuntime` 支持只读 blueprint attributes 与受锁保护的精确帧 measurement；
+- 新增 Town03 smoke，使用原生 SimLingo 相机位姿/分辨率/FOV、20 Hz 单 tick master，并
+  保存本机只读 Evidence。
+
+验证结果：
+
+- `tests/hybrid`：97 passed、1 个真实 GPU 20-forward 环境门测试 skipped；
+- H1/nominal/runtime 直接回归：35 passed；Classic/Safety 相关回归：59 passed；
+- `compileall` 与 `git diff --check`：通过；
+- 10 个活动 Markdown 文档本地链接检查：`BROKEN_LOCAL_LINKS 0`；H1 runtime 的
+  World/Oracle/archive import 与第二 `carla.Client`/tick master 扫描：0 命中；
+- 全量 310 tests：308 passed、1 skipped、1 failed。唯一失败仍是既有
+  `test_static_obstacle_lateral_repair` 在整套负载下以 51.10 ms 命中 RATO deadline；单独
+  复跑 1/1 passed（44 ms 测试总时长），未放宽 deadline 或修改测试；
+- CARLA gate：唯一一次 `ensure --map Town03 --rhi dx12` 后 READY，唯一一次 preflight
+  复查仍 READY；CUDA admission 为 RTX 4080、约 15.77 GB free，模型资产齐全；
+- 正式 smoke `h1-smoke-20260812T161321Z`：两来源成功，Classic/VLA wall latency
+  `0.817646 / 1.111187 s`，VLA forward count `1`，两条均 Guard PASS，候选差异
+  `2.833430 m / 1.174353 m/s`，Safety `ACCEPT` 且 selected/executed/applied id 连贯，
+  控制 `TRACK_APPROVED`，VLA peak `2218.178 MB`，runtime cleanup `COMPLETED`。
+
+验证 JSON SHA256：
+`2be0a5171856848bf52fb1ac48bbc88e714d65b8ff7c1811b89baae0bc857db7`。
+此前两次失败 smoke 因相机额外 `sensor_tick` 的精确首帧 barrier timeout 被保留为
+`INTERRUPTED` Evidence；相机改为随唯一 20 Hz world tick 每帧采样后通过。
+
+当前研究事实：
+
+```text
+H0 = VERIFIED / STOPPED
+H1 = VERIFIED / STOPPED
+H2 = NOT_STARTED / NOT_AUTHORIZED
+H3 = NOT_STARTED
+H4 = NOT_STARTED
+H5 = NOT_STARTED
+H6 = NOT_STARTED
+```
+
+停止点：H1 已完成，不自动进入 H2。
+
 ## 2026-08-12 — H0 路线收敛
 
 状态：`H0_CONSOLIDATED / VERIFIED / STOPPED`。
@@ -56,4 +208,5 @@ H6 = NOT_STARTED
 结果重命名为 H Evidence。完整活动测试仍有上述一个时序敏感失败；H 专项回归与静态
 验证均通过。
 
-下一步只允许在新任务中实施 H1；不得自动进入 H2 或 World 训练。
+该 H0 记录的下一步已由本轮 H1 完成；当前下一步只能由新任务单独授权 H2，不得自动
+采集 paired outcome 或进入 World 训练。

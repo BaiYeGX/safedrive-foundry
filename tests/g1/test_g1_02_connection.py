@@ -37,6 +37,7 @@ from runtime.carla_connection import (  # noqa: E402
     STARTUP_TIMEOUT,
     TCP_UNREACHABLE,
     WORLD_SETTINGS_QUERY_FAILED,
+    WindowsCarlaProcess,
     _parse_default_routes,
     _rank_host_candidates,
     build_carla_launch_arguments,
@@ -760,6 +761,85 @@ class G102ConnectionTests(unittest.TestCase):
             )
             self.assertIn("Town03.Town03", after.game_default_map or "")
             self.assertEqual(after.configured_rhi, "dx12")
+
+    def test_restart_refuses_synchronous_world_and_multiple_processes(self) -> None:
+        process = WindowsCarlaProcess(7, r"E:\CARLA_0.9.16\CarlaUE4.exe", "CarlaUE4.exe")
+        world = World("Carla/Maps/Town03")
+        world.settings.synchronous_mode = True
+        closed: list[int] = []
+        resolver = self.resolver(
+            tcp_probe=lambda h, p, t: (True, None),
+            client_factory=lambda h, p: Client(world=world),
+            windows_processes=lambda: (process,),
+            request_process_close=lambda pid: closed.append(pid) or True,
+        )
+        report = resolver.restart(host="host", map_name="Town01")
+        self.assertEqual(report.status, BLOCKED_EXTERNAL)
+        self.assertEqual(closed, [])
+
+        world.settings.synchronous_mode = False
+        resolver = self.resolver(
+            tcp_probe=lambda h, p, t: (True, None),
+            client_factory=lambda h, p: Client(world=world),
+            windows_processes=lambda: (
+                process,
+                WindowsCarlaProcess(8, process.executable_path, process.command_line),
+            ),
+            request_process_close=lambda pid: closed.append(pid) or True,
+        )
+        report = resolver.restart(host="host", map_name="Town01")
+        self.assertEqual(report.error_code, NEEDS_USER_ACTION)
+        self.assertEqual(closed, [])
+
+    def test_restart_graceful_close_pin_ensure_and_single_recheck(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_start_toml(root, default_map="Town03")
+            ini = self._write_default_engine_ini(root / "DefaultEngine.ini", map_name="Town03")
+            state = {"running": True, "map": "Town03", "starts": 0, "closes": 0}
+            process = WindowsCarlaProcess(
+                77, r"E:\CARLA_0.9.16\CarlaUE4.exe", r"E:\CARLA_0.9.16\CarlaUE4.exe"
+            )
+
+            def close(pid: int) -> bool:
+                self.assertEqual(pid, 77)
+                state["closes"] += 1
+                state["running"] = False
+                return True
+
+            def start(spec: Any) -> LaunchResult:
+                state["starts"] += 1
+                state["running"] = True
+                state["map"] = "Town01"
+                return LaunchResult(ok=True, pid=88, launch_mode="default_engine", started_at=1.0)
+
+            resolver = ConnectionResolver(
+                root,
+                process_query=lambda: "RUNNING" if state["running"] else "NOT_RUNNING",
+                tcp_probe=lambda h, p, t: (bool(state["running"]), None),
+                client_factory=lambda h, p: Client(world=World(f"Carla/Maps/{state['map']}")),
+                start_process=start,
+                windows_processes=lambda: (process,) if state["running"] else (),
+                request_process_close=close,
+                sleeper=lambda _: None,
+            )
+            with patch("runtime.carla_connection.windows_path_exists", return_value=True), patch(
+                "runtime.carla_engine_config.resolve_default_engine_ini", return_value=ini
+            ):
+                report = resolver.restart(
+                    host="host",
+                    map_name="Town01",
+                    rhi="dx12",
+                    shutdown_timeout_seconds=1.0,
+                    startup_timeout_seconds=1.0,
+                    poll_interval_seconds=0.0,
+                )
+            self.assertEqual(report.status, READY)
+            self.assertEqual(report.map, "Carla/Maps/Town01")
+            self.assertEqual(state["closes"], 1)
+            self.assertEqual(state["starts"], 1)
+            self.assertEqual(report.recovery_action, "safe_cold_restart")
+            self.assertEqual(read_default_engine_config(ini).configured_map_token, "Town01")
 
     def test_find_recent_crash_context_parses_shader_fatal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

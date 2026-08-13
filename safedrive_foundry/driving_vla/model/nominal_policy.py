@@ -9,7 +9,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from driving_vla.adapter.policy_adapter import ObservationBundle, TrajectoryArray
-from driving_vla.model.canonicalizer import TrajectoryCanonicalizer, UpstreamPathSpeed
+from driving_vla.model.canonicalizer import (
+    CanonicalizationResult,
+    TrajectoryCanonicalizer,
+    UpstreamPathSpeed,
+)
 from driving_vla.model.simlingo_runtime import SimLingoNeuralRuntime
 
 
@@ -53,6 +57,7 @@ class NominalVLAPolicy:
         self.canonicalizer = TrajectoryCanonicalizer()
         self.last_latency_s = 0.0
         self.last_peak_vram_mb = 0.0
+        self.forward_count = 0
 
     def ensure_loaded(self) -> None:
         if self.runtime is None:
@@ -153,14 +158,7 @@ class NominalVLAPolicy:
 
     def predict_arrays(self, obs: ObservationBundle) -> list[TrajectoryArray]:
         native = self.predict_native(obs)
-        trajectory = self.canonicalizer.canonicalize(
-            UpstreamPathSpeed(
-                path_xy=native.path_map_xy,
-                speed_mps=native.speed_mps,
-                frame="map",
-            ),
-            to_map=False,
-        )
+        trajectory = self.canonicalize_native(native).trajectory
         return [
             TrajectoryArray(
                 points_xy_yaw_v_a_kappa=trajectory.points_xy_yaw_v_a_kappa,
@@ -171,6 +169,18 @@ class NominalVLAPolicy:
                 behavior="follow",
             )
         ]
+
+    def canonicalize_native(self, native: NativePathPrediction) -> CanonicalizationResult:
+        """Canonicalize an already-computed native prediction without another forward."""
+
+        return self.canonicalizer.canonicalize_with_report(
+            UpstreamPathSpeed(
+                path_xy=native.path_map_xy,
+                speed_mps=native.speed_mps,
+                frame="map",
+            ),
+            to_map=False,
+        )
 
     def predict_native(self, obs: ObservationBundle) -> NativePathPrediction:
         if backend_name() in {"debug_geom", "fingerprint", "geom"}:
@@ -231,6 +241,7 @@ class NominalVLAPolicy:
                 eval_route_as if official else "legacy_command_text"
             )
 
+        self.forward_count += 1
         result = self.runtime.forward_numpy(
             image,
             speed_mps=input_speed,

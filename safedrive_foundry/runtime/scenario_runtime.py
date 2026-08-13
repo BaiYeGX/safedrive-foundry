@@ -67,6 +67,12 @@ class SensorSpec:
     transform: Any
     parent: str
     spawn_order: int
+    attributes: Mapping[str, str] = field(default_factory=dict)
+    delivery: str = "frame"  # ``frame`` participates in barrier; ``event`` is sparse.
+
+    def __post_init__(self) -> None:
+        if self.delivery not in {"frame", "event"}:
+            raise ValueError("sensor delivery must be 'frame' or 'event'")
 
 
 @dataclass(frozen=True)
@@ -78,6 +84,7 @@ class ScenarioSpec:
     traffic_manager_port: int = 8000
     traffic_manager_seed: int = 0
     sensor_timeout_seconds: float = 1.0
+    weather: Mapping[str, float] = field(default_factory=dict)
 
     def ordered_actors(self) -> tuple[ActorSpec, ...]:
         return tuple(sorted(self.actors, key=lambda item: (item.spawn_order, item.name)))
@@ -277,6 +284,7 @@ class RunRegistry:
 class _SensorBarrier:
     names: set[str]
     received: dict[str, int] = field(default_factory=dict)
+    measurements: dict[str, Any] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def accept(self, name: str, measurement: Any) -> None:
@@ -284,10 +292,24 @@ class _SensorBarrier:
         if isinstance(frame, int):
             with self._lock:
                 self.received[name] = frame
+                self.measurements[name] = measurement
 
     def snapshot(self) -> dict[str, int]:
         with self._lock:
             return dict(self.received)
+
+    def measurement(self, name: str, frame: int) -> Any:
+        """Return the latest payload only when it belongs to ``frame``."""
+
+        with self._lock:
+            if name not in self.names:
+                raise RuntimeViolation(f"unknown_sensor name={name}")
+            actual = self.received.get(name)
+            if actual != frame or name not in self.measurements:
+                raise RuntimeViolation(
+                    f"sensor_frame_unavailable name={name} expected={frame} actual={actual}"
+                )
+            return self.measurements[name]
 
     def await_frame(self, frame: int, timeout_seconds: float) -> None:
         deadline = time.monotonic() + timeout_seconds
@@ -299,11 +321,39 @@ class _SensorBarrier:
         raise RuntimeViolation(f"sensor_barrier_timeout frame={frame} sensors={missing}")
 
 
+@dataclass
+class _SensorEventBuffer:
+    """Thread-safe append-only buffer for sparse collision/lane events."""
+
+    names: set[str]
+    events: dict[str, list[tuple[int, Any]]] = field(default_factory=dict)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def accept(self, name: str, measurement: Any) -> None:
+        frame = getattr(measurement, "frame", None)
+        if name not in self.names or not isinstance(frame, int):
+            return
+        with self._lock:
+            self.events.setdefault(name, []).append((frame, measurement))
+
+    def read(self, name: str, since_frame: int, through_frame: int | None = None) -> tuple[Any, ...]:
+        if name not in self.names:
+            raise RuntimeViolation(f"unknown_event_sensor name={name}")
+        upper = int(through_frame) if through_frame is not None else 2**63 - 1
+        with self._lock:
+            return tuple(
+                measurement
+                for frame, measurement in self.events.get(name, ())
+                if int(since_frame) <= frame <= upper
+            )
+
+
 class _SensorCallbackGate:
     """Admission gate and worker queue for sensor callbacks during shutdown."""
 
-    def __init__(self, barrier: _SensorBarrier) -> None:
+    def __init__(self, barrier: _SensorBarrier, event_buffer: _SensorEventBuffer) -> None:
         self.barrier = barrier
+        self.event_buffer = event_buffer
         self._accepting = True
         self._inflight = 0
         self._lock = threading.Condition(threading.Lock())
@@ -340,7 +390,10 @@ class _SensorCallbackGate:
                 if self.process_item is not None:
                     self.process_item()
                 name, measurement = item
-                self.barrier.accept(name, measurement)
+                if name in self.barrier.names:
+                    self.barrier.accept(name, measurement)
+                else:
+                    self.event_buffer.accept(name, measurement)
             except BaseException as exc:  # worker errors become cleanup failures
                 with self._lock:
                     self._worker_errors.append(exc)
@@ -352,6 +405,11 @@ class _SensorCallbackGate:
             self._accepting = False
             while self._inflight:
                 self._lock.wait()
+
+    def flush(self) -> None:
+        """Wait until every callback admitted so far has been processed."""
+
+        self._queue.join()
 
     def drain_and_join(self) -> None:
         self._queue.join()
@@ -386,6 +444,7 @@ class ScenarioRuntime:
         self.world: Any | None = None
         self.spec: ScenarioSpec | None = None
         self._original_settings: Any | None = None
+        self._original_weather: Any | None = None
         self._traffic_manager: Any | None = None
         self._actors: dict[str, Any] = {}
         self._sensors: dict[str, Any] = {}
@@ -393,6 +452,7 @@ class ScenarioRuntime:
         self._sensor_ids: dict[str, int] = {}
         self._actor_ids: dict[str, int] = {}
         self._barrier: _SensorBarrier | None = None
+        self._event_buffer: _SensorEventBuffer | None = None
         self._callback_gate: _SensorCallbackGate | None = None
         self._started = False
         self._registry_started = False
@@ -432,12 +492,15 @@ class ScenarioRuntime:
                         "name": item.name, "blueprint": item.blueprint,
                         "transform": transform_payload(item.transform), "parent": item.parent,
                         "spawn_order": item.spawn_order,
+                        "attributes": dict(sorted(item.attributes.items())),
+                        "delivery": item.delivery,
                     }
                     for item in spec.ordered_sensors()
                 ],
                 "traffic_manager_port": spec.traffic_manager_port,
                 "traffic_manager_seed": spec.traffic_manager_seed,
                 "sensor_timeout_seconds": spec.sensor_timeout_seconds,
+                "weather": dict(sorted(spec.weather.items())),
             },
             "profile": asdict(profile),
         }
@@ -462,8 +525,11 @@ class ScenarioRuntime:
         try:
             self.world = self.client.get_world()
             current_map = str(self.world.get_map().name)
-            if current_map != spec.map_name:
-                self.world = self.client.load_world(spec.map_name)
+            actual_map = current_map.rsplit("/", 1)[-1]
+            if actual_map != spec.map_name:
+                raise RuntimeViolation(
+                    f"map_mismatch actual={current_map} expected={spec.map_name}; cold restart required"
+                )
             self._configure_world()
             self._configure_traffic_manager(spec)
             self.registry.begin(
@@ -499,6 +565,18 @@ class ScenarioRuntime:
         settings.max_substep_delta_time = self.profile.max_substep_delta_time
         settings.max_substeps = self.profile.max_substeps
         self.world.apply_settings(settings)
+        if self.spec is not None and self.spec.weather:
+            getter = getattr(self.world, "get_weather", None)
+            setter = getattr(self.world, "set_weather", None)
+            if getter is None or setter is None:
+                raise RuntimeViolation("world weather API unavailable")
+            self._original_weather = getter()
+            weather = getter()
+            for name, value in sorted(self.spec.weather.items()):
+                if not hasattr(weather, name):
+                    raise RuntimeViolation(f"unknown weather attribute: {name}")
+                setattr(weather, name, float(value))
+            setter(weather)
 
     def _configure_traffic_manager(self, spec: ScenarioSpec) -> None:
         # Skip TM when no actor uses autopilot. Creating a TM binds a Windows-side
@@ -521,20 +599,44 @@ class ScenarioRuntime:
             self._actor_ids[actor_spec.name] = int(getattr(actor, "id", -1))
             if actor_spec.autopilot:
                 actor.set_autopilot(True, spec.traffic_manager_port)
-        self._barrier = _SensorBarrier({sensor.name for sensor in spec.sensors})
-        self._callback_gate = _SensorCallbackGate(self._barrier)
+        frame_names = {sensor.name for sensor in spec.sensors if sensor.delivery == "frame"}
+        event_names = {sensor.name for sensor in spec.sensors if sensor.delivery == "event"}
+        self._barrier = _SensorBarrier(frame_names)
+        self._event_buffer = _SensorEventBuffer(event_names)
+        self._callback_gate = _SensorCallbackGate(self._barrier, self._event_buffer)
         for sensor_spec in spec.ordered_sensors():
             parent = self._actors.get(sensor_spec.parent)
             if parent is None:
                 raise RuntimeViolation(f"sensor parent not spawned: {sensor_spec.parent}")
-            sensor = self.world.spawn_actor(
-                blueprints.find(sensor_spec.blueprint), sensor_spec.transform, attach_to=parent
-            )
+            blueprint = blueprints.find(sensor_spec.blueprint)
+            if sensor_spec.attributes:
+                setter = getattr(blueprint, "set_attribute", None)
+                if setter is None:
+                    raise RuntimeViolation(
+                        f"sensor_blueprint_attributes_unsupported name={sensor_spec.name}"
+                    )
+                for key, value in sorted(sensor_spec.attributes.items()):
+                    setter(str(key), str(value))
+            sensor = self.world.spawn_actor(blueprint, sensor_spec.transform, attach_to=parent)
             sensor.listen(self._callback_gate.callback(sensor_spec.name))
             self._sensors[sensor_spec.name] = sensor
             self._sensor_ids[sensor_spec.name] = int(getattr(sensor, "id", -1))
 
     def tick(self, control: Any, apply_control: Callable[[Any, Any], None] | None = None) -> FrameHeader:
+        if self.spec is None:
+            raise RuntimeViolation("runtime is not started")
+        ego_names = [item.name for item in self.spec.ordered_actors() if item.role == "ego"]
+        if len(ego_names) != 1:
+            raise RuntimeViolation("scenario requires exactly one ego actor for control")
+        return self.tick_controls({ego_names[0]: control}, apply_control=apply_control)
+
+    def tick_controls(
+        self,
+        controls: Mapping[str, Any],
+        apply_control: Callable[[Any, Any], None] | None = None,
+    ) -> FrameHeader:
+        """Apply ego/NPC controls, then advance the single owned tick exactly once."""
+
         with self._lifecycle:
             if not self._started or self._closing or self._closed or self.world is None or self.spec is None:
                 raise RuntimeViolation("runtime is not started")
@@ -542,19 +644,20 @@ class ScenarioRuntime:
         result: FrameHeader | None = None
         with self._tick_lock:
             try:
-                ego = next(
-                    (self._actors[item.name] for item in self.spec.ordered_actors() if item.role == "ego"),
-                    None,
-                )
-                if ego is None:
-                    raise RuntimeViolation("scenario requires one ego actor for control")
-                (apply_control or (lambda actor, command: actor.apply_control(command)))(ego, control)
+                unknown = sorted(set(controls) - set(self._actors))
+                if unknown:
+                    raise RuntimeViolation(f"unknown controlled actors: {unknown}")
+                applier = apply_control or (lambda actor, command: actor.apply_control(command))
+                for name in sorted(controls):
+                    applier(self._actors[name], controls[name])
                 frame = int(self.world.tick())
                 snapshot = self.world.get_snapshot()
                 if int(snapshot.frame) != frame:
                     raise RuntimeViolation(f"snapshot_frame_mismatch tick={frame} snapshot={snapshot.frame}")
                 if self._barrier is not None and self._barrier.names:
                     self._barrier.await_frame(frame, self.spec.sensor_timeout_seconds)
+                if self._callback_gate is not None:
+                    self._callback_gate.flush()
                 result = FrameHeader(
                     identity=self.identity,
                     carla_frame=frame,
@@ -568,6 +671,31 @@ class ScenarioRuntime:
             raise error
         assert result is not None
         return result
+
+    def sensor_measurement(self, name: str, frame: int) -> Any:
+        """Read one payload already admitted by this runtime's frame barrier.
+
+        This method never waits and never advances CARLA.  Callers must first
+        obtain ``frame`` from :meth:`tick`; stale, future and unknown frames fail
+        closed rather than returning a nearby measurement.
+        """
+
+        with self._lifecycle:
+            if not self._started or self._closing or self._closed or self._barrier is None:
+                raise RuntimeViolation("runtime is not started")
+            return self._barrier.measurement(name, int(frame))
+
+    def sensor_events(
+        self, name: str, *, since_frame: int, through_frame: int | None = None
+    ) -> tuple[Any, ...]:
+        """Return sparse events already admitted in the requested inclusive frame range."""
+
+        with self._lifecycle:
+            if not self._started or self._closing or self._closed or self._event_buffer is None:
+                raise RuntimeViolation("runtime is not started")
+            if self._callback_gate is not None:
+                self._callback_gate.flush()
+            return self._event_buffer.read(name, int(since_frame), through_frame)
 
     def complete(self) -> None:
         self._finalize("COMPLETED")
@@ -688,12 +816,17 @@ class ScenarioRuntime:
                 actor.destroy()
             self._actors.pop(name, None)
 
-        # 7. restore Traffic Manager, then 8. world settings.
+        # 7. restore Traffic Manager/weather, then 8. world settings.
         if self._traffic_manager is not None:
             try:
                 self._traffic_manager.set_synchronous_mode(False)
             except BaseException as exc:
                 errors.append(f"traffic_manager.restore: {type(exc).__name__}")
+        if self.world is not None and self._original_weather is not None:
+            try:
+                self.world.set_weather(self._original_weather)
+            except BaseException as exc:
+                errors.append(f"weather.restore: {type(exc).__name__}")
         if self.world is not None and self._original_settings is not None:
             try:
                 self.world.apply_settings(self._original_settings)
@@ -713,6 +846,7 @@ class ScenarioRuntime:
             errors.append(f"tick_lease.release: {type(exc).__name__}")
         self._callback_gate = None
         self._barrier = None
+        self._event_buffer = None
         if errors:
             raise CleanupFailed("; ".join(errors))
 

@@ -35,6 +35,33 @@ except Exception:  # pragma: no cover - optional dependency
     _HAS_OSQP = False
 
 
+def _select_osqp_algebra() -> str | None:
+    """Resolve the OSQP algebra once, outside the real-time solve path.
+
+    OSQP's default constructor probes optional CUDA and MKL extension modules
+    on every instance.  On this WSL image those failed imports cost tens of
+    milliseconds, which consumed the entire frozen QP deadline before the
+    actual solve started.  Algebra selection is process-global configuration,
+    so resolving it once at import time is both deterministic and safe.
+    """
+
+    if not _HAS_OSQP or _osqp is None:
+        return None
+    try:
+        # Keep OSQP's own preference order when multiple compiled algebras are
+        # available, but pay the optional-module discovery cost only once.
+        return str(_osqp.default_algebra())
+    except Exception:
+        try:
+            available = tuple(str(item) for item in _osqp.algebras_available())
+        except Exception:
+            available = ()
+        return available[0] if available else None
+
+
+_OSQP_ALGEBRA = _select_osqp_algebra()
+
+
 @dataclass
 class QPProblem:
     P: np.ndarray  # (n, n) PSD  — cost uses 1/2 x' P x + q' x
@@ -255,7 +282,13 @@ class LongitudinalQPSolver:
         A = sp.csc_matrix(problem.A)
         used_warm = False
         try:
-            solver = _osqp.OSQP()
+            # Passing the resolved algebra prevents OSQP.__init__ from
+            # re-probing optional CUDA/MKL modules for every QP instance.
+            solver = (
+                _osqp.OSQP(algebra=_OSQP_ALGEBRA)
+                if _OSQP_ALGEBRA
+                else _osqp.OSQP()
+            )
             # OSQP 1.x settings use warm_starting/polishing; fall back for older wheels.
             settings = {
                 "verbose": False,

@@ -577,6 +577,100 @@ def query_windows_carla_command_line() -> str | None:
     return line or None
 
 
+@dataclass(frozen=True)
+class WindowsCarlaProcess:
+    pid: int
+    executable_path: str
+    command_line: str
+    parent_pid: int | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "pid": self.pid,
+            "executable_path": self.executable_path,
+            "command_line": self.command_line,
+            "parent_pid": self.parent_pid,
+        }
+
+
+def query_windows_carla_processes() -> tuple[WindowsCarlaProcess, ...] | None:
+    """Return every CarlaUE4 process with PID/path/cmdline, or None if unqueryable."""
+
+    powershell = shutil.which("powershell.exe") or shutil.which("pwsh")
+    if powershell is None:
+        return None
+    command = (
+        "@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | "
+        "Where-Object { $_.Name -match '^CarlaUE4' } | "
+        "Select-Object ProcessId,ParentProcessId,ExecutablePath,CommandLine) | ConvertTo-Json -Compress"
+    )
+    try:
+        completed = subprocess.run(
+            [powershell, "-NoProfile", "-NonInteractive", "-Command", command],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+            check=False,
+        )
+        if completed.returncode != 0:
+            return None
+        payload = json.loads((completed.stdout or "[]").strip() or "[]")
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return None
+    if isinstance(payload, Mapping):
+        payload = [payload]
+    if not isinstance(payload, list):
+        return None
+    processes: list[WindowsCarlaProcess] = []
+    for item in payload:
+        if not isinstance(item, Mapping):
+            return None
+        try:
+            processes.append(
+                WindowsCarlaProcess(
+                    pid=int(item["ProcessId"]),
+                    executable_path=str(item.get("ExecutablePath") or ""),
+                    command_line=str(item.get("CommandLine") or ""),
+                    parent_pid=(
+                        None
+                        if item.get("ParentProcessId") in (None, "")
+                        else int(item["ParentProcessId"])
+                    ),
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
+    return tuple(sorted(processes, key=lambda item: item.pid))
+
+
+def request_windows_process_close(pid: int) -> bool | None:
+    """Request normal GUI shutdown via CloseMainWindow; never force-kill."""
+
+    powershell = shutil.which("powershell.exe") or shutil.which("pwsh")
+    if powershell is None:
+        return None
+    command = (
+        f"$p = Get-Process -Id {int(pid)} -ErrorAction SilentlyContinue; "
+        "if (-not $p) { '0' } elseif ($p.CloseMainWindow()) { '1' } else { '0' }"
+    )
+    try:
+        completed = subprocess.run(
+            [powershell, "-NoProfile", "-NonInteractive", "-Command", command],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    output = (completed.stdout or "").strip()
+    if output == "1":
+        return True
+    if output == "0":
+        return False
+    return None
+
+
 def launch_params_match(
     command_line: str | None,
     *,
@@ -869,6 +963,8 @@ class ConnectionResolver:
         process_query: Callable[[], str] | None = None,
         sleeper: Callable[[float], None] = time.sleep,
         start_process: Callable[[Mapping[str, Any]], bool] | None = None,
+        windows_processes: Callable[[], tuple[WindowsCarlaProcess, ...] | None] | None = None,
+        request_process_close: Callable[[int], bool | None] | None = None,
     ) -> None:
         self.root = root.resolve()
         self.expected_version = expected_version
@@ -879,6 +975,8 @@ class ConnectionResolver:
         self.process_query = process_query or _default_process_query
         self.sleeper = sleeper
         self.start_process = start_process
+        self.windows_processes = windows_processes or query_windows_carla_processes
+        self.request_process_close = request_process_close or request_windows_process_close
 
     def resolve_port(self, explicit_port: int | None = None) -> int:
         value = explicit_port if explicit_port is not None else os.environ.get("CARLA_PORT", DEFAULT_RPC_PORT)
@@ -967,7 +1065,17 @@ class ConnectionResolver:
                 payload = json.loads(lease_path.read_text(encoding="utf-8"))
                 owner = str(payload.get("owner", ""))
                 if owner:
-                    return owner, configured
+                    try:
+                        import fcntl as lease_fcntl
+
+                        with lease_path.open("r", encoding="utf-8") as handle:
+                            lease_fcntl.flock(handle.fileno(), lease_fcntl.LOCK_EX | lease_fcntl.LOCK_NB)
+                            lease_fcntl.flock(handle.fileno(), lease_fcntl.LOCK_UN)
+                        return f"free (configured={configured})", configured
+                    except BlockingIOError:
+                        return owner, configured
+                    except (ImportError, OSError):
+                        return owner, configured
             except (OSError, ValueError, TypeError):
                 pass
         return f"free (configured={configured})", configured
@@ -1415,6 +1523,216 @@ class ConnectionResolver:
         if crash_context is not None:
             details["crash_context"] = dict(crash_context)
         report.details = details
+
+    @staticmethod
+    def _normalized_windows_path(value: str) -> str:
+        return str(value).strip().replace("/", "\\").rstrip("\\").casefold()
+
+    @staticmethod
+    def _restart_block(report: ConnectionReport, code: str, message: str) -> ConnectionReport:
+        report.status = BLOCKED_EXTERNAL
+        report.error_code = code
+        report.error_message = message
+        report.needs_user_action = True
+        report.task_action = "BLOCKED_EXTERNAL"
+        report.recovery_action = "safe_cold_restart"
+        report.recovery_result = "refused"
+        return report
+
+    def restart(
+        self,
+        *,
+        map_name: str,
+        rhi: str = "dx12",
+        host: str | None = None,
+        port: int | None = None,
+        shutdown_timeout_seconds: float = 30.0,
+        startup_timeout_seconds: float = DEFAULT_STARTUP_TIMEOUT_SECONDS,
+        poll_interval_seconds: float = 0.5,
+    ) -> ConnectionReport:
+        """Gracefully cold-restart the one verified CARLA process.
+
+        The method never force-kills, never loads a world through RPC and never
+        proceeds from an unknown process, tick-owner or world state.
+        """
+
+        from runtime.carla_engine_config import (
+            maps_match,
+            read_default_engine_config,
+            resolve_default_engine_ini,
+            verify_default_engine_matches,
+            windows_install_root_from_executable,
+        )
+
+        requested_map = str(map_name).strip()
+        requested_rhi = normalize_rhi(rhi, default="dx12")
+        if not requested_map:
+            raise ValueError("restart requires --map")
+        report = self.preflight(host=host, port=port)
+        if report.status != READY:
+            return self._restart_block(
+                report,
+                NEEDS_USER_ACTION,
+                "safe restart requires a READY server so async/tick ownership can be verified",
+            )
+        if report.synchronous_mode is not False:
+            return self._restart_block(report, TICK_OWNER_CONFLICT, "world must be asynchronous before restart")
+        if not str(report.tick_owner or "").startswith("free "):
+            return self._restart_block(report, TICK_OWNER_CONFLICT, f"tick owner is not free: {report.tick_owner}")
+
+        spec = self._start_spec(rhi=requested_rhi, map_name=requested_map, launch_mode="default_engine")
+        if spec is None:
+            return self._restart_block(report, INVALID_LAUNCH_CONFIG, "verified CARLA startup config is unavailable")
+        configured_executable = str(spec.get("windows_executable") or "")
+        processes = self.windows_processes()
+        if processes is None:
+            return self._restart_block(report, NEEDS_USER_ACTION, "CARLA process enumeration is unavailable")
+        if not configured_executable:
+            return self._restart_block(report, NEEDS_USER_ACTION, "configured CARLA executable path is unavailable")
+        normalized_configured = self._normalized_windows_path(configured_executable)
+        matching_roots = tuple(
+            item for item in processes
+            if item.executable_path
+            and self._normalized_windows_path(item.executable_path) == normalized_configured
+        )
+        if len(matching_roots) != 1:
+            return self._restart_block(
+                report,
+                NEEDS_USER_ACTION,
+                f"expected exactly one configured CARLA root process, observed {len(matching_roots)} "
+                f"among {len(processes)} CARLA processes",
+            )
+        process = matching_roots[0]
+        process_tree = tuple(item for item in processes if item.pid != process.pid)
+        # A normal Windows CARLA launch has CarlaUE4.exe as a launcher and
+        # CarlaUE4-Win64-Shipping.exe as its child. Treat that exact,
+        # same-install tree as one server; unrelated roots remain blocked.
+        install_prefix = normalized_configured.rsplit("\\", 1)[0] + "\\"
+        for child in process_tree:
+            child_path = self._normalized_windows_path(child.executable_path)
+            same_install = child_path.startswith(install_prefix)
+            is_shipping = child_path.endswith("\\carlaue4-win64-shipping.exe")
+            if child.parent_pid != process.pid or not same_install or not is_shipping:
+                return self._restart_block(
+                    report,
+                    NEEDS_USER_ACTION,
+                    f"unrecognized CARLA process tree: root={process.pid} child={child.pid}",
+                )
+        if not process.executable_path or not configured_executable:
+            return self._restart_block(report, UNKNOWN_CARLA_PATH, "CARLA executable path is unknown")
+        if self._normalized_windows_path(process.executable_path) != self._normalized_windows_path(configured_executable):
+            return self._restart_block(
+                report,
+                UNKNOWN_CARLA_PATH,
+                f"running executable does not match config: {process.executable_path}",
+            )
+        process_rhi = parse_rhi_from_command_line(process.command_line)
+        process_map = parse_map_from_command_line(process.command_line)
+        if process_rhi is not None and process_rhi != requested_rhi:
+            return self._restart_block(
+                report, LAUNCH_PARAM_MISMATCH, f"running process RHI {process_rhi} does not match {requested_rhi}"
+            )
+        if process_map is not None and not maps_match(process_map, report.map):
+            return self._restart_block(
+                report, MAP_MISMATCH, f"process command map {process_map} does not match live map {report.map}"
+            )
+        install_root = str(spec.get("windows_working_directory") or "") or windows_install_root_from_executable(
+            configured_executable
+        )
+        ini_override = spec.get("default_engine_ini")
+        ini_path = Path(str(ini_override)) if ini_override else resolve_default_engine_ini(install_root)
+        current_engine = read_default_engine_config(ini_path)
+        mismatch = verify_default_engine_matches(
+            current_engine,
+            requested_map=str(report.map or ""),
+            requested_rhi=requested_rhi,
+        )
+        if mismatch is not None:
+            return self._restart_block(
+                report,
+                MAP_OR_RHI_CONFIG_MISMATCH,
+                f"running CARLA does not match pinned DefaultEngine.ini: {mismatch.message}",
+            )
+
+        requested_pid = process.pid
+        requested = self.request_process_close(process.pid)
+        # CarlaUE4.exe is a launcher without a top-level window on some
+        # Windows builds; the verified Shipping child owns the game window.
+        # Request the same graceful CloseMainWindow on that child before
+        # classifying the tree as user-action blocked. No force-kill path is
+        # introduced, and only the already validated same-install child is
+        # eligible here.
+        if requested is not True:
+            for child in process_tree:
+                if child.executable_path.casefold().endswith("carlaue4-win64-shipping.exe"):
+                    child_requested = self.request_process_close(child.pid)
+                    if child_requested is True:
+                        requested = True
+                        requested_pid = child.pid
+                        break
+        report.details = dict(report.details or {})
+        report.details["restart_process"] = process.to_dict()
+        report.details["restart_process_tree"] = [item.to_dict() for item in process_tree]
+        report.details["graceful_close_requested"] = requested
+        report.details["graceful_close_pid"] = requested_pid if requested is True else None
+        if requested is not True:
+            return self._restart_block(report, NEEDS_USER_ACTION, "CloseMainWindow was not accepted; no force kill used")
+
+        deadline = time.monotonic() + max(0.0, float(shutdown_timeout_seconds))
+        stopped = False
+        while True:
+            remaining = self.windows_processes()
+            if remaining is None:
+                return self._restart_block(report, NEEDS_USER_ACTION, "process state became unqueryable during shutdown")
+            tcp_up, _ = self.tcp_probe(str(report.resolved_host or report.host), report.port, self.timeout_seconds)
+            stopped = not remaining and not tcp_up
+            if stopped or time.monotonic() >= deadline:
+                break
+            self.sleeper(max(0.01, poll_interval_seconds))
+        if not stopped:
+            return self._restart_block(
+                report, NEEDS_USER_ACTION, "CARLA did not exit cleanly before timeout; no force kill used"
+            )
+
+        ensured = self.ensure(
+            host=host,
+            port=port,
+            startup_timeout_seconds=startup_timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            rhi=requested_rhi,
+            render_offscreen=False,
+            map_name=requested_map,
+            launch_mode="default_engine",
+            auto_pin_default_engine=True,
+        )
+        if ensured.status != READY:
+            ensured.details = dict(ensured.details or {})
+            ensured.details["restart_process"] = process.to_dict()
+            ensured.details["graceful_close_requested"] = True
+            return ensured
+
+        # Exactly one post-ensure preflight recheck is the restart gate.
+        final = self.preflight(host=host, port=port, retry_host=False)
+        final.details = dict(final.details or {})
+        final.details.update(
+            {
+                "restart_process": process.to_dict(),
+                "graceful_close_requested": True,
+                "ensure_status": ensured.status,
+                "requested_map": requested_map,
+                "requested_rhi": requested_rhi,
+            }
+        )
+        if final.status != READY or not maps_match(final.map, requested_map):
+            was_ready = final.status == READY
+            final.status = FAILED_FINAL
+            final.error_code = MAP_MISMATCH if was_ready else final.error_code
+            final.error_message = f"restart recheck failed: actual_map={final.map!r} requested={requested_map!r}"
+            final.task_action = "BLOCKED"
+            return final
+        final.recovery_action = "safe_cold_restart"
+        final.recovery_result = "graceful_shutdown_pin_ensure_recheck_ready"
+        return final
 
     def ensure(
         self,

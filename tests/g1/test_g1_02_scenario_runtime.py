@@ -78,10 +78,22 @@ class FakeSensor(FakeActor):
         self.stopped = True
 
 
+class FakeBlueprint:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.attributes: dict[str, str] = {}
+
+    def set_attribute(self, key: str, value: str) -> None:
+        self.attributes[key] = value
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class FakeBlueprints:
     @staticmethod
-    def find(name: str) -> str:
-        return name
+    def find(name: str) -> FakeBlueprint:
+        return FakeBlueprint(name)
 
 
 class FakeWorld:
@@ -90,6 +102,7 @@ class FakeWorld:
         self.settings, self.frame, self.applied_settings = FakeSettings(), 0, []
         self.actors: list[FakeActor] = []
         self.sensors: list[FakeSensor] = []
+        self.spawned_sensor_blueprint: FakeBlueprint | None = None
         self.emit_sensors = True
 
     def get_map(self) -> object:
@@ -108,12 +121,13 @@ class FakeWorld:
     def get_blueprint_library(self) -> FakeBlueprints:
         return FakeBlueprints()
 
-    def try_spawn_actor(self, blueprint: str, transform: object) -> FakeActor:
+    def try_spawn_actor(self, blueprint: object, transform: object) -> FakeActor:
         actor = FakeActor(str(transform))
         self.actors.append(actor)
         return actor
 
-    def spawn_actor(self, blueprint: str, transform: object, attach_to: FakeActor) -> FakeSensor:
+    def spawn_actor(self, blueprint: FakeBlueprint, transform: object, attach_to: FakeActor) -> FakeSensor:
+        self.spawned_sensor_blueprint = blueprint
         sensor = FakeSensor(str(transform), self)
         self.sensors.append(sensor)
         return sensor
@@ -212,6 +226,42 @@ class G102ScenarioRuntimeTests(unittest.TestCase):
         runtime.complete()
         self.assertEqual(self.registry.status(self.identity(1).run_id), "COMPLETED")
 
+    def test_exact_frame_sensor_payload_and_blueprint_attributes(self) -> None:
+        client = FakeClient()
+        runtime = self.runtime(client)
+        base = self.spec()
+        spec = ScenarioSpec(
+            scenario_id=base.scenario_id,
+            map_name=base.map_name,
+            actors=base.actors,
+            sensors=(
+                SensorSpec(
+                    "front_camera",
+                    "sensor.camera.rgb",
+                    "camera",
+                    "ego",
+                    0,
+                    {"image_size_x": "1024", "image_size_y": "512", "fov": "110"},
+                ),
+            ),
+            traffic_manager_port=base.traffic_manager_port,
+            traffic_manager_seed=base.traffic_manager_seed,
+            sensor_timeout_seconds=base.sensor_timeout_seconds,
+        )
+        runtime.start(spec)
+        header = runtime.tick({"brake": 1.0})
+        measurement = runtime.sensor_measurement("front_camera", header.carla_frame)
+        self.assertEqual(measurement.frame, header.carla_frame)
+        self.assertEqual(
+            client.world.spawned_sensor_blueprint.attributes,
+            {"fov": "110", "image_size_x": "1024", "image_size_y": "512"},
+        )
+        with self.assertRaisesRegex(RuntimeViolation, "sensor_frame_unavailable"):
+            runtime.sensor_measurement("front_camera", header.carla_frame - 1)
+        with self.assertRaisesRegex(RuntimeViolation, "unknown_sensor"):
+            runtime.sensor_measurement("rear_camera", header.carla_frame)
+        runtime.complete()
+
     def test_npc_tm_is_seeded_and_spawn_manifest_is_reproducible(self) -> None:
         first_client, second_client = FakeClient(), FakeClient()
         first, second = self.runtime(first_client), self.runtime(second_client, attempt=1)
@@ -245,16 +295,52 @@ class G102ScenarioRuntimeTests(unittest.TestCase):
             second.start(self.spec())
         first.abort("test")
 
-    def test_map_load_and_forced_interrupt_are_non_success(self) -> None:
+    def test_map_mismatch_requires_cold_restart_and_forced_interrupt_is_non_success(self) -> None:
         client = FakeClient(FakeWorld("WrongTown"))
         runtime = self.runtime(client)
+        with self.assertRaisesRegex(RuntimeViolation, "cold restart required"):
+            runtime.start(self.spec())
+        self.assertEqual(client.loaded_maps, [])
+        self.assertNotEqual(self.registry.status(self.identity().run_id), "COMPLETED")
+
+        client = FakeClient()
+        runtime = self.runtime(client, attempt=1)
         runtime.start(self.spec())
-        self.assertEqual(client.loaded_maps, ["Town01"])
         original_tick = client.world.tick
         client.world.tick = lambda: (_ for _ in ()).throw(KeyboardInterrupt())
         with self.assertRaises(KeyboardInterrupt):
             runtime.tick({})
         client.world.tick = original_tick
+        self.assertEqual(self.registry.status(self.identity(1).run_id), "INTERRUPTED")
+
+    def test_sparse_event_sensor_and_same_tick_multi_actor_controls(self) -> None:
+        client = FakeClient()
+        base = self.spec()
+        spec = ScenarioSpec(
+            scenario_id=base.scenario_id,
+            map_name=base.map_name,
+            actors=base.actors,
+            sensors=(
+                SensorSpec("front_camera", "sensor.camera.rgb", "camera", "ego", 0),
+                SensorSpec("collision", "sensor.other.collision", "collision", "ego", 1, delivery="event"),
+                SensorSpec("lane", "sensor.other.lane_invasion", "lane", "ego", 2, delivery="event"),
+            ),
+            sensor_timeout_seconds=base.sensor_timeout_seconds,
+        )
+        runtime = self.runtime(client)
+        runtime.start(spec)
+        header = runtime.tick_controls(
+            {"ego": {"throttle": 0.1}, "npc-a": {"brake": 0.2}, "npc-b": {"steer": 0.3}}
+        )
+        self.assertEqual(header.carla_frame, 1)
+        self.assertEqual(runtime._actors["ego"].control, {"throttle": 0.1})
+        self.assertEqual(runtime._actors["npc-a"].control, {"brake": 0.2})
+        self.assertEqual(len(runtime.sensor_events("collision", since_frame=1, through_frame=1)), 1)
+        self.assertEqual(len(runtime.sensor_events("lane", since_frame=2)), 0)
+        with self.assertRaisesRegex(RuntimeViolation, "unknown_event_sensor"):
+            runtime.sensor_events("front_camera", since_frame=1)
+        with self.assertRaisesRegex(RuntimeViolation, "unknown controlled actors"):
+            runtime.tick_controls({"not-spawned": {}})
         self.assertEqual(self.registry.status(self.identity().run_id), "INTERRUPTED")
 
     def test_client_connection_failure_releases_lease(self) -> None:

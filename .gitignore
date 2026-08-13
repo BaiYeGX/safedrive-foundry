@@ -27,6 +27,9 @@ tools/
 .wsl-*.txt
 docs/runtime-evidence/
 
+# H2/H1 generated runtime artifacts and local datasets
+generated/
+
 # Editors and operating system
 .vscode/
 .idea/
