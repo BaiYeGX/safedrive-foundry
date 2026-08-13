@@ -48,7 +48,7 @@ physical_manifest_sha256 6e74a789647182d9333cd99a69305bc2700a95216ebc7f34d2af210
 store_manifest_sha256    22d11961c74509843a1df6ea453794fad2519fcc42077540c33ce46e9f3c3524
 config_sha256            70996b2b2a0d88cd02c210e75206cc1be1f189fae249979d14c417c866092043
 offline_audit_file_sha256 3dc0573b5fe7a80fc3358f1e11d1c981d1fbe900f07357acc30a7b40d389b585
-final_delivery_sha256    5e1ca730978b9c4ff54ee001f76dbe871348927979d853f19c0b6a925453d8b8
+final_delivery             docs/runtime-evidence/h2/h2-gatepass-20260813-routefix/final-delivery.json
 ```
 
 完整门指标：120/120 terminal；108 eligible/distinct；108 valid；Town01/Town03/Town05

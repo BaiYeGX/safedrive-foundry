@@ -12,7 +12,7 @@
 冻结身份：物理 manifest payload `6e74a789647182d9333cd99a69305bc2700a95216ebc7f34d2af21024a6d48ed`；
 store manifest payload `22d11961c74509843a1df6ea453794fad2519fcc42077540c33ce46e9f3c3524`；
 配置 `70996b2b2a0d88cd02c210e75206cc1be1f189fae249979d14c417c866092043`；final Evidence
-`final-delivery.json` SHA256 `5e1ca730978b9c4ff54ee001f76dbe871348927979d853f19c0b6a925453d8b8`。
+`final-delivery.json` 在最终提交后重生成并绑定最终 HEAD。
 
 在真实 CARLA 0.9.16、RTX 4080/CUDA 和 Town01 → Town03 → Town05 冷重启序列上完成：
 

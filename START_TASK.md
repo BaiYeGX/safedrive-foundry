@@ -87,8 +87,7 @@ pilot、冻结 120-anchor manifest、完整 paired rollout、离线 Oracle、per
 SHA256 为 `6e74a789647182d9333cd99a69305bc2700a95216ebc7f34d2af21024a6d48ed`，store manifest
 payload SHA256 为 `22d11961c74509843a1df6ea453794fad2519fcc42077540c33ce46e9f3c3524`，配置
 SHA256 为 `70996b2b2a0d88cd02c210e75206cc1be1f189fae249979d14c417c866092043`。最终 Evidence 位于
-`docs/runtime-evidence/h2/h2-gatepass-20260813-routefix/final-delivery.json`，Evidence SHA256 为
-`5e1ca730978b9c4ff54ee001f76dbe871348927979d853f19c0b6a925453d8b8`。
+`docs/runtime-evidence/h2/h2-gatepass-20260813-routefix/final-delivery.json`。
 
 完整门实际指标：120 terminal、108 eligible/distinct、108 valid；Town01/Town03/Town05
 分别 36/34/38；family `cut_in/free_flow/red_light_hold/slow_lead/stopped_lead` 分别
