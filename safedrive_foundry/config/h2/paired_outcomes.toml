@@ -11,6 +11,12 @@ history_ticks = 20
 branch_ticks = 50
 trajectory_stamp_refresh_ticks = 4
 
+[pre_roll]
+moving_families = ["free_flow", "slow_lead", "cut_in"]
+target_speed_mps = 2.0
+kp = 0.30
+max_throttle = 0.35
+
 [reset]
 position_delta_m = 0.05
 yaw_delta_deg = 0.5

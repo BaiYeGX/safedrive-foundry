@@ -28,7 +28,39 @@ H2 状态只有在 120 个固定 anchor 全部 terminal 并完成 offline label/
 `VERIFIED`。Pilot 或环境阻塞不能借用 H1 smoke、archive 或合成数据升级为 H2 证据；门失败
 也必须冻结为负结果并关闭 H3。
 
-### H2 最终验收（负结果）
+### H2 最终验收（GATE_PASSED）
+
+最终 dataset `h2-gatepass-20260813-routefix` 已完成 Town01、Town03、Town05 冷重启、
+restart smoke、15-anchor pilot 和完整 120-anchor 固定矩阵；pilot 与 full gate 均通过。
+H3 保持 `NOT_AUTHORIZED`，不进入 World、在线 Oracle 或训练。
+
+本机 artifact（均 Git-ignored）：
+
+```text
+generated/h2/paired-outcomes/h2-gatepass-20260813-routefix/
+docs/runtime-evidence/h2/h2-gatepass-20260813-routefix/
+```
+
+冻结 hash：
+
+```text
+physical_manifest_sha256 6e74a789647182d9333cd99a69305bc2700a95216ebc7f34d2af21024a6d48ed
+store_manifest_sha256    22d11961c74509843a1df6ea453794fad2519fcc42077540c33ce46e9f3c3524
+config_sha256            70996b2b2a0d88cd02c210e75206cc1be1f189fae249979d14c417c866092043
+offline_audit_file_sha256 3dc0573b5fe7a80fc3358f1e11d1c981d1fbe900f07357acc30a7b40d389b585
+final_delivery_sha256    5e1ca730978b9c4ff54ee001f76dbe871348927979d853f19c0b6a925453d8b8
+```
+
+完整门指标：120/120 terminal；108 eligible/distinct；108 valid；Town01/Town03/Town05
+为 36/34/38；family 为 21/21/21/24/21；weather 为 56/52；83 decisive；Expert/VLA
+wins 为 51/32；slot Expert=0 比例 0.5；swap/permutation、trajectory hash、执行绑定和
+manifest/artifact hash 全部通过；source-only baseline 0.6144578313；整卡 GPU peak
+8.3720703125 GiB；dataset 1,480,172,014 bytes。
+
+全量测试为 `329 tests: 328 passed, 1 skipped, 0 failed`；compileall、活动文档链接检查、
+旧路线/import/cache 扫描和 `git diff --check` 通过。
+
+### H2 之前的失败数据集（保留负结果）
 
 最终 dataset `h2-final-20260813-scenariov2-cleanup` 已完成 Town01、Town03、Town05 冷重启、
 restart smoke、15-anchor pilot 和完整 120-anchor 固定矩阵。pilot 通过后才扩大；完整数据门
@@ -161,7 +193,7 @@ sha256 bff2e26a9c7ff86a55ddb38fd4e2e09482468587e4dfc53c827ec9e4d00c53fb
 |---|---|
 | H0 route consolidation | `VERIFIED / STOPPED` |
 | H1 independent candidates | `VERIFIED / STOPPED` |
-| H2 paired outcomes | `COMPLETED / VERIFIED / GATE_FAILED / STOPPED` |
+| H2 paired outcomes | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
 | H3 World development | `NOT_STARTED` |
 | H4 locked evaluation | `NOT_STARTED` |
 | H5 World on/off | `NOT_STARTED` |

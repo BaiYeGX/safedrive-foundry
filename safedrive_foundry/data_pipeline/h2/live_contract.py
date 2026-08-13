@@ -19,8 +19,8 @@ from .contracts import (
 )
 
 
-COLLECTOR_VERSION = "h2-paired-collector-v1"
-SCENARIO_ALGORITHM_VERSION = "h2-fixed-carla-scenarios-v2-cutin-shoulder"
+COLLECTOR_VERSION = "h2-paired-collector-v2-route-stop-preroll"
+SCENARIO_ALGORITHM_VERSION = "h2-fixed-carla-scenarios-v3-route-stop-preroll"
 
 
 def trajectory_sha256(points: Sequence[TrajectoryPoint]) -> str:

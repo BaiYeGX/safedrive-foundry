@@ -133,6 +133,11 @@ class TrafficLightObs:
     state: str  # red|yellow|green|unknown
     distance_m: float
     observed_time_s: float
+    # Additive H2 geometry: distance from the ego projection to the trigger/stop
+    # line along the active route.  Older producers leave these unset and retain
+    # the legacy Euclidean-distance semantics above.
+    stop_line_distance_m: float | None = None
+    controls_ego_lane: bool | None = None
 
 
 @dataclass(frozen=True)

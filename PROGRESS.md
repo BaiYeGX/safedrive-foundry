@@ -1,9 +1,18 @@
 # SafeDrive Foundry 进度
 
-## 2026-08-13 — H2 完整验收与交付终态
+## 2026-08-13 — H2 GATE_PASSED 完整验收与交付终态
 
-状态：`H2 COMPLETED / VERIFIED / GATE_FAILED / STOPPED`。H3、World、训练和在线 Oracle
-关闭/未授权。本轮没有通过改变矩阵、标签阈值或补挑场景制造通过。
+状态：`H2 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。H3、World、训练和在线 Oracle
+仍未授权。本轮保留此前负结果，并在同一冻结协议上用新 dataset 完成定点修复和 full gate。
+
+最终 dataset：`h2-gatepass-20260813-routefix`（本机 Git-ignored）。Evidence 位于
+`docs/runtime-evidence/h2/h2-gatepass-20260813-routefix/`，数据位于
+`generated/h2/paired-outcomes/h2-gatepass-20260813-routefix/`。
+
+冻结身份：物理 manifest payload `6e74a789647182d9333cd99a69305bc2700a95216ebc7f34d2af21024a6d48ed`；
+store manifest payload `22d11961c74509843a1df6ea453794fad2519fcc42077540c33ce46e9f3c3524`；
+配置 `70996b2b2a0d88cd02c210e75206cc1be1f189fae249979d14c417c866092043`；final Evidence
+`final-delivery.json` SHA256 `5e1ca730978b9c4ff54ee001f76dbe871348927979d853f19c0b6a925453d8b8`。
 
 在真实 CARLA 0.9.16、RTX 4080/CUDA 和 Town01 → Town03 → Town05 冷重启序列上完成：
 
@@ -12,7 +21,7 @@
 - 固定 `3 × 5 × 4 × 2 = 120` anchors 全部 terminal，三地图 full collector 均 `ok=true`；
 - 离线 Oracle、slot/source/branch permutation、执行绑定轨迹 hash、CAS/Parquet manifest
   与 artifact hash audit 全部完成；
-- dataset `h2-final-20260813-scenariov2-cleanup` 写入本机 Git-ignored 的
+- dataset `h2-gatepass-20260813-routefix` 写入本机 Git-ignored 的
   `generated/h2/paired-outcomes/`，Evidence 写入 `docs/runtime-evidence/h2/`。
 
 冻结身份：物理 manifest `f89a2f8a039144b089ae27c2584aa112a3d35d061d6a22cc6d12359fabd11a9f`；
@@ -23,24 +32,21 @@ store manifest `b63f4f63de12aa0a84762c398fecc7bb78ffbcc4d59f22b3552da1ba2c82727e
 terminal summary `final-delivery.json` 的 Evidence SHA256 为
 `6ceb3c74aede8c3895cbefb302a10f9ec98f0b5425af616fe1e9da77ec163f23`。
 
-最终门指标：120 terminal；58 valid/distinct（目标 ≥72）；Town01/Town03/Town05 为
-21/23/14（每张 ≥18）；family `cut_in/free_flow/red_light_hold/slow_lead/stopped_lead`
-为 14/12/4/13/15（每个 ≥8）；weather ClearNoon/CloudyNoon 为 33/25（每种 ≥30）；
-58 decisive；Expert/VLA wins 为 58/0（VLA 目标 ≥5）；slot Expert=0 比例 0.4827586；
-swap/source/branch permutation 通过；trajectory hash 保持 100%；source-only baseline 1.0
-（目标 ≤0.8）；整卡 GPU peak 8.3945 GiB（目标 ≤14.5）；dataset 1,443,906,253 bytes
-（目标 ≤15 GiB）。门失败项为 `eligible_distinct`、`valid_pairs`、`per_map_valid_pairs`、
-`per_family_valid_pairs`、`per_weather_valid_pairs`、`vla_wins`、`source_only_majority`；
-manifest、执行绑定、cleanup 和 artifact hash 均通过。该负结果关闭 H3，不进入 World/训练。
+最终门指标：120 terminal；108 eligible/distinct；108 valid；Town01/Town03/Town05 为
+36/34/38；family `cut_in/free_flow/red_light_hold/slow_lead/stopped_lead` 为 21/21/21/24/21；
+weather ClearNoon/CloudyNoon 为 56/52；83 decisive；Expert/VLA wins 为 51/32；slot
+Expert=0 比例 0.5；swap/permutation、trajectory hash、执行绑定和 manifest/artifact hash
+全部通过；source-only baseline 0.6144578313；整卡 GPU peak 8.3720703125 GiB；dataset
+1,480,172,014 bytes。全部冻结数据门通过。
 
-QP 时序修复已完成：OSQP algebra 仅探测并冻结一次；全量串行测试现为 `327 tests: 326
-passed, 1 skipped, 0 failed`。H2 专项 `111 tests: 110 passed, 1 skipped`；compileall、文档
-链接检查与 `git diff --check` 通过。label 批量写入支持延迟 manifest 扫描，但最终 manifest
-仍完成全量校验；中断 audit 的 18 个 labels 通过不可变内容复用安全恢复。
+本轮定点修复包括 route-relative traffic-light stop line、有限时域安全停止前缀、moving
+family 闭环预滚、cut-in spawn probe cleanup 和 freshness-only trajectory stamp refresh。
+全量串行测试为 `329 tests: 328 passed, 1 skipped, 0 failed`；compileall、文档链接和
+`git diff --check` 通过。最终 manifest 完成全量校验。
 
 CARLA 过程中一次 Town01 残留 actor 触发硬清场门；保留失败 Evidence，执行一次受控冷重启
 并确认仅剩内建 traffic light/speed-limit actors 后从同一冻结 manifest 恢复，未改变数据身份。
-未使用 `load_world`、第二 tick master、在线 Oracle 或 fake GPU/CARLA。
+未使用 `load_world`、第二 tick master、在线 Oracle、训练或 fake GPU/CARLA。
 
 ## 2026-08-13 — H2 Paired Outcomes 实现与验证阻塞（已被上方最终验收记录取代）
 

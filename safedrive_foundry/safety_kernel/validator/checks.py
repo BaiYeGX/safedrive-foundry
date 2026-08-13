@@ -346,7 +346,10 @@ def check_rules(
         for light in obs.traffic_lights:
             if light.state != "red":
                 continue
-            if light.distance_m > cfg.red_light_stop_distance_m:
+            if light.controls_ego_lane is False:
+                continue
+            distance = light.stop_line_distance_m if light.stop_line_distance_m is not None else light.distance_m
+            if distance > cfg.red_light_stop_distance_m:
                 continue
             # Near red light: trajectory must not carry high speed through the stop zone.
             for p in candidate.points:
@@ -497,6 +500,14 @@ def check_actor_integrity(obs: ObservableSnapshot) -> ConstraintMargin:
                 hard=True,
                 rule_id=light.light_id,
                 message="non_finite_traffic_light",
+            )
+        if light.stop_line_distance_m is not None and not _finite(light.stop_line_distance_m):
+            return ConstraintMargin(
+                name="actor_numeric",
+                margin=-1.0,
+                hard=True,
+                rule_id=light.light_id,
+                message="non_finite_stop_line",
             )
     return ConstraintMargin(name="actor_numeric", margin=1.0, hard=True, message="ok")
 

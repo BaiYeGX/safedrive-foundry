@@ -110,10 +110,13 @@ def _stop_s(obs: ObservableSnapshot, cfg: SafetyKernelConfig, buffer_m: float) -
     for light in obs.traffic_lights:
         if light.state != "red":
             continue
-        # Only enforce stop geometry for lights inside validator horizon.
-        if light.distance_m > cfg.red_light_stop_distance_m + 1e-6:
+        if light.controls_ego_lane is False:
             continue
-        cand = max(0.05, float(light.distance_m) - buffer_m)
+        distance = light.stop_line_distance_m if light.stop_line_distance_m is not None else light.distance_m
+        # Only enforce stop geometry for lights inside validator horizon.
+        if distance > cfg.red_light_stop_distance_m + 1e-6:
+            continue
+        cand = max(0.05, float(distance) - buffer_m)
         stop = cand if stop is None else min(stop, cand)
     return stop
 
@@ -595,5 +598,4 @@ class LongitudinalQPRepair:
             metrics=metrics,
             reason=reason,
         )
-
 

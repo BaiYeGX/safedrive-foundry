@@ -103,6 +103,16 @@ class G104FrenetTests(unittest.TestCase):
         _, err_s = solve_st_dp(grid_s, v0=10.0, v_target=0.0, vehicle=vehicle, stop_at_s=20.0)
         self.assertIsNotNone(err_s)
         self.assertIn(err_s, ("ST_INFEASIBLE_STOP", "ST_NO_PATH", "ST_BLOCKED", "ST_START_OCCUPIED"))
+        # A distant stop beyond this finite horizon returns a safe approach
+        # prefix, not a fabricated terminal stop or an unconditional reject.
+        prefix, prefix_err = solve_st_dp(
+            grid, v0=6.0, v_target=6.0, vehicle=vehicle, stop_at_s=40.0
+        )
+        self.assertIsNone(prefix_err, prefix_err)
+        self.assertGreaterEqual(len(prefix), 2)
+        self.assertLessEqual(prefix[-1][1], 40.0 + 1e-6)
+        remaining = max(0.0, 40.0 - prefix[-1][1])
+        self.assertLessEqual(prefix[-1][2], (2.0 * vehicle.max_decel_mps2 * remaining) ** 0.5 + 0.5)
         # Feasible stop on free grid (horizon must cover braking + approach)
         grid_long = STGrid(ds=1.0, dt=0.2, s_bins=50, t_bins=40, occupied=[[False] * 50 for _ in range(40)])
         prof_stop, err_stop = solve_st_dp(

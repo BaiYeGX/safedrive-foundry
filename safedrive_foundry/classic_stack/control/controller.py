@@ -96,6 +96,14 @@ class MultiRateTrajectoryBuffer:
         self._traj = traj
         self._stamp_s = now_s
 
+    def refresh(self, traj: Trajectory, now_s: float) -> None:
+        """Refresh freshness for the same immutable trajectory only."""
+        if self._traj is None or self._traj.trajectory_id != traj.trajectory_id:
+            raise ValueError("trajectory_refresh_identity_mismatch")
+        if self._traj.points != traj.points:
+            raise ValueError("trajectory_refresh_geometry_mismatch")
+        self._stamp_s = now_s
+
     def get(self, now_s: float) -> Trajectory | None:
         if self._traj is None:
             return None
@@ -143,6 +151,10 @@ class ControlLoop:
 
     def set_trajectory(self, traj: Trajectory, now_s: float) -> None:
         self.buffer.update(traj, now_s)
+
+    def refresh_trajectory_stamp(self, traj: Trajectory, now_s: float) -> None:
+        """Refresh buffer freshness without restarting the trajectory epoch."""
+        self.buffer.refresh(traj, now_s)
 
     def step(
         self,

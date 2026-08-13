@@ -470,7 +470,16 @@ def _pre_roll(
     ego_history: list[tuple[float, float, float, float]] = []
     header = None
     for index in range(20):
-        controls = {"ego": carla.VehicleControl(throttle=0.0, brake=1.0), **_npc_controls(scenario)}
+        family = str(scenario.script.get("family", scenario.scenario.family))
+        if family in {"free_flow", "slow_lead", "cut_in"}:
+            target = float(scenario.script.get("pre_roll_target_speed_mps", 2.0))
+            kp = float(scenario.script.get("pre_roll_kp", 0.30))
+            current, _ = ego_state(runtime._actors["ego"])
+            throttle = max(0.0, min(float(scenario.script.get("pre_roll_max_throttle", 0.35)), kp * (target - current.v)))
+            ego_control = carla.VehicleControl(throttle=throttle, brake=0.0)
+        else:
+            ego_control = carla.VehicleControl(throttle=0.0, brake=1.0)
+        controls = {"ego": ego_control, **_npc_controls(scenario)}
         header = runtime.tick_controls(controls)
         state, acceleration = ego_state(runtime._actors["ego"])
         ego_history.append((state.x, state.y, state.yaw, state.v))
@@ -657,7 +666,7 @@ def _branch(
                     command = applied
                 else:
                     if tick % 4 == 0:
-                        control_loop.set_trajectory(safety_points_to_ctrl(executable.points), now_s)
+                        control_loop.refresh_trajectory_stamp(safety_points_to_ctrl(executable.points), now_s)
                     current_ego, _ = ego_state(runtime._actors["ego"])
                     command = control_loop.step(current_ego, now_s)
                 controls = {

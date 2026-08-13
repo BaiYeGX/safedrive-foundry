@@ -158,6 +158,7 @@ def solve_st_dp(
 
     best_term: tuple[int, int] | None = None
     best_score = INF
+    partial_stop = False
 
     if stop_at_s is not None:
         s_tol = max(ds * 3.0, 4.0)
@@ -176,7 +177,31 @@ def solve_st_dp(
                     best_score = score
                     best_term = (ti, si)
         if best_term is None:
-            return [], "ST_INFEASIBLE_STOP"
+            # A stop farther than the finite planning horizon is still safe if
+            # the terminal state remains before the line and inside the
+            # braking envelope.  The next planning cycle will continue the
+            # approach; never fabricate a terminal stop outside the horizon.
+            # A partial approach is useful only when the planning horizon is
+            # actually consumed.  This prevents a blocked wall at t=0 from
+            # being misreported as a safe one-step prefix.
+            for ti in (grid.t_bins - 1,):
+                for si in range(grid.s_bins):
+                    if cost[ti][si] >= INF / 2:
+                        continue
+                    s = si * ds
+                    if s > stop_at_s + 1e-6:
+                        continue
+                    remaining = max(0.0, stop_at_s - s)
+                    v_lim = math.sqrt(max(0.0, 2.0 * vehicle.max_decel_mps2 * remaining))
+                    if v_at[ti][si] > v_lim + 0.4:
+                        continue
+                    score = cost[ti][si] - 10.0 * s + 0.5 * v_at[ti][si] ** 2
+                    if score < best_score:
+                        best_score = score
+                        best_term = (ti, si)
+            if best_term is None:
+                return [], "ST_INFEASIBLE_STOP"
+            partial_stop = True
     else:
         for ti in range(grid.t_bins):
             for si in range(grid.s_bins):
@@ -224,11 +249,16 @@ def solve_st_dp(
         v_use = clamp(v0p + a * dtp, 0.0, vehicle.max_speed_mps)
         fixed.append((t1, s_use, v_use, a))
 
-    if stop_at_s is not None:
+    if stop_at_s is not None and not partial_stop:
         _, s_f, v_f, _ = fixed[-1]
         if v_f > 0.95:
             return [], "ST_INFEASIBLE_STOP"
         if abs(s_f - stop_at_s) > max(4.0, 3.0 * ds) and s_f < 0.6 * stop_at_s:
+            return [], "ST_INFEASIBLE_STOP"
+    elif stop_at_s is not None:
+        _, s_f, v_f, _ = fixed[-1]
+        remaining = max(0.0, stop_at_s - s_f)
+        if s_f > stop_at_s + 1e-6 or v_f > math.sqrt(max(0.0, 2.0 * vehicle.max_decel_mps2 * remaining)) + 0.5:
             return [], "ST_INFEASIBLE_STOP"
 
     return fixed, None

@@ -32,6 +32,7 @@ from data_pipeline.h2.quality import audit_h2_gate
 from data_pipeline.h2.store import PairedOutcomeStore
 from driving_vla.model.canonicalizer import stable_sha256 as canonical_sha256
 from safety_kernel.contracts.types import TrajectoryPoint
+from safety_kernel.contracts.types import TrafficLightObs
 
 
 H0 = "0" * 64
@@ -123,6 +124,14 @@ def pair_record(dataset_id: str = "dataset-test") -> PairRecord:
 
 
 class H2ContractsTests(unittest.TestCase):
+    def test_traffic_light_geometry_is_additive_and_legacy_compatible(self) -> None:
+        legacy = TrafficLightObs("tl", "red", 7.0, 1.0)
+        self.assertIsNone(legacy.stop_line_distance_m)
+        self.assertIsNone(legacy.controls_ego_lane)
+        routed = TrafficLightObs("tl", "red", 40.0, 1.0, 18.0, True)
+        self.assertEqual(routed.stop_line_distance_m, 18.0)
+        self.assertTrue(routed.controls_ego_lane)
+
     def test_fixed_matrix_is_complete_frozen_and_balanced(self) -> None:
         self.assertEqual(len(FIXED_MATRIX), 120)
         self.assertEqual(len(PILOT_MATRIX), 15)

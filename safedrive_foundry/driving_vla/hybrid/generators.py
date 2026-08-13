@@ -175,9 +175,11 @@ class ClassicExpertGenerator:
             if not actor.lost
         )
         red_distances = [
-            light.distance_m
+            (light.stop_line_distance_m if light.stop_line_distance_m is not None else light.distance_m)
             for light in anchor.safety_snapshot.traffic_lights
-            if light.state.lower() == "red" and light.distance_m >= 0.0
+            if light.state.lower() == "red"
+            and light.controls_ego_lane is not False
+            and (light.stop_line_distance_m if light.stop_line_distance_m is not None else light.distance_m) >= 0.0
         ]
         stop_s = min(red_distances) if red_distances else None
         scenario_kind = "stop" if stop_s is not None else "follow"

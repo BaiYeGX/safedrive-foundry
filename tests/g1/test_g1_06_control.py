@@ -134,6 +134,16 @@ class G106ControlTests(unittest.TestCase):
         cmd = loop.step(ego, now_s=1.0)
         self.assertEqual(cmd.mode, "brake")
 
+    def test_refresh_stamp_preserves_trajectory_epoch(self) -> None:
+        traj = make_reference_trajectory("straight")
+        loop = ControlLoop(self.cfg)
+        loop.set_trajectory(traj, 0.0)
+        loop.refresh_trajectory_stamp(traj, 0.2)
+        self.assertEqual(loop.buffer._traj, traj)
+        self.assertEqual(loop.buffer._stamp_s, 0.2)
+        with self.assertRaises(ValueError):
+            loop.refresh_trajectory_stamp(make_reference_trajectory("curve"), 0.4)
+
     def test_not_claiming_20hz_as_20ms(self) -> None:
         self.assertNotEqual(self.cfg.control_period_ms, 50.0)
         self.assertEqual(self.cfg.control_period_ms, 20.0)

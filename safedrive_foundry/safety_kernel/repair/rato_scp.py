@@ -816,7 +816,10 @@ class RestrictedRatoScpRepair:
             for light in obs.traffic_lights:
                 if light.state != "red":
                     continue
-                if light.distance_m > cfg.red_light_stop_distance_m:
+                if light.controls_ego_lane is False:
+                    continue
+                distance = light.stop_line_distance_m if light.stop_line_distance_m is not None else light.distance_m
+                if distance > cfg.red_light_stop_distance_m:
                     continue
                 for k in range(n):
                     if times[k] - times[0] <= 2.0 + 1e-9:

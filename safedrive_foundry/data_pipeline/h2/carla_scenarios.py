@@ -226,6 +226,53 @@ def _adjacent_cutter_lane(waypoint: Any) -> tuple[Any | None, str]:
     return None, "none"
 
 
+def _probe_cutter_spawn(world: Any, transform: Any) -> bool:
+    """Probe a cut-in transform and synchronously destroy the temporary actor.
+
+    Materialization is deterministic and pre-capture; the probe only removes
+    CARLA spawn ambiguity on maps such as Town01 and never consults outcomes.
+    Test doubles without a blueprint API retain the geometry-only behavior.
+    """
+    library = getattr(world, "get_blueprint_library", None)
+    try_spawn = getattr(world, "try_spawn_actor", None)
+    if not callable(library) or not callable(try_spawn):
+        return True
+    blueprints = library()
+    find = getattr(blueprints, "find", None)
+    if not callable(find):
+        return True
+    blueprint = find("vehicle.lincoln.mkz_2020")
+    actor = try_spawn(blueprint, transform)
+    if actor is None:
+        return False
+    actor_id = int(getattr(actor, "id", -1))
+    destroy = getattr(actor, "destroy", None)
+    if callable(destroy):
+        destroy()
+    wait_for_tick = getattr(world, "wait_for_tick", None)
+    if callable(wait_for_tick):
+        wait_for_tick(seconds=1.0)
+    def _remaining() -> Any | None:
+        get_actors = getattr(world, "get_actors", None)
+        if not callable(get_actors) or actor_id < 0:
+            return None
+        return next((item for item in get_actors() if int(getattr(item, "id", -1)) == actor_id), None)
+
+    remaining = _remaining()
+    for _ in range(2):
+        if remaining is None:
+            break
+        retry_destroy = getattr(remaining, "destroy", None)
+        if callable(retry_destroy):
+            retry_destroy()
+        if callable(wait_for_tick):
+            wait_for_tick(seconds=1.0)
+        remaining = _remaining()
+    # Actor disappearance, rather than destroy()'s asynchronous boolean, is
+    # the authoritative cleanup barrier.
+    return remaining is None
+
+
 def _red_route(world: Any, carla_map: Any, key: ScenarioKey) -> tuple[Any, tuple[Any, ...], dict[str, Any]]:
     lights = sorted(
         (actor for actor in world.get_actors() if str(getattr(actor, "type_id", "")).startswith("traffic.traffic_light")),
@@ -289,12 +336,23 @@ def materialize_physical_scenario(world: Any, entry: MatrixEntry) -> PhysicalSce
         start_index = int(hashlib.sha256(key.pair_id.encode()).hexdigest(), 16) % len(ranked)
         ego_transform = None
         waypoints = ()
+        selected_cutter: tuple[Any, str] | None = None
         for offset in range(len(ranked)):
             spawn, candidate_route = ranked[(start_index + offset) % len(ranked)]
             if key.family == "cut_in":
-                adjacent, _ = _adjacent_cutter_lane(candidate_route[8])
-                if adjacent is None:
+                probe_result: tuple[Any, str] | None = None
+                for route_index in (8, 9, 7, 10, 6):
+                    if route_index >= len(candidate_route):
+                        continue
+                    adjacent, side = _adjacent_cutter_lane(candidate_route[route_index])
+                    if adjacent is None:
+                        continue
+                    if _probe_cutter_spawn(world, _raised_transform(adjacent.transform)):
+                        probe_result = (adjacent, side)
+                        break
+                if probe_result is None:
                     continue
+                selected_cutter = probe_result
             ego_transform, waypoints = spawn, candidate_route
             break
         if ego_transform is None:
@@ -302,7 +360,14 @@ def materialize_physical_scenario(world: Any, entry: MatrixEntry) -> PhysicalSce
 
     route = tuple((float(wp.transform.location.x), float(wp.transform.location.y)) for wp in waypoints)
     npc_actors: list[dict[str, Any]] = []
-    script: dict[str, Any] = {"family": key.family, "pre_roll_ticks": 20, "branch_ticks": 50}
+    script: dict[str, Any] = {
+        "family": key.family,
+        "pre_roll_ticks": 20,
+        "branch_ticks": 50,
+        "pre_roll_target_speed_mps": 2.0,
+        "pre_roll_kp": 0.30,
+        "pre_roll_max_throttle": 0.35,
+    }
     if key.family in {"slow_lead", "stopped_lead"}:
         target = waypoints[9 if key.family == "slow_lead" else 8]
         npc_actors.append(
@@ -318,9 +383,9 @@ def materialize_physical_scenario(world: Any, entry: MatrixEntry) -> PhysicalSce
             else {"throttle": 0.0, "brake": 1.0, "steer": 0.0}
         )
     elif key.family == "cut_in":
-        adjacent, side = _adjacent_cutter_lane(waypoints[8])
-        if adjacent is None:
-            raise RuntimeError("cut-in adjacent lane disappeared")
+        if selected_cutter is None:
+            raise RuntimeError("cut-in adjacent lane unavailable_or_unspawnable")
+        adjacent, side = selected_cutter
         npc_actors.append(
             {
                 "role": "cutter",
@@ -328,6 +393,7 @@ def materialize_physical_scenario(world: Any, entry: MatrixEntry) -> PhysicalSce
                 "transform": transform_to_dict(_raised_transform(adjacent.transform)),
             }
         )
+        script["cut_in_spawn_probe"] = "fixed-route-index-order-v1"
         script["cutter_control"] = {
             "throttle": 0.22,
             "brake": 0.0,

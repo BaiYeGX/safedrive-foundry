@@ -16,9 +16,9 @@ flowchart LR
     S --> M["MPC / PID"]
 ```
 
-当前状态：`H0 VERIFIED / H1 VERIFIED / H2 COMPLETED / VERIFIED / GATE_FAILED / STOPPED`。
+当前状态：`H0 VERIFIED / H1 VERIFIED / H2 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。
 H2 已在真实 CARLA/CUDA 上完成三地图 restart smoke、pilot 和冻结 120-anchor 矩阵；离线
-Oracle、manifest/hash 和隔离审计完成，但数据门按冻结阈值失败，负结果已冻结且 H3 关闭。
+Oracle、manifest/hash 和隔离审计全部通过。H3 仍未授权。
 dataset 和 runtime Evidence 继续保留在本机 Git-ignored 路径；World、在线 Oracle 和训练
 均未授权。
 

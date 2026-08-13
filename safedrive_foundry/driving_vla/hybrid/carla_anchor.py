@@ -89,13 +89,17 @@ def observable_lights(
     route: Sequence[tuple[float, float]],
 ) -> tuple[TrafficLightObs, ...]:
     ego_location = ego.get_transform().location
+    ego_s, _ = _route_projection(float(ego_location.x), float(ego_location.y), route)
     output: list[TrafficLightObs] = []
     for actor in world.get_actors():
         if not str(getattr(actor, "type_id", "")).startswith("traffic.traffic_light"):
             continue
-        location = actor.get_transform().location
+        location = _traffic_light_stop_location(actor)
         distance = math.hypot(float(location.x - ego_location.x), float(location.y - ego_location.y))
-        if distance > 50.0 or min(math.hypot(float(location.x) - x, float(location.y) - y) for x, y in route) > 10.0:
+        stop_s, route_distance = _route_projection(float(location.x), float(location.y), route)
+        route_delta = stop_s - ego_s
+        controls_ego_lane = route_distance <= 6.0 and route_delta >= -2.0
+        if distance > 50.0 or route_distance > 10.0:
             continue
         state = str(actor.get_state()).split(".")[-1].lower()
         output.append(
@@ -104,9 +108,48 @@ def observable_lights(
                 state=state,
                 distance_m=distance,
                 observed_time_s=simulation_time_s,
+                stop_line_distance_m=max(0.0, route_delta) if controls_ego_lane else None,
+                controls_ego_lane=controls_ego_lane,
             )
         )
     return tuple(sorted(output, key=lambda item: item.light_id))
+
+
+def _traffic_light_stop_location(actor: Any) -> Any:
+    """Return trigger-volume center in map coordinates when CARLA exposes it."""
+    volume = getattr(actor, "trigger_volume", None)
+    relative = getattr(volume, "location", None)
+    transform = getattr(actor, "get_transform", lambda: None)()
+    if relative is not None and transform is not None and hasattr(transform, "transform"):
+        point = type(relative)(x=float(relative.x), y=float(relative.y), z=float(relative.z))
+        mapped = transform.transform(point)
+        if mapped is not None:
+            return mapped
+        return point
+    return actor.get_transform().location
+
+
+def _route_projection(x: float, y: float, route: Sequence[tuple[float, float]]) -> tuple[float, float]:
+    """Project a map point to the observable route without importing H2 code."""
+    if len(route) < 2:
+        return 0.0, math.inf
+    best_s, best_distance, accumulated = 0.0, math.inf, 0.0
+    for index in range(1, len(route)):
+        ax, ay = route[index - 1]
+        bx, by = route[index]
+        dx, dy = bx - ax, by - ay
+        length_sq = dx * dx + dy * dy
+        if length_sq <= 1e-12:
+            continue
+        fraction = max(0.0, min(1.0, ((x - ax) * dx + (y - ay) * dy) / length_sq))
+        px, py = ax + fraction * dx, ay + fraction * dy
+        distance = math.hypot(x - px, y - py)
+        segment = math.sqrt(length_sq)
+        if distance < best_distance:
+            best_distance = distance
+            best_s = accumulated + fraction * segment
+        accumulated += segment
+    return best_s, best_distance
 
 
 def safety_snapshot(

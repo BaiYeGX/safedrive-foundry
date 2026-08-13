@@ -91,7 +91,7 @@ def finalize(dataset_id: str) -> dict[str, Any]:
         "evidence_status": "VERIFIED",
         "gate_status": "GATE_PASSED" if gate.get("passed") else "GATE_FAILED",
         "stopped": True,
-        "h3_status": "CLOSED_AFTER_H2_GATE_FAILURE",
+        "h3_status": "NOT_AUTHORIZED",
         "attempts": {
             "pilot": {"records": audit.get("records"), "gate_passed": json.loads(pilot_path.read_text(encoding="utf-8")).get("gate", {}).get("passed") if pilot_path.is_file() else None},
             "full": {"records": audit.get("records"), "gate_passed": bool(gate.get("passed"))},
