@@ -34,6 +34,7 @@ class NormalizedWorldScorer:
         device: str = "cpu",
         model_hash: str = "",
         temperature: float | None = None,
+        risk_defer_probability: float = 0.5,
     ) -> None:
         if not models:
             raise ValueError("world_scorer_requires_model")
@@ -43,6 +44,7 @@ class NormalizedWorldScorer:
         self.stats = [(float(mean), float(std)) for mean, std in stats]
         self.device = torch.device(device)
         self.temperature = float(temperature if temperature is not None else H4_CONFIG["temperature"])
+        self.risk_defer_probability = float(risk_defer_probability)
         self.model_hash = model_hash or hashlib.sha256(str(len(models)).encode()).hexdigest()
 
     @classmethod
@@ -135,7 +137,15 @@ class NormalizedWorldScorer:
         defer_margin = float(H4_CONFIG["runtime"]["defer_margin"])
         latency_ms = (time.perf_counter() - started) * 1000.0
 
-        if uncertainty > max_uncertainty:
+        # The structured risk head must be part of the online decision, not a
+        # disconnected auxiliary output.  If either candidate is predicted to
+        # be hard-unsafe above the frozen probability threshold, World defers
+        # to the non-learning fallback instead of selecting a risky trajectory.
+        risk_first = sigmoid(first_prediction.risk_logit)
+        risk_second = sigmoid(second_prediction.risk_logit)
+        if max(risk_first, risk_second) > self.risk_defer_probability:
+            disposition, selected, reason = "defer_low_confidence", None, "predicted_hard_risk_over_threshold"
+        elif uncertainty > max_uncertainty:
             disposition, selected, reason = "defer_low_confidence", None, "uncertainty_over_threshold"
         elif margin < defer_margin:
             disposition, selected, reason = "defer_low_confidence", None, "score_margin_below_threshold"

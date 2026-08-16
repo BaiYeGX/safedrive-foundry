@@ -197,17 +197,23 @@ def train_model(
     best_epoch = 0
     wait = 0
     best_state: dict[str, Tensor] | None = None
+    batch_size = max(1, int(optimizer_cfg.get("batch_size", len(train_examples))))
+    indices = list(range(len(train_examples)))
     for epoch in range(1, epochs + 1):
         model.train()
-        optimizer.zero_grad(set_to_none=True)
-        contexts, candidates, progress, jerk, risk, winner, ties = _batch(train_examples, torch_device, swap=True)
-        outputs = torch.stack([model(contexts[:, index], candidates[:, index]) for index in range(2)], dim=1)
-        loss = scorer_loss(outputs, progress, jerk, risk, winner, ties, temperature=temperature)
-        if not torch.isfinite(loss):
-            raise RuntimeError(f"non_finite_training_loss:{epoch}")
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), float(optimizer_cfg["gradient_clip"]))
-        optimizer.step()
+        random.shuffle(indices)
+        for start in range(0, len(indices), batch_size):
+            batch_indices = indices[start : start + batch_size]
+            batch_examples = [train_examples[index] for index in batch_indices]
+            optimizer.zero_grad(set_to_none=True)
+            contexts, candidates, progress, jerk, risk, winner, ties = _batch(batch_examples, torch_device, swap=True)
+            outputs = torch.stack([model(contexts[:, index], candidates[:, index]) for index in range(2)], dim=1)
+            loss = scorer_loss(outputs, progress, jerk, risk, winner, ties, temperature=temperature)
+            if not torch.isfinite(loss):
+                raise RuntimeError(f"non_finite_training_loss:{epoch}")
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), float(optimizer_cfg["gradient_clip"]))
+            optimizer.step()
         model.eval()
         val_loss = _loss_for_examples(model, val_examples or train_examples, torch_device, temperature=temperature)
         if val_loss + 1e-8 < best_loss:

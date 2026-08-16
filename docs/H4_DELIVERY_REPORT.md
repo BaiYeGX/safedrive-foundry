@@ -197,3 +197,25 @@ git diff --check
   H4 代码、测试、文档和 H4 证据路径/hash 说明。
 - `h5_authorized=true` 只是 H4 离线门与运营预检通过；它不是闭环安全性证明，H5 必须
   单独授权并执行 closed-loop on/off。
+
+## 8. 深度审计后的工程加固
+
+针对后续代码级审计发现的问题，已完成以下**不依赖重新采集数据**的修复：
+
+1. `H3_CONFIG["optimizer"]["batch_size"]=16` 此前是死配置；`train_model` 现在按该值
+   shuffle 后执行 mini-batch 训练，不再隐式 full-batch。
+2. H3 最终部署 checkpoint 此前使用 `train_model(all_dev, all_dev)`，验证集等于训练集；
+   现在使用 `_inner_split(all_dev)` 的独立 inner validation 做 early stopping。
+3. `NormalizedWorldScorer` 与 H3 `WorldScorer` 现在接入 `risk_logit`：
+   `sigmoid(risk_logit) > 0.5` 时直接 defer，reason 为
+   `predicted_hard_risk_over_threshold`。risk head 不再只是训练侧辅助输出。
+4. 新增风险门禁单元测试：高风险候选触发 defer，低风险候选保持 rank。
+
+仍需在 H5 前完成、且需要重新采集或重新训练才能解决的事项：
+
+- locked test 仅覆盖 3 地图、8 类场景、2 种天气的 seed 变体，缺乏真正 OOD 地图/场景；
+- 64 个 decisive 测试样本中，简单基线同分 89.06%，非平凡样本过少；
+- 温度拟合 `T*` 卡在 0.05 下界，概率过度饱和，需要新的校准协议；
+- scene gate 是显式架构开关，只能证明合同性 history sensitivity，不能证明网络自发
+  学习到历史因果；
+- 开环 2.5s 标签与 20Hz 闭环重规划之间存在语义鸿沟，H5 必须增加候选切换滞后/平滑。

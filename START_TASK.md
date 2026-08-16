@@ -54,7 +54,7 @@ H5 授权预检：
 h5_authorized = true
 ```
 
-H5 仍不自动进入，需要新任务单独授权并执行 closed-loop on/off。
+H5 仍不自动进入，需要新任务单独授权并执行 closed-loop on/off；进入前必须使用审计后的 risk-gated runtime、重做温度校准，并设计候选切换滞后。
 
 ## H4 冻结输入
 

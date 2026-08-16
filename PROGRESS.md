@@ -24,7 +24,8 @@ gate.failures   []
 - Expert/VLA wins `39/25`；ECE `0.00884`；swap max error `0.0`；isolation `passed`；
 - P99 `15.23 ms`，增量显存 `0.03125 GiB`，0 deadline misses；
 - `h5_authorized = true`，但 H5 不自动进入。
-- 全量测试 `352 tests: 351 passed, 1 skipped, 0 failed`；compileall 与 `git diff --check` 通过。
+- 全量测试通过；compileall 与 `git diff --check` 通过。
+- 审计后加固：batch_size 生效、final checkpoint 独立验证、runtime risk gate 接入。
 
 H4 使用 H3 5-seed final checkpoints 加 dev-only per-model utility normalization 修复了
 H3 raw ensemble uncertainty 导致的全 defer 问题；该 normalization 已冻结并写入 H4 evidence。

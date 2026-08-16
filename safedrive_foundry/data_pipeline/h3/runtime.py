@@ -31,12 +31,13 @@ from .evaluate import sigmoid
 class WorldScorer:
     """Shared candidate-conditioned scorer with a frozen calibration temperature."""
 
-    def __init__(self, models: Sequence[WorldScorerModel], *, device: str = "cpu", model_hash: str = "", temperature: float | None = None) -> None:
+    def __init__(self, models: Sequence[WorldScorerModel], *, device: str = "cpu", model_hash: str = "", temperature: float | None = None, risk_defer_probability: float = 0.5) -> None:
         if not models:
             raise ValueError("world_scorer_requires_model")
         self.models = tuple(models)
         self.device = torch.device(device)
         self.temperature = float(temperature if temperature is not None else H3_CONFIG["runtime"]["temperature_bounds"][0])
+        self.risk_defer_probability = float(risk_defer_probability)
         self.model_hash = model_hash or hashlib.sha256(str(len(models)).encode()).hexdigest()
 
     @classmethod
@@ -112,7 +113,11 @@ class WorldScorer:
         defer_margin = float(H3_CONFIG["runtime"]["defer_margin"])
         latency_ms = (time.perf_counter() - started) * 1000.0
 
-        if uncertainty > max_uncertainty:
+        risk_first = sigmoid(first_prediction.risk_logit)
+        risk_second = sigmoid(second_prediction.risk_logit)
+        if max(risk_first, risk_second) > self.risk_defer_probability:
+            disposition, selected, reason = "defer_low_confidence", None, "predicted_hard_risk_over_threshold"
+        elif uncertainty > max_uncertainty:
             disposition, selected, reason = "defer_low_confidence", None, "uncertainty_over_threshold"
         elif margin < defer_margin:
             disposition, selected, reason = "defer_low_confidence", None, "score_margin_below_threshold"

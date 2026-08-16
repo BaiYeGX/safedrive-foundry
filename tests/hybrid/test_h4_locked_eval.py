@@ -133,6 +133,46 @@ class H4IsolationAuditTest(unittest.TestCase):
         self.assertTrue(audit["passed"])
 
 
+class FakeRiskModel:
+    """Minimal callable with the same batched output shape as WorldScorerModel."""
+    def __init__(self, risk_logit: float = 0.0, utility_first: float = 1.0, utility_second: float = -1.0):
+        self.risk_logit = risk_logit
+        self.utility_first = utility_first
+        self.utility_second = utility_second
+
+    def __call__(self, context, candidate):
+        import torch
+        batch = context.shape[0]
+        out = torch.zeros(batch, 6)
+        out[0, 0] = self.utility_first
+        if batch > 1:
+            out[1, 0] = self.utility_second
+        out[:, 5] = self.risk_logit
+        return out
+
+
+class H4RuntimeRiskGateTest(unittest.TestCase):
+    def _payloads(self):
+        context = tuple([0.0] * 499)
+        candidate = tuple(tuple([0.0] * 8 for _ in range(10)))
+        return ("a", context, candidate), ("b", context, candidate)
+
+    def test_high_predicted_risk_defers(self):
+        from data_pipeline.h4.runtime import NormalizedWorldScorer
+        scorer = NormalizedWorldScorer([FakeRiskModel(risk_logit=5.0)], [(0.0, 1.0)], device="cpu")
+        first, second = self._payloads()
+        result = scorer.score_pair(first, second)
+        self.assertEqual(result.disposition, "defer_low_confidence")
+        self.assertEqual(result.defer_reason, "predicted_hard_risk_over_threshold")
+
+    def test_low_predicted_risk_ranks(self):
+        from data_pipeline.h4.runtime import NormalizedWorldScorer
+        scorer = NormalizedWorldScorer([FakeRiskModel(risk_logit=0.0, utility_first=2.0, utility_second=-2.0)], [(0.0, 1.0)], device="cpu")
+        first, second = self._payloads()
+        result = scorer.score_pair(first, second)
+        self.assertEqual(result.disposition, "ranked")
+
+
 class H4LoaderContractTest(unittest.TestCase):
     def test_locked_loader_rejects_non_test_split(self) -> None:
         with self.assertRaises(Exception):

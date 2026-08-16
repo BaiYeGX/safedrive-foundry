@@ -330,13 +330,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     # 7) Final deployment ensemble (not used in any gate metric).
     final_models = []
     final_records = []
+    final_inner_train, final_inner_val = _inner_split(all_dev)
     for seed in H3_CONFIG["training_seeds"]:
         checkpoint = checkpoint_root / "final" / f"seed-{seed}.pt"
         if checkpoint.exists():
             model, metadata = load_model(checkpoint, device=device)
         else:
-            result = train_model(all_dev, all_dev, seed=int(seed), checkpoint_path=checkpoint, device=device,
-                                 max_epochs=args.max_epochs, patience=args.patience)
+            result = train_model(final_inner_train, final_inner_val, seed=int(seed), checkpoint_path=checkpoint,
+                                 device=device, max_epochs=args.max_epochs, patience=args.patience)
             model, metadata = load_model(checkpoint, device=device)
         final_models.append(model)
         final_records.append({"seed": int(seed), "checkpoint": str(checkpoint),
