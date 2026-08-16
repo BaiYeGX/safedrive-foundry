@@ -92,10 +92,15 @@ Evidence：
 ```text
 docs/runtime-evidence/h5/h5-smoke-20260816-ok/h5_smoke.json
 docs/runtime-evidence/h5/h5-smoke-3t-20260816-ok/h5_smoke.json
+docs/runtime-evidence/h5/h5-smoke-5t-20260816-ok/h5_smoke.json
 ```
 
-3-tick smoke 验证了 per-frame candidate id 变化下 switch_count 正确按 source 统计：
-`decisions=3, switch_count=0, defer_count=0, online_history_ticks=3`。
+3-tick / 5-tick smoke 验证了 per-frame candidate id 变化下 switch_count 正确按 source 统计：
+
+```text
+3-tick: decisions=3, switch_count=0, defer_count=0, online_history_ticks=3
+5-tick: decisions=5, switch_count=0, defer_count=0, online_history_ticks=5
+```
 
 之前因 CARLA 冷重启要求导致的失败也已保留：
 
