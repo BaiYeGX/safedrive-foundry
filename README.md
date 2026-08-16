@@ -35,6 +35,7 @@ H5 closed-loop 与在线 Oracle 仍未授权。
    [RESOURCES](docs/RESOURCES.md)、[EVIDENCE](docs/EVIDENCE.md)。
 6. H3 完整交付与实施记录见 [H3_DELIVERY_REPORT](docs/H3_DELIVERY_REPORT.md)。
 7. H4 完整交付与实施记录见 [H4_DELIVERY_REPORT](docs/H4_DELIVERY_REPORT.md)。
+8. H5 进入检查见 [H5_ENTRY](docs/H5_ENTRY.md)。
 
 ## 固定边界
 
