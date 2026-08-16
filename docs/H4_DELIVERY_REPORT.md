@@ -219,3 +219,27 @@ git diff --check
 - scene gate 是显式架构开关，只能证明合同性 history sensitivity，不能证明网络自发
   学习到历史因果；
 - 开环 2.5s 标签与 20Hz 闭环重规划之间存在语义鸿沟，H5 必须增加候选切换滞后/平滑。
+
+## 9. H5 Readiness
+
+已新增：
+
+```text
+safedrive_foundry/data_pipeline/h5/runtime.py   # H5WorldRouter (risk gate + hysteresis)
+scripts/h5_readiness.py                         # H5 readiness preflight
+tests/hybrid/test_h5_runtime.py                 # hysteresis / defer fallback tests
+```
+
+运行：
+
+```bash
+python scripts/h5_readiness.py
+```
+
+当前返回：
+
+```json
+{"ready": true}
+```
+
+这意味着 H3/H4 的工程加固已完成，H5 可以进入闭环设计与执行阶段。H5 本身仍需单独授权和真实 CARLA 闭环验证。
