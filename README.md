@@ -16,11 +16,10 @@ flowchart LR
     S --> M["MPC / PID"]
 ```
 
-当前状态：`H0 VERIFIED / H1 VERIFIED / H2 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。
-H2 已在真实 CARLA/CUDA 上完成三地图 restart smoke、pilot 和冻结 120-anchor 矩阵；离线
-Oracle、manifest/hash 和隔离审计全部通过。H3 仍未授权。
-dataset 和 runtime Evidence 继续保留在本机 Git-ignored 路径；World、在线 Oracle 和训练
-均未授权。
+当前状态：`H0 VERIFIED / H1 VERIFIED / H2 GATE_PASSED / H3 GATE_PASSED / STOPPED`。
+H3v2 已基于冻结 H2 数据与新采集的 96 场真实 CARLA Challenge 数据完成嵌套 OOF
+训练与验收，最终 Evidence 为 `docs/runtime-evidence/h3/h3-v2-20260815d-final/`。
+H4 locked evaluation、H5 closed-loop 与在线 Oracle 仍未授权。
 
 ## 从这里开始
 
@@ -31,6 +30,7 @@ dataset 和 runtime Evidence 继续保留在本机 Git-ignored 路径；World、
    [Paired outcomes](docs/PAIRED_OUTCOMES.md) 与 [World](docs/WORLD_MODEL.md)。
 5. 环境、资源、证据分别见 [ENVIRONMENT](docs/ENVIRONMENT.md)、
    [RESOURCES](docs/RESOURCES.md)、[EVIDENCE](docs/EVIDENCE.md)。
+6. H3 完整交付与实施记录见 [H3_DELIVERY_REPORT](docs/H3_DELIVERY_REPORT.md)。
 
 ## 固定边界
 

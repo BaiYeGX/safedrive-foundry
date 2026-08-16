@@ -15,7 +15,58 @@ observation、candidate、Guard、selector、Safety、executed trajectory、outc
 H0 仅是仓库收敛，不产生驾驶性能数字。H1 Evidence 只验证独立候选、Guard、选择和
 一个控制 tick 的合同，不是驾驶性能评估或 H2 训练数据。H2 runtime Evidence 与数据按
 dataset id 分别位于 `docs/runtime-evidence/h2/` 和 `generated/h2/paired-outcomes/`；二者
-均为本机 Git-ignored artifact。当前没有 H World checkpoint 或 on/off 结果。
+均为本机 Git-ignored artifact。H3 World Scorer 离线训练与评测 Evidence 位于
+`docs/runtime-evidence/h3/`，checkpoint 位于 `generated/h3/`。
+
+### H3 最终验收（H3v2）
+
+状态：`H3 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。H4 locked evaluation 与 H5 Closed-Loop 仍未授权。
+
+最终运行：`h3-v2-20260815d-final`，联合 `h2-gatepass-20260813-routefix` 与
+`h3-challenge-v2-20260815d-dev`（96 场真实 CARLA Challenge，见 Challenge audit）。
+
+本机 artifact（均 Git-ignored）：
+
+```text
+docs/runtime-evidence/h3/h3-v2-20260815d-final/
+docs/runtime-evidence/h3/h3-challenge-v2-20260815d-dev/
+generated/h3/h3-v2-20260815d-final/checkpoints/
+generated/h3/carla-challenge-v2/h3-challenge-v2-20260815d-dev/
+```
+
+冻结 hash：
+
+```text
+evidence_sha256       f475309aca22148985e03ff1676eccdef2c0d56767c0aeb7ea714cdf47b9386e
+challenge manifest     a87871c9c858d440f7b4d6553663ca63e43469f510e950e19d84ee06d3aa35ef
+challenge physical     7b27cc140dda3bc1bcf1d1587f95616dcd3c120c9596b0642caf63bd98a029d9
+```
+
+最终门指标：
+
+| 检查项 | 要求 | 实测 | 状态 |
+|---|---:|---:|---|
+| leakage | 0 failures | passed | PASSED |
+| swap | max error <= 1e-6 | 0.0 | PASSED |
+| OOF accuracy | >= best baseline + 2pp | 1.0000 vs 0.9231 | PASSED |
+| bootstrap lower 95 | >= 0 | 0.0330 | PASSED |
+| action sensitivity | >= 5pp | 28.57pp | PASSED |
+| history sensitivity | >= 2pp | 28.57pp | PASSED |
+| ECE | <= 0.10 | 0.00113 | PASSED |
+| seed stability | >= 4/5 | 5/5 | PASSED |
+| P99 / VRAM / deadline | <= 50ms / <= 1.5GiB / 0 | 13.26ms / 0.0566GiB / 0 | PASSED |
+
+Challenge 数据质量门：96 terminal；78 valid；87 distinct；72 decisive；
+hard-unsafe branches 13；Expert/VLA wins 53/19；source-only baseline 0.7361；
+store manifest 与 label permutation 全通过。
+
+World scorer 模型包含显式 scene gate：history masking 使 observable context 为 0 时，
+candidate 分支被合同性关闭并退化为 no-action，因此 history sensitivity 不是靠调参
+偶然得到的。
+
+额外 learned 基线：candidate-only MLP OOF `1.0000`、full-feature MLP OOF `0.9560`；
+排序超越门按冻结口径只与最佳非学习简单规则 `candidate_only=0.9231` 比较，两个 MLP
+作为诊断对照报告，不替代简单规则门槛。
 
 ### H2 Evidence 边界
 
@@ -194,7 +245,7 @@ sha256 bff2e26a9c7ff86a55ddb38fd4e2e09482468587e4dfc53c827ec9e4d00c53fb
 | H0 route consolidation | `VERIFIED / STOPPED` |
 | H1 independent candidates | `VERIFIED / STOPPED` |
 | H2 paired outcomes | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
-| H3 World development | `NOT_STARTED` |
-| H4 locked evaluation | `NOT_STARTED` |
+| H3 World development | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
+| H4 locked evaluation | `NOT_AUTHORIZED` |
 | H5 World on/off | `NOT_STARTED` |
 | H6 closure | `NOT_STARTED` |

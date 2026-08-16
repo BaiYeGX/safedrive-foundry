@@ -1,0 +1,182 @@
+{
+  "checks": [
+    {
+      "code": "project_path_ok",
+      "details": {
+        "root": "/mnt/e/autonomous driving"
+      },
+      "id": "paths.project",
+      "message": "project root and G0 skeleton are present",
+      "status": "PASS"
+    },
+    {
+      "code": "sync_config_ok",
+      "details": {
+        "clock_topic": "/clock",
+        "fixed_delta_seconds": 0.05,
+        "frame_contract": "episode_id+carla_frame",
+        "max_frame_gap": 1,
+        "max_substep_delta_time": 0.01,
+        "max_substeps": 5,
+        "snapshot_topic": "/safedrive/carla/status",
+        "substepping": true,
+        "synchronous_mode": true,
+        "tick_master": "sdf.g0-05.sync",
+        "timestamp_tolerance_seconds": 1e-06
+      },
+      "id": "sync.config",
+      "message": "fixed-step and frame contract configuration is valid",
+      "status": "PASS"
+    },
+    {
+      "code": "versions_lock_ok",
+      "details": {
+        "carla": "0.9.16",
+        "path": "/mnt/e/autonomous driving/versions.lock"
+      },
+      "id": "versions.lock",
+      "message": "authoritative version lock is readable",
+      "status": "PASS"
+    },
+    {
+      "code": "python_version_ok",
+      "details": {
+        "current": "3.12.3",
+        "expected": "3.12.3"
+      },
+      "id": "python.version",
+      "message": "Python major/minor matches the preferred frozen interpreter",
+      "status": "PASS"
+    },
+    {
+      "code": "gpu_visible",
+      "details": {
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "NVIDIA GeForce RTX 4080, 16376 MiB, 610.74"
+      },
+      "id": "gpu.visible",
+      "message": "NVIDIA GPU is visible to the diagnostic process",
+      "status": "PASS"
+    },
+    {
+      "code": "wsl_in_guest",
+      "details": {
+        "distro": "Ubuntu-24.04",
+        "mode": "in_guest"
+      },
+      "id": "wsl.available",
+      "message": "diagnostic process is already running inside WSL",
+      "status": "PASS"
+    },
+    {
+      "code": "ros2_ready_in_guest",
+      "details": {
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "/opt/ros/jazzy/bin/ros2\nusage: ros2 [-h] [--use-python-default-buffering]\n            Call `ros2 <command> -h` for more detailed usage. ...\n\nros2 is an extensible command-line tool for ROS 2.\n\noptions:\n  -h, --help            show this help message and exit\n  --use-python-default-buffering\n                        Do not force line buffering in stdout and instead use\n                        the python default buffering, which might be affected\n                        by PYTHONUNBUFFERED/-u and depends on whatever stdout\n                        is interactive or not\n\nCommands:\n  action     Various action related sub-commands\n  bag        Various rosbag related sub-commands\n  component  Various component related sub-commands\n  daemon     Various daemon related sub-commands\n  doctor     Check ROS setup and other potential issues\n  interface  Show information about ROS interfaces\n  launch     Run a launch file\n  lifecycle  Various lifecycle related sub-commands\n  multicast  Various multicast related sub-commands\n  node       Various node related sub-commands\n  param      Various param related sub-commands\n  pkg        Various package related sub-commands\n  plugin     Various plugin related sub-commands\n  run        Run a package specific executable\n  security   Various security related sub-commands\n  service    Various service related sub-commands\n  topic      Various topic related sub-commands\n  wtf        Use `wtf` as alias to `doctor`\n\n  Call `ros2 <command> -h` for more detailed usage."
+      },
+      "id": "ros2.available",
+      "message": "ROS 2 Jazzy command is available in current WSL",
+      "status": "PASS"
+    },
+    {
+      "code": "carla_path_ok",
+      "details": {
+        "path": "/mnt/e/CARLA_0.9.16"
+      },
+      "id": "paths.carla",
+      "message": "configured CARLA installation path exists",
+      "status": "PASS"
+    },
+    {
+      "code": "disk_space_ok",
+      "details": {
+        "free_gib": 132.848,
+        "minimum_free_gib": 20.0
+      },
+      "id": "disk.free",
+      "message": "free disk space is above the configured G0 safety floor",
+      "status": "PASS"
+    },
+    {
+      "code": "port_open",
+      "details": {
+        "error": null,
+        "host": "172.30.80.1",
+        "port": 2000
+      },
+      "id": "carla.port",
+      "message": "CARLA RPC TCP endpoint 172.30.80.1:2000 is reachable",
+      "status": "PASS"
+    },
+    {
+      "code": "port_conflict_or_non_carla_service",
+      "details": {
+        "error": "RuntimeError: time-out of 3000ms while waiting for the simulator, make sure the simulator is ready and connected to 172.30.80.1:2000"
+      },
+      "id": "carla.handshake",
+      "message": "RPC port is open but the CARLA handshake failed; possible port conflict or protocol error",
+      "status": "FAIL"
+    },
+    {
+      "code": "port_open",
+      "details": {
+        "error": null,
+        "host": "172.30.80.1",
+        "port": 2001
+      },
+      "id": "carla.port.streaming",
+      "message": "CARLA streaming endpoint 172.30.80.1:2001 is reachable",
+      "status": "PASS"
+    },
+    {
+      "code": "port_open",
+      "details": {
+        "error": null,
+        "host": "172.30.80.1",
+        "port": 2002
+      },
+      "id": "carla.port.traffic_manager",
+      "message": "CARLA traffic_manager endpoint 172.30.80.1:2002 is reachable",
+      "status": "PASS"
+    },
+    {
+      "code": "clock_topic_not_observed",
+      "details": {
+        "error": "timeout",
+        "returncode": 124,
+        "stderr": "",
+        "stdout": ""
+      },
+      "id": "ros.clock",
+      "message": "ROS 2 is available but /clock is not currently observable; start the sync driver",
+      "status": "WARN"
+    },
+    {
+      "code": "single_tick_master",
+      "details": {
+        "tick_master": "sdf.g0-05.sync"
+      },
+      "id": "sync.tick_master",
+      "message": "configuration declares exactly one tick master",
+      "status": "PASS"
+    }
+  ],
+  "generated_at_utc": "2026-08-15T09:33:54.465301+00:00",
+  "invocation": [
+    "scripts/sdf.py",
+    "doctor"
+  ],
+  "project_root": "/mnt/e/autonomous driving",
+  "schema": "safedrive.g0.doctor.v1",
+  "summary": {
+    "counts": {
+      "BLOCKED": 0,
+      "FAIL": 1,
+      "PASS": 13,
+      "WARN": 1
+    },
+    "status": "FAIL"
+  }
+}

@@ -110,6 +110,9 @@ class Client:
 class G102ConnectionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.root = ROOT
+        patcher = patch("runtime.carla_connection.query_windows_carla_command_line", return_value=r"E:\CARLA_0.9.16\CarlaUE4.exe -dx12")
+        self.addCleanup(patcher.stop)
+        patcher.start()
 
     def resolver(self, **kwargs) -> ConnectionResolver:
         return ConnectionResolver(self.root, process_query=lambda: "RUNNING", **kwargs)
@@ -288,6 +291,7 @@ class G102ConnectionTests(unittest.TestCase):
         rhi: str = "dx12",
         arguments: str | None = None,
         working_directory: str = r"E:\CARLA_0.9.16",
+        default_engine_ini: str | Path | None = None,
     ) -> Path:
         cfg = root / "safedrive_foundry" / "config" / "runtime"
         cfg.mkdir(parents=True, exist_ok=True)
@@ -295,25 +299,24 @@ class G102ConnectionTests(unittest.TestCase):
             f"/Game/Carla/Maps/{default_map} -windowed -ResX=640 -ResY=360 "
             f"-quality-level=Low -nosound -{rhi} -carla-rpc-port=2000"
         )
+        ini_line = f'default_engine_ini = "{str(default_engine_ini)}"' if default_engine_ini else ""
         path = cfg / "carla_start.toml"
-        path.write_text(
-            "\n".join(
-                [
-                    "[carla_start]",
-                    'expected_version = "0.9.16"',
-                    r'windows_executable = "E:\\CARLA_0.9.16\\CarlaUE4.exe"',
-                    f'windows_working_directory = "{working_directory.replace(chr(92), chr(92)+chr(92))}"',
-                    'wsl_path = "/mnt/e/CARLA_0.9.16/CarlaUE4.exe"',
-                    f'launch_mode = "{launch_mode}"',
-                    f'default_map = "{default_map}"',
-                    f'rhi = "{rhi}"',
-                    "render_offscreen = false",
-                    f'arguments = "{args}"',
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
+        lines = [
+            "[carla_start]",
+            'expected_version = "0.9.16"',
+            r'windows_executable = "E:\\CARLA_0.9.16\\CarlaUE4.exe"',
+            f'windows_working_directory = "{working_directory.replace(chr(92), chr(92)+chr(92))}"',
+            'wsl_path = "/mnt/e/CARLA_0.9.16/CarlaUE4.exe"',
+            f'launch_mode = "{launch_mode}"',
+            f'default_map = "{default_map}"',
+            f'rhi = "{rhi}"',
+            "render_offscreen = false",
+            f'arguments = "{args}"',
+        ]
+        if ini_line:
+            lines.append(ini_line)
+        lines.append("")
+        path.write_text("\n".join(lines), encoding="utf-8")
         return path
 
     def _write_default_engine_ini(self, path: Path, *, map_name: str, rhi: str = "dx12") -> Path:
@@ -794,12 +797,9 @@ class G102ConnectionTests(unittest.TestCase):
     def test_restart_graceful_close_pin_ensure_and_single_recheck(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self._write_start_toml(root, default_map="Town03")
             ini = self._write_default_engine_ini(root / "DefaultEngine.ini", map_name="Town03")
-            state = {"running": True, "map": "Town03", "starts": 0, "closes": 0}
-            process = WindowsCarlaProcess(
-                77, r"E:\CARLA_0.9.16\CarlaUE4.exe", r"E:\CARLA_0.9.16\CarlaUE4.exe"
-            )
+            self._write_start_toml(root, default_map="Town03", default_engine_ini=ini)
+            state = {"running": True, "map": "Town03", "starts": 0, "closes": 0, "pid": 77}
 
             def close(pid: int) -> bool:
                 self.assertEqual(pid, 77)
@@ -811,6 +811,7 @@ class G102ConnectionTests(unittest.TestCase):
                 state["starts"] += 1
                 state["running"] = True
                 state["map"] = "Town01"
+                state["pid"] = 88
                 return LaunchResult(ok=True, pid=88, launch_mode="default_engine", started_at=1.0)
 
             resolver = ConnectionResolver(
@@ -819,12 +820,18 @@ class G102ConnectionTests(unittest.TestCase):
                 tcp_probe=lambda h, p, t: (bool(state["running"]), None),
                 client_factory=lambda h, p: Client(world=World(f"Carla/Maps/{state['map']}")),
                 start_process=start,
-                windows_processes=lambda: (process,) if state["running"] else (),
+                windows_processes=lambda: (
+                    WindowsCarlaProcess(
+                        state["pid"], r"E:\CARLA_0.9.16\CarlaUE4.exe", r"E:\CARLA_0.9.16\CarlaUE4.exe"
+                    ),
+                ) if state["running"] else (),
                 request_process_close=close,
                 sleeper=lambda _: None,
             )
             with patch("runtime.carla_connection.windows_path_exists", return_value=True), patch(
                 "runtime.carla_engine_config.resolve_default_engine_ini", return_value=ini
+            ), patch("runtime.carla_connection.query_windows_carla_command_line", return_value=r"E:\CARLA_0.9.16\CarlaUE4.exe"), patch(
+                "runtime.carla_connection.query_windows_pid_alive", return_value=True
             ):
                 report = resolver.restart(
                     host="host",

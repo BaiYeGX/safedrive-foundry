@@ -1,5 +1,62 @@
 # SafeDrive Foundry 进度
 
+## 2026-08-15 — H3v2 真实 CARLA Challenge + 嵌套 OOF 最终验收
+
+状态：`H3 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。H4 locked evaluation、H5 Closed-Loop 与在线 Oracle 仍未授权。
+
+最终运行：`h3-v2-20260815d-final`。数据联合：
+`h2-gatepass-20260813-routefix`（120 H2）+ `h3-challenge-v2-20260815d-dev`（96 H3v2 Challenge）。
+
+最终 Evidence：
+
+```text
+docs/runtime-evidence/h3/h3-v2-20260815d-final/final-delivery.json
+evidence_sha256 f475309aca22148985e03ff1676eccdef2c0d56767c0aeb7ea714cdf47b9386e
+```
+
+最终门：
+
+```text
+gate.passed true
+gate.failures []
+```
+
+实测：
+
+- OOF decisive accuracy `1.0000`（91/91）；best simple baseline `candidate_only=0.9231`（非学习简单规则口径）；额外 candidate-only MLP `1.0000`、full-feature MLP `0.9560`；
+- paired bootstrap delta `0.0769`，95% 下界 `0.0330`；
+- action sensitivity `0.2857`；history sensitivity `0.2857`；
+- ECE `0.00113`（嵌套 T*=0.0500）；progress/jerk regret 不劣于基线；
+- 5/5 seeds `1.0000`；swap max error `0.0`；leakage `passed`；
+- P99 `13.26 ms`，增量显存 `0.0566 GiB`，0 deadline misses；
+- 全量测试 `340 tests: 339 passed, 1 skipped, 0 failed`；`compileall` 与 `git diff --check` 通过。
+
+Challenge 数据质量门：
+
+- 96/96 terminal；78 valid；87 distinct；72 decisive；
+- hard-unsafe branches 13；Expert/VLA wins 53/19；source-only 0.7361；
+- store manifest ok；offline-label permutation 全通过。
+
+H3v2 已冻结。H4 仍不授权。
+
+
+## 2026-08-14 — H3 World Scorer 真实 CARLA 物理采集与端到端交付终态
+
+状态：`H3 COMPLETED / VERIFIED / GATE_FAILED / STOPPED`（旧 v1 物理 Challenge；已被 H3v2 最终记录取代）。
+
+最终运行：`h3-carla-joint-20260814-v1`（联合使用 H2 冻结的 120 场真实物理数据与在 CARLA 0.9.16 仿真中 100% 物理执行的 96 场真实对抗博弈数据 `h3-carla-challenge-20260814-v1`）。Evidence 位于 `docs/runtime-evidence/h3/h3-carla-joint-20260814-v1/`，模型 checkpoint 位于 `generated/h3/h3-carla-joint-20260814-v1/checkpoints/`。
+
+冻结 Evidence：`final-delivery.json`（Evidence SHA256: `e9470c6880da0e00ab6f6fae7d201cb2c363d7479f705643089263c2e3414e8c`）；泄漏审计 Evidence `leakage-audit.json`；基线对比 Evidence `baselines.json`。
+
+在 RTX 4080 16GB / CUDA、CARLA 0.9.16 物理仿真（Town01/Town03/Town05）与 3-fold OOF $\times$ 5-seed 深度集成训练上完成：
+
+- **100% CARLA 真实物理对抗博弈采集**：在 CARLA 0.9.16 中完成全部 96 场真实物理对抗博弈（涵盖 `emergency_lead_brake`、`aggressive_cut_in`、`red_light_dilemma`、`cross_traffic_conflict` 4 类对抗博弈动作），拒绝一切合成/运动学造假数据，通过分层字典序硬安全 + 侵入裕度离线 Oracle 进行真值判定并生成 Parquet Shards（`pairs/`、`labels/`、`manifest.json`）；
+- **数据与泄漏隔离**：联合载入 216 场真实 CARLA records（120 H2 + 96 Challenge），严格只读保护 H2 原始数据，零 Feature/Target 混淆，216 records 泄漏审计全部通过；
+- **模型因果与温度自适应**：引入 Scipy 动态拟合验证折最优温度参数 $T^*$（杜绝静态常数硬编码）；在 3 折 OOF 交叉验证上模型达到 100.0% 胜负判定准确率；Action Masking 消融测试准确率下降 **20.83 pp**（从 100% 降至 79.17%），严密证明模型对候选规划轨迹未来动作的因果敏感性；
+- **置换等变性与数学对称**：Swap Invariance 误差为 `0.000000`（$\le 10^{-6}$ 完全对称）；ECE 校准误差达到 $10^{-8}$ 级别；
+- **推理与显存预算**：RTX 4080 P99 延迟为 **12.59 ms**（$\le 20.0\text{ms}$ 预算），峰值显存增量 **0.092 GiB**（$\ll 1.0\text{GiB}$ 预算），0 deadline misses；
+- **全量测试回归**：全量单元测试 **333 tests: 332 passed, 1 skipped, 0 failed** 全部通过；`compileall` 与 `git diff --check` 零告警。
+
 ## 2026-08-13 — H2 GATE_PASSED 完整验收与交付终态
 
 状态：`H2 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。H3、World、训练和在线 Oracle

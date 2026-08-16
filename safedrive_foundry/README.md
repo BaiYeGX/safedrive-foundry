@@ -8,8 +8,8 @@ Observable → Classic Expert + nominal VLA → per-candidate Guard
 ```
 
 当前已保留 CARLA/ROS 连接、确定性 runtime、Classic/Safety、nominal SimLingo policy、
-轨迹 canonicalizer、PathManager 与 constrained MPC/PID。H1 的双来源 candidate set 与
-逐候选 Guard 尚未实现；World Model 尚未实现。
+轨迹 canonicalizer、PathManager、constrained MPC/PID、H1 双来源 candidate set、
+逐候选 Guard，以及 H3v2 WorldScorer 的离线训练与 rank/defer runtime。
 
 权威入口：
 

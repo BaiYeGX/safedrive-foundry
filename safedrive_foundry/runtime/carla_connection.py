@@ -436,10 +436,15 @@ def find_recent_crash_context(
     if crash_root is not None:
         roots.append(crash_root)
     else:
-        # WSL view of Windows user profiles.
         users = Path("/mnt/c/Users")
         if users.is_dir():
-            roots.append(users)
+            try:
+                for user_dir in users.iterdir():
+                    crash_dir = user_dir / "AppData" / "Local" / "CarlaUE4" / "Saved" / "Crashes"
+                    if crash_dir.is_dir():
+                        roots.append(crash_dir)
+            except OSError:
+                pass
         local = os.environ.get("LOCALAPPDATA")
         if local:
             roots.append(Path(local) / "CarlaUE4" / "Saved" / "Crashes")
@@ -447,26 +452,16 @@ def find_recent_crash_context(
     candidates: list[Path] = []
     for root in roots:
         try:
-            if root.name == "Crashes" or (root / "CrashContext.runtime-xml").is_file():
-                pattern_roots = [root]
-            else:
-                pattern_roots = [root]
-            for base in pattern_roots:
-                if not base.exists():
-                    continue
-                if base.is_file() and base.name == "CrashContext.runtime-xml":
-                    candidates.append(base)
-                    continue
-                # Profile tree: */AppData/Local/CarlaUE4/Saved/Crashes/*/CrashContext.runtime-xml
-                for path in base.glob(
-                    "**/CarlaUE4/Saved/Crashes/*/CrashContext.runtime-xml"
-                ):
-                    candidates.append(path)
-                for path in base.glob("*/CrashContext.runtime-xml"):
-                    candidates.append(path)
-                direct = base / "CrashContext.runtime-xml"
-                if direct.is_file():
-                    candidates.append(direct)
+            if not root.exists():
+                continue
+            if root.is_file() and root.name == "CrashContext.runtime-xml":
+                candidates.append(root)
+                continue
+            # Direct CrashContext or immediate subdirectory in Crashes/
+            for path in root.glob("*/CrashContext.runtime-xml"):
+                candidates.append(path)
+            for path in root.glob("**/CrashContext.runtime-xml"):
+                candidates.append(path)
         except OSError:
             continue
 

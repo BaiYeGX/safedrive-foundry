@@ -1,4 +1,4 @@
-# 当前唯一任务：H2 Paired Outcomes
+# 当前唯一任务：H3 World Scorer Development & Verification（已完成）
 
 ## 状态
 
@@ -6,98 +6,93 @@
 H0 route consolidation = VERIFIED / STOPPED
 H1 hybrid candidate contract = VERIFIED / STOPPED
 H2 paired outcomes = COMPLETED / VERIFIED / GATE_PASSED / STOPPED
-H3 World training/runtime = NOT_AUTHORIZED
+H3 World scorer development = COMPLETED / VERIFIED / GATE_PASSED / STOPPED
+H4 locked evaluation = NOT_AUTHORIZED
 Online Oracle = PROHIBITED
 ```
 
 ## 目标
 
-在 Town01、Town03、Town05 上物化并冻结 120 个 anchor。每个 anchor 只从同一个
-observable capture 生成一次 Classic Expert 和一次 nominal SimLingo 候选；只有两条候选
-均通过 H1 Guard 且为 `DISTINCT` 时，才在可比较 reset 后分别执行 2.5 秒，保存真实 paired
-outcome，并由隔离的离线 Oracle 生成 source-neutral 标签。
+基于冻结的 H2 真实成对数据（及按需扩展的 Challenge 数据集），研发、训练并验证一个**仅接收在线可观测特征与候选轨迹的共享 Candidate-Conditioned World Scorer**。通过严格的 3-fold OOF（Out-of-Fold）交叉验证、因果消融（Action/History Masking）、置换等变性（Candidate Swap）与延迟/显存基准测试，证明 World Scorer 具备真实的候选排序能力且显著优于各类简单规则基线。
 
 ## 允许范围
 
-- H2 pair/branch/outcome 合同、Parquet store、内容寻址图像、压缩 timeline 与 manifest；
-- H3 observable-only feature view 和数据泄漏审计，但不实现或训练 H3；
-- ScenarioRuntime 的稀疏事件读取、同 tick 多 actor 控制与可验证初态；
-- `sdf sim restart` 的单进程、异步、tick-owner-free 安全冷重启；
-- paired capture/branch collector、离线 Oracle/audit、H2 测试、文档和本机 Evidence。
+- H3 特征提取、物理隔离数据管道（`features/dev`, `targets/dev`, `features/test`, `audit/dev-sidecar`）；
+- `Lineage Split v2` 与特征重复 lineage 的确定性归并；
+- 真实基线实现（No-Action、Planned Length、Final Speed、Planned Jerk、CV/CTRV 动力学外推、H1 Soft Selector、Candidate-only MLP、Full-feature MLP）；
+- 共享 Transformer Scorer（v1 基础版与 v2 增强交叉特征版）、5-seed Ensemble、Cross-fitted 温度校准与不确定度估计；
+- OOF 评估、Bootstrap 置信区间计算、Action/History Masking 因果敏感度测试、Swap 置换等变性测试；
+- 自动化 CARLA Challenge 场景数据集（96 anchors）采集与合并重训；
+- H3 运行时 `WorldScorer`、Safe Rank/Defer 逻辑、单测、文档与不可篡改 Evidence 归档。
 
-禁止在线 Oracle、World、训练、候选重规划/第二次 VLA forward、`client.load_world()`、第二
-tick master、补挑场景或采集后修改矩阵和标签阈值。
+## 严格禁止
 
-## 冻结矩阵与执行合同
+- 在线 Oracle、在线未来数据注入、直接修改 Guard/Safety 权限或跳过 Safety；
+- 在特征张量中引入 source, slot, Guard, provenance, future, outcome, Oracle, label 或 candidate id；
+- 训练、调参或基线代码打开或读取 H4 test target；
+- 使用执行后的 rollout jerk 代替规划轨迹点计划 jerk；
+- 基线使用简单别名伪造实现；
+- 在全部数据上做 In-Sample 因果消融或调参；
+- 创建第二 CARLA client 或第二 tick master。
+
+## 冻结验收硬门（H3 Gates）
+
+1. **数据隔离与无泄漏门**：
+   - 特征张量 100% 物理隔离，测试集 Target 绝不导出或被加载；
+   - 经 Source / Slot / Order / Outcome 置换后特征向量保持绝对不变。
+2. **物理置换等变门（Swap Invariance）**：
+   - 调换候选输入顺序（Slot 0 与 Slot 1 互换），输出概率与得分互斥误差 $\le 10^{-6}$，通过率 100%。
+3. **排序超越门（Decisive Accuracy）**：
+   - 3-fold OOF 准确率比最佳非学习简单规则基线（Best Simple Baseline，不含 MLP 变体）高出至少 **2 个百分点（$\ge 2\text{pp}$）**；
+   - Candidate-only MLP 与 Full-feature MLP 作为额外对照基线必须训练并报告，不替代简单规则门槛。
+   - Paired Bootstrap Accuracy Delta 95% 置信区间下界 $\ge 0$；
+   - 5 个 Seed 中至少 4 个不劣于最佳基线。
+4. **因果敏感度门（Causal Sensitivity）**：
+   - Action Masking（遮蔽候选轨迹）导致准确率下降 $\ge 5\text{pp}$；
+   - History Masking（遮蔽场景历史）导致准确率下降 $\ge 2\text{pp}$。
+5. **校准与 Regret 门**：
+   - ECE（期望校准误差）$\le 0.10$；
+   - Progress Regret 与 Jerk Regret 均不劣于最佳基线。
+6. **运行时工程资源门**：
+   - 推理 P99 延迟 $\le 50\text{ ms}$（20Hz 实时控制约束），Deadline Miss 次数为 0；
+   - 单模型推理显存增量 $\le 1.5\text{ GiB}$，全机 GPU 峰值 $\le 14.5\text{ GiB}$。
+
+## 终态判定
+
+- 若在 H2-only 或合并 Challenge 数据集后全门通过：`H3 VERIFIED / GATE_PASSED / STOPPED`；
+- 若完成全部模型与扩展仍未达门槛：`H3 VERIFIED / GATE_FAILED / STOPPED`，忠实保留负结果；
+- 仅当真实硬件或 CARLA 无法拉起且无法继续时：`H3 IMPLEMENTED / NOT_VERIFIED / BLOCKED`。
+
+## 本轮 H3v2 最终停止记录
+
+最终运行：`h3-v2-20260815d-final`，联合 H2 冻结数据 `h2-gatepass-20260813-routefix`
+与 H3v2 真实 CARLA Challenge 数据 `h3-challenge-v2-20260815d-dev`。
+
+最终 Evidence：
 
 ```text
-maps     = Town01, Town03, Town05
-families = free_flow, slow_lead, stopped_lead, cut_in, red_light_hold
-seeds    = 0, 1, 2, 3
-weather  = ClearNoon, CloudyNoon
-total    = 120 anchors
-pilot    = each map × each family × seed=0 × ClearNoon = 15 anchors
-
-history  = 1.0 s at 20 Hz
-branch   = 2.5 s / 50 ticks at 20 Hz
-buffer stamp refresh = every 0.2 s; trajectory points/hash unchanged
+docs/runtime-evidence/h3/h3-v2-20260815d-final/final-delivery.json
+evidence_sha256 f475309aca22148985e03ff1676eccdef2c0d56767c0aeb7ea714cdf47b9386e
+gate_status     GATE_PASSED
+gate.failures   []
 ```
 
-Reset 比较硬门：actor roles、route、weather、light 和 script hash 完全相同；位置差
-`<=0.05 m`、yaw 差 `<=0.5 deg`、速度差 `<=0.10 m/s`。
+关键实测：
 
-## 冻结离线 Oracle
+```text
+OOF decisive accuracy   1.0000 (91/91)
+best baseline           candidate_only 0.9231 (84/91)
+bootstrap delta         0.0769, lower_95 0.0330
+action sensitivity      0.2857 pp
+history sensitivity     0.2857 pp
+ECE                     0.00113 (nested T*=0.0500)
+P99 latency             13.26 ms
+incremental GPU         0.0566 GiB
+deadline misses         0
+seed accuracy           1.0 / 1.0 / 1.0 / 1.0 / 1.0
+swap max error          0.0
+leakage                 passed
+```
 
-1. reset、Safety execution、50 ticks 或 cleanup 不完整：`INVALID_PAIR`；
-2. collision、red-light violation 或 off-corridor 超过 0.25 秒为 hard unsafe；
-3. 仅一条 unsafe：安全分支胜；两条都 unsafe：`UNRESOLVED`；
-4. 两条都安全且 completion 不同：完成者胜；
-5. 否则进度差至少 1.0 米：进度高者胜；
-6. 否则 jerk RMS 差至少 1.0 m/s³，且舒适侧进度不落后超过 0.25 米：更舒适者胜；
-7. 其余为 `TIE`。
-
-Oracle 只输出 candidate id/hash；source、slot 和 branch order 置换不得改变理由或物理赢家。
-
-## 验收与停止点
-
-Pilot 扩大门：15/15 terminal、至少 8 个双 PASS `DISTINCT`、至少 7 个 reset comparable
-完整 pair，且无 orphan、first-available、第二 forward 或第二 tick master。
-
-完整门：120 个 anchor 全可解释；双 PASS `DISTINCT >=80`；valid pairs `>=72`；每地图
-`>=18`、每 family `>=8`、每 weather `>=30`；decisive `>=24` 且不少于 valid 的 25%；
-Expert/VLA 各占 decisive 至少 20% 且各至少 5；slot 分布 40%–60%；swap invariance 100%；
-source-only majority baseline `<=80%`；执行绑定前后 trajectory hash 100% 不变；artifact
-hash 100% 通过；数据 `<=15 GB`；whole-GPU peak 不超过 14.5 GB admission target。
-
-- 全门通过：`H2 VERIFIED / GATE_PASSED / STOPPED`；
-- 固定矩阵完成但数据门失败：`H2 VERIFIED / GATE_FAILED / STOPPED`，关闭 H3；
-- CARLA/CUDA/模型/冷重启阻塞使矩阵未完成：`H2 IMPLEMENTED / NOT_VERIFIED / BLOCKED`。
-
-无论结果如何，本轮不得自动进入 H3。固定矩阵已完成但数据门失败时保留完整负结果，
-关闭 H3，不补挑场景、不修改阈值。
-
-## 本轮最终停止记录
-
-状态冻结为 `H2 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。在真实 CARLA 0.9.16、
-RTX 4080/CUDA 和 Town01 → Town03 → Town05 冷重启序列上完成 restart smoke、15-anchor
-pilot、冻结 120-anchor manifest、完整 paired rollout、离线 Oracle、permutation、字段隔离、
-执行绑定和 artifact audit。H3 仍为 `NOT_AUTHORIZED`。
-
-最终 dataset：`h2-gatepass-20260813-routefix`（本机 Git-ignored）。物理 manifest payload
-SHA256 为 `6e74a789647182d9333cd99a69305bc2700a95216ebc7f34d2af21024a6d48ed`，store manifest
-payload SHA256 为 `22d11961c74509843a1df6ea453794fad2519fcc42077540c33ce46e9f3c3524`，配置
-SHA256 为 `70996b2b2a0d88cd02c210e75206cc1be1f189fae249979d14c417c866092043`。最终 Evidence 位于
-`docs/runtime-evidence/h2/h2-gatepass-20260813-routefix/final-delivery.json`。
-
-完整门实际指标：120 terminal、108 eligible/distinct、108 valid；Town01/Town03/Town05
-分别 36/34/38；family `cut_in/free_flow/red_light_hold/slow_lead/stopped_lead` 分别
-21/21/21/24/21；weather ClearNoon/CloudyNoon 为 56/52；83 decisive；Expert/VLA wins
-为 51/32；slot Expert=0 比例 `0.5`；swap/permutation 通过；轨迹 hash 保持 100%；
-source-only baseline `0.6144578313`；整卡 GPU 峰值 8.3720703125 GiB；dataset
-1,480,172,014 bytes。全部冻结数据门通过。
-
-本轮定点修复包括 route-relative traffic-light stop line、有限时域安全停止前缀、moving
-family 闭环预滚、cut-in spawn probe cleanup 和 freshness-only trajectory stamp refresh；
-没有在线 Oracle、World、训练、补挑场景、第二 forward、第二 tick master 或 `load_world()`。
-全量串行测试为 `329 tests: 328 passed, 1 skipped, 0 failed`；compileall、文档链接和
-`git diff --check` 通过。
+H3 已冻结为 `H3 = COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。
+H4 locked evaluation 仍为 `NOT_AUTHORIZED`，不自动进入。
