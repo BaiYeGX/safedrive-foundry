@@ -124,7 +124,7 @@ def main() -> int:
         )
         spec = ScenarioSpec(
             scenario_id=identity.scenario_id,
-            map_name=str(world.get_map().name),
+            map_name=_map_basename(str(world.get_map().name)),
             actors=(ActorSpec("ego", "vehicle.tesla.model3", spawn, "ego", 0, False),),
             sensors=(SensorSpec(
                 "front_camera", "sensor.camera.rgb", camera, "ego", 0,
@@ -189,7 +189,7 @@ def main() -> int:
             "ok": True,
             "run_id": run_id,
             "routing": result.routing.to_dict(),
-            "safety": result.safety.decision.to_dict(),
+            "safety": result.to_dict().get("safety"),
             "applied_control": applied.to_dict(),
             "execution_frame": int(execution_header.carla_frame),
             "vla_forward_count": policy.forward_count,
