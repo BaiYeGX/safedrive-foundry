@@ -44,7 +44,7 @@ def main() -> int:
         from data_pipeline.h4.runtime import NormalizedWorldScorer
         params = inspect.signature(NormalizedWorldScorer.__init__).parameters
         risk_param = params.get("risk_defer_probability")
-        checks["risk_gate_default"] = risk_param is not None and float(risk_param.default) == 0.5
+        checks["risk_gate_default"] = risk_param is not None and float(risk_param.default) == 0.35
     except Exception:
         checks["risk_gate_default"] = False
 

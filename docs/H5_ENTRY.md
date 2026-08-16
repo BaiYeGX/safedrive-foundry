@@ -19,9 +19,11 @@ python scripts/h5_run.py --preflight
 ## 2. H5 必须使用的新组件
 
 - `H5WorldRouter`：
-  - risk-gated defer；
+  - risk-gated defer（阈值 `0.35`，从 dev hard-unsafe 分支校准）；
   - minimum hold ticks；
   - hysteresis margin；
+  - emergency_switch_margin（强优势可提前打破 hold）；
+  - zero-context defer（防止 scene gate 静默输出）；
   - fallback 到 FrozenH1Router。
 - 路径：
   - `safedrive_foundry/data_pipeline/h5/runtime.py`

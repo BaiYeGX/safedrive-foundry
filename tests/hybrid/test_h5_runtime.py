@@ -92,7 +92,7 @@ class H5HysteresisTest(unittest.TestCase):
         self.assertEqual(r1.reason, "h5_world_ranked")
         # Even though scorer still says b, no switch issue; to test hold, we
         # change scorer to propose a after first call.
-        router.scorer = _Scorer("a", 2.0, -2.0)
+        router.scorer = _Scorer("a", 0.2, -0.2)
         r2 = router.route(cs, features)
         self.assertEqual(r2.selected_candidate_id, "b")
         self.assertEqual(r2.reason, "h5_world_hold_hysteresis")
@@ -101,6 +101,21 @@ class H5HysteresisTest(unittest.TestCase):
         r3 = router.route(cs, features)
         self.assertEqual(r3.selected_candidate_id, "a")
         self.assertEqual(r3.reason, "h5_world_ranked")
+
+    def test_emergency_margin_breaks_hold(self):
+        router = H5WorldRouter(
+            _Scorer("b"), _Fallback(),
+            min_hold_ticks=10, hysteresis_margin=0.05, emergency_switch_margin=1.5,
+        )
+        cs = _CandidateSet(["a", "b"])
+        features = self._features()
+        r1 = router.route(cs, features)
+        self.assertEqual(r1.selected_candidate_id, "b")
+        # Huge new-candidate advantage must switch before the hold expires.
+        router.scorer = _Scorer("a", 3.0, -3.0)
+        r2 = router.route(cs, features)
+        self.assertEqual(r2.selected_candidate_id, "a")
+        self.assertEqual(r2.reason, "h5_world_ranked")
 
     def test_defer_resets_and_falls_back(self):
         scorer = _Scorer(selected=None, disposition="defer_low_confidence", reason="risk")

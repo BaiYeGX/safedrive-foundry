@@ -31,7 +31,7 @@ from .evaluate import sigmoid
 class WorldScorer:
     """Shared candidate-conditioned scorer with a frozen calibration temperature."""
 
-    def __init__(self, models: Sequence[WorldScorerModel], *, device: str = "cpu", model_hash: str = "", temperature: float | None = None, risk_defer_probability: float = 0.5) -> None:
+    def __init__(self, models: Sequence[WorldScorerModel], *, device: str = "cpu", model_hash: str = "", temperature: float | None = None, risk_defer_probability: float = 0.35) -> None:
         if not models:
             raise ValueError("world_scorer_requires_model")
         self.models = tuple(models)
@@ -79,6 +79,21 @@ class WorldScorer:
         started = time.perf_counter()
         self._validate(first[1], first[2])
         self._validate(second[1], second[2])
+
+        if sum(abs(float(value)) for value in first[1]) <= 1e-9 or sum(abs(float(value)) for value in second[1]) <= 1e-9:
+            zero_prediction = WorldPrediction("zero_context", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+            return WorldScoreResult(
+                disposition="defer_low_confidence",
+                selected_candidate_key=None,
+                predictions=(zero_prediction, zero_prediction),
+                probability_first_wins=0.5,
+                uncertainty=0.0,
+                defer_reason="context_masked_or_empty",
+                latency_ms=(time.perf_counter() - started) * 1000.0,
+                model_hash=self.model_hash,
+                feature_schema=H3_SCHEMA_VERSION,
+                temperature=self.temperature,
+            )
 
         context_tensor = torch.tensor([list(first[1]), list(second[1])], dtype=torch.float32, device=self.device)
         candidate_tensor = torch.tensor([list(first[2]), list(second[2])], dtype=torch.float32, device=self.device)

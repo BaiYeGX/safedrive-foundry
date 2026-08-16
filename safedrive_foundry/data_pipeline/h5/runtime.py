@@ -37,6 +37,7 @@ class H5WorldRouter:
         *,
         min_hold_ticks: int = 10,
         hysteresis_margin: float = 0.05,
+        emergency_switch_margin: float = 1.5,
     ) -> None:
         if min_hold_ticks < 1:
             raise ValueError("min_hold_ticks_must_be_positive")
@@ -44,6 +45,9 @@ class H5WorldRouter:
         self.fallback = fallback or FrozenH1Router()
         self.min_hold_ticks = int(min_hold_ticks)
         self.hysteresis_margin = float(hysteresis_margin)
+        self.emergency_switch_margin = float(emergency_switch_margin)
+        if self.emergency_switch_margin < self.hysteresis_margin:
+            raise ValueError("emergency_switch_margin_must_be_ge_hysteresis_margin")
         self._last_selected_id: str | None = None
         self._hold_count = 0
 
@@ -111,14 +115,22 @@ class H5WorldRouter:
 
         margin = abs(score.predictions[0].utility - score.predictions[1].utility)
         # Hysteresis: keep the current World selection unless the candidate is
-        # no longer passed, the hold period has elapsed, and the margin is large
-        # enough to justify switching.
-        if (
+        # no longer passed, the margin is below the switch floor, or the hold
+        # period has not elapsed.  A very large margin is treated as an
+        # emergency switch and may break the hold early.
+        keep_current = (
             self._last_selected_id is not None
             and self._last_selected_id in passed_ids
             and self._last_selected_id != proposed
-            and (self._hold_count < self.min_hold_ticks or margin < self.hysteresis_margin)
-        ):
+            and (
+                margin < self.hysteresis_margin
+                or (
+                    self._hold_count < self.min_hold_ticks
+                    and margin < self.emergency_switch_margin
+                )
+            )
+        )
+        if keep_current:
             selected = self._last_selected_id
             self._hold_count += 1
             reason = "h5_world_hold_hysteresis"

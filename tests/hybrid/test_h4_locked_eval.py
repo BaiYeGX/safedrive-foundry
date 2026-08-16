@@ -153,7 +153,7 @@ class FakeRiskModel:
 
 class H4RuntimeRiskGateTest(unittest.TestCase):
     def _payloads(self):
-        context = tuple([0.0] * 499)
+        context = tuple([0.5] * 499)
         candidate = tuple(tuple([0.0] * 8 for _ in range(10)))
         return ("a", context, candidate), ("b", context, candidate)
 
@@ -165,9 +165,21 @@ class H4RuntimeRiskGateTest(unittest.TestCase):
         self.assertEqual(result.disposition, "defer_low_confidence")
         self.assertEqual(result.defer_reason, "predicted_hard_risk_over_threshold")
 
+    def test_zero_context_defers(self):
+        from data_pipeline.h4.runtime import NormalizedWorldScorer
+        scorer = NormalizedWorldScorer(
+            [FakeRiskModel(risk_logit=-5.0, utility_first=2.0, utility_second=-2.0)],
+            [(0.0, 1.0)], device="cpu",
+        )
+        context = tuple([0.0] * 499)
+        candidate = tuple(tuple([0.0] * 8 for _ in range(10)))
+        result = scorer.score_pair(("a", context, candidate), ("b", context, candidate))
+        self.assertEqual(result.disposition, "defer_low_confidence")
+        self.assertEqual(result.defer_reason, "context_masked_or_empty")
+
     def test_low_predicted_risk_ranks(self):
         from data_pipeline.h4.runtime import NormalizedWorldScorer
-        scorer = NormalizedWorldScorer([FakeRiskModel(risk_logit=0.0, utility_first=2.0, utility_second=-2.0)], [(0.0, 1.0)], device="cpu")
+        scorer = NormalizedWorldScorer([FakeRiskModel(risk_logit=-5.0, utility_first=2.0, utility_second=-2.0)], [(0.0, 1.0)], device="cpu")
         first, second = self._payloads()
         result = scorer.score_pair(first, second)
         self.assertEqual(result.disposition, "ranked")
