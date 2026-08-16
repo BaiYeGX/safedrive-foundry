@@ -50,16 +50,34 @@ class H5WorldRouter:
             raise ValueError("emergency_switch_margin_must_be_ge_hysteresis_margin")
         self._last_selected_id: str | None = None
         self._hold_count = 0
+        self._history: list[dict] = []
+        self._switch_count = 0
+        self._defer_count = 0
 
     def reset(self) -> None:
         self._last_selected_id = None
         self._hold_count = 0
+        self._history.clear()
+        self._switch_count = 0
+        self._defer_count = 0
+
+    def metrics(self) -> dict:
+        return {
+            "decisions": len(self._history),
+            "switch_count": self._switch_count,
+            "defer_count": self._defer_count,
+            "current_hold_ticks": self._hold_count,
+            "history": list(self._history),
+        }
 
     def _defer(self, candidate_set: HybridCandidateSet, reason: str) -> RoutingResult:
         baseline = self.fallback.route(candidate_set)
         # A defer means the non-learning selector is authoritative.  Reset the
         # World hold state so a later World decision starts clean.
-        self.reset()
+        self._defer_count += 1
+        self._history.append({"type": "defer", "reason": reason})
+        self._last_selected_id = None
+        self._hold_count = 0
         return replace(
             baseline,
             world=WorldDisposition.DEFERRED_LOW_CONFIDENCE,
@@ -114,6 +132,7 @@ class H5WorldRouter:
             return self._defer(candidate_set, "selected_candidate_not_in_passed")
 
         margin = abs(score.predictions[0].utility - score.predictions[1].utility)
+        previous_selected = self._last_selected_id
         # Hysteresis: keep the current World selection unless the candidate is
         # no longer passed, the margin is below the switch floor, or the hold
         # period has not elapsed.  A very large margin is treated as an
@@ -139,6 +158,17 @@ class H5WorldRouter:
             self._last_selected_id = selected
             self._hold_count = 1
             reason = "h5_world_ranked"
+
+        if selected != previous_selected and previous_selected is not None and self._history and self._history[-1].get("type") == "ranked":
+            self._switch_count += 1
+        self._history.append({
+            "type": "ranked",
+            "reason": reason,
+            "selected": selected,
+            "proposed": proposed,
+            "margin": float(margin),
+            "hold_count": self._hold_count,
+        })
 
         return RoutingResult(
             pass_candidate_ids=baseline.pass_candidate_ids,

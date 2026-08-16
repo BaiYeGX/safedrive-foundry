@@ -117,6 +117,18 @@ class H5HysteresisTest(unittest.TestCase):
         self.assertEqual(r2.selected_candidate_id, "a")
         self.assertEqual(r2.reason, "h5_world_ranked")
 
+    def test_metrics_tracks_switch_and_defer(self):
+        router = H5WorldRouter(_Scorer("b"), _Fallback(), min_hold_ticks=3, hysteresis_margin=0.0)
+        cs = _CandidateSet(["a", "b"]); features = self._features()
+        router.route(cs, features)
+        router.scorer = _Scorer("a", 3.0, -3.0)
+        router.route(cs, features)
+        router.scorer = _Scorer(selected=None, disposition="defer_low_confidence", reason="risk")
+        router.route(cs, features)
+        m = router.metrics()
+        self.assertEqual(m["switch_count"], 1)
+        self.assertEqual(m["defer_count"], 1)
+
     def test_defer_resets_and_falls_back(self):
         scorer = _Scorer(selected=None, disposition="defer_low_confidence", reason="risk")
         router = H5WorldRouter(scorer, _Fallback(), min_hold_ticks=3)
