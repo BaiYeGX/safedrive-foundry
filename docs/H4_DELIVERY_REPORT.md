@@ -214,6 +214,9 @@ git diff --check
 5. `WorldScorerModel` 现在支持 `scene_gate_mode="learned"`；`h3_train_eval_v2.py`
    增加 `--scene-gate-mode learned`。旧 checkpoint 仍以 `hard` 模式加载，新 H3.1
    重训时可选择 learned gate，彻底移除硬编码应试开关。
+6. `scripts/h3_learned_smoke.py` 验证 learned-gate + risk-aware ranking + natural
+   actor ablation 的端到端训练路径。smoke evidence：
+   `docs/runtime-evidence/h3/h3-learned-smoke.json`。
 
 仍需在 H5 前完成、且需要重新采集或重新训练才能解决的事项：
 
