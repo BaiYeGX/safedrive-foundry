@@ -10,7 +10,7 @@ Evidence：
 
 ```text
 docs/runtime-evidence/h4/h4-locked-20260816-final/final-delivery.json
-evidence_sha256 325deb52ccb7fc7824b9a246b60bffd72f3ed68dfbad50e88cac8fea9aa0166d
+evidence_sha256 35e28958ddd98d9df7a980ffd707bf6049efb9685e22d335082f69916974e6e4
 gate_status     GATE_PASSED
 gate.failures   []
 ```
