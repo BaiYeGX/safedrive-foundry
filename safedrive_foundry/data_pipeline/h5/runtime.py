@@ -28,6 +28,7 @@ class H5WorldRouter:
     """Stateful World router with hysteresis for closed-loop use."""
 
     selector_name = "h5_world_v1"
+    requires_features = True
 
     def __init__(
         self,
@@ -138,6 +139,23 @@ class H5WorldRouter:
             difference=baseline.difference,
             scores={item.candidate_key: item.utility for item in score.predictions},
         )
+
+
+    @staticmethod
+    def safety_input(
+        candidate_set: HybridCandidateSet, routing: RoutingResult
+    ):
+        from driving_vla.hybrid.contracts import PolicyCandidateSet  # type: ignore
+        if routing.selected_candidate_id is None:
+            return candidate_set.to_policy_candidate_set(())
+        selected = tuple(
+            item.candidate
+            for item in candidate_set.candidates
+            if item.candidate.candidate_id == routing.selected_candidate_id
+        )
+        if len(selected) != 1:
+            raise RuntimeError("selected_candidate_not_resolvable")
+        return candidate_set.to_policy_candidate_set(selected)
 
 
 __all__ = ["H5WorldRouter"]

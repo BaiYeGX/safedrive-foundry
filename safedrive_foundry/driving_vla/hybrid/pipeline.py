@@ -54,7 +54,18 @@ class H1CandidatePipeline:
 
     def decide(self, candidate_set: HybridCandidateSet) -> H1SafetyResult:
         guarded = self.guard.evaluate(candidate_set)
-        routing = self.router.route(guarded)
+        features = None
+        if getattr(self.router, "requires_features", False):
+            from data_pipeline.h3.live_features import build_live_features
+            features = build_live_features(
+                guarded.anchor,
+                [],
+                guarded.candidates,
+            )
+        if getattr(self.router, "requires_features", False):
+            routing = self.router.route(guarded, features=features)
+        else:
+            routing = self.router.route(guarded)
         safety_input = self.router.safety_input(guarded, routing)
         successful_sources = {
             attempt.source for attempt in guarded.attempts if attempt.success
