@@ -211,6 +211,10 @@ git diff --check
    `predicted_hard_risk_over_threshold`。risk head 不再只是训练侧辅助输出。
 4. 新增风险门禁单元测试：高风险候选触发 defer，低风险候选保持 rank。
 
+5. `WorldScorerModel` 现在支持 `scene_gate_mode="learned"`；`h3_train_eval_v2.py`
+   增加 `--scene-gate-mode learned`。旧 checkpoint 仍以 `hard` 模式加载，新 H3.1
+   重训时可选择 learned gate，彻底移除硬编码应试开关。
+
 仍需在 H5 前完成、且需要重新采集或重新训练才能解决的事项：
 
 - locked test 仅覆盖 3 地图、8 类场景、2 种天气的 seed 变体，缺乏真正 OOD 地图/场景；

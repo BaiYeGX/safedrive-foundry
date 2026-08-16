@@ -44,8 +44,11 @@ def seed_everything(seed: int) -> None:
 class WorldScorerModel(nn.Module):
     """Structured context + candidate scorer with cross-attention."""
 
-    def __init__(self, *, d_model: int = 128, layers: int = 2, heads: int = 4, ffn: int = 256, dropout: float = 0.1) -> None:
+    def __init__(self, *, d_model: int = 128, layers: int = 2, heads: int = 4, ffn: int = 256, dropout: float = 0.1, scene_gate_mode: str = "hard") -> None:
         super().__init__()
+        if scene_gate_mode not in {"hard", "learned"}:
+            raise ValueError(f"unknown_scene_gate_mode:{scene_gate_mode}")
+        self.scene_gate_mode = scene_gate_mode
         self.context_proj = nn.Sequential(nn.Linear(CONTEXT_DIM, d_model), nn.LayerNorm(d_model), nn.GELU())
         self.candidate_proj = nn.Sequential(nn.Linear(CANDIDATE_DIM, d_model), nn.LayerNorm(d_model), nn.GELU())
         encoder_layer = nn.TransformerEncoderLayer(
@@ -68,6 +71,10 @@ class WorldScorerModel(nn.Module):
         )
         self.register_buffer("position", torch.arange(CANDIDATE_STEPS, dtype=torch.float32), persistent=False)
         self.position_proj = nn.Linear(1, d_model)
+        if scene_gate_mode == "learned":
+            # Learned context gate for H3.1.  The legacy hard gate remains the
+            # default only for loading frozen H3 checkpoints.
+            self.scene_gate_proj = nn.Linear(d_model, 1)
 
     def forward(self, context: Tensor, candidate: Tensor, *, mask_context: bool = False, mask_candidate: bool = False) -> Tensor:
         if context.ndim != 2 or context.shape[-1] != CONTEXT_DIM:
@@ -84,12 +91,18 @@ class WorldScorerModel(nn.Module):
         position = self.position[: candidate_tokens.shape[1]].to(candidate_tokens).view(1, -1, 1)
         candidate_tokens = candidate_tokens + self.position_proj(position)
         candidate_tokens = self.candidate_encoder(candidate_tokens)
-        # A World scorer is scene-conditioned by contract.  With no observable
-        # context (history masking), candidate action must not drive a ranking;
-        # this deterministic gate makes that dependency explicit and auditable.
-        presence = context.abs().sum(dim=-1, keepdim=True)
-        scene_gate = (presence > 1e-6).to(candidate_tokens.dtype).unsqueeze(-1)
-        candidate_tokens = candidate_tokens * scene_gate
+        if self.scene_gate_mode == "hard":
+            # Frozen H3 contract: all-zero context explicitly disables the
+            # candidate path.  The H4/H5 runtime also checks this case before
+            # inference and defers instead of relying on the model alone.
+            presence = context.abs().sum(dim=-1, keepdim=True)
+            scene_gate = (presence > 1e-6).to(candidate_tokens.dtype).unsqueeze(-1)
+            candidate_tokens = candidate_tokens * scene_gate
+        else:
+            # H3.1 learned gate: context absence is a learned continuous gate,
+            # not a hard-coded zero multiplier.
+            gate = torch.sigmoid(self.scene_gate_proj(context_token[:, 0]))
+            candidate_tokens = candidate_tokens * gate.unsqueeze(-1)
         attended, _ = self.cross_attention(candidate_tokens, context_token, context_token, need_weights=False)
         candidate_tokens = self.pool_norm(candidate_tokens + attended)
         pooled = torch.cat([candidate_tokens[:, 0], candidate_tokens.mean(dim=1), context_token[:, 0]], dim=-1)
@@ -181,13 +194,14 @@ def train_model(
     max_epochs: int | None = None,
     patience: int | None = None,
     device: str | torch.device = "cpu",
+    scene_gate_mode: str = "hard",
 ) -> TrainResult:
     if not train_examples:
         raise ValueError("empty_training_examples")
     seed_everything(seed)
     torch_device = torch.device(device)
     model_cfg = H3_CONFIG["model"]
-    model = WorldScorerModel(**model_cfg).to(torch_device)
+    model = WorldScorerModel(**model_cfg, scene_gate_mode=scene_gate_mode).to(torch_device)
     optimizer_cfg = H3_CONFIG["optimizer"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(optimizer_cfg["lr"]), weight_decay=float(optimizer_cfg["weight_decay"]))
     epochs = int(max_epochs or optimizer_cfg["max_epochs"])
@@ -237,6 +251,7 @@ def train_model(
         "train_examples": len(train_examples),
         "val_examples": len(val_examples),
         "temperature": temperature,
+        "scene_gate_mode": scene_gate_mode,
     }
     torch.save({"state_dict": best_state, "metadata": metadata}, checkpoint_path)
     digest = hashlib.sha256(checkpoint_path.read_bytes()).hexdigest()
@@ -245,7 +260,8 @@ def train_model(
 
 def load_model(checkpoint_path: Path, *, device: str | torch.device = "cpu") -> tuple[WorldScorerModel, dict]:
     payload = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    model = WorldScorerModel(**H3_CONFIG["model"]).to(device)
+    scene_gate_mode = str(payload.get("metadata", {}).get("scene_gate_mode", "hard"))
+    model = WorldScorerModel(**H3_CONFIG["model"], scene_gate_mode=scene_gate_mode).to(device)
     model.load_state_dict(payload["state_dict"])
     model.eval()
     return model, dict(payload.get("metadata", {}))

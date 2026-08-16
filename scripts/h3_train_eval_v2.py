@@ -80,7 +80,7 @@ def _inner_split(examples, val_ratio: float = 0.20) -> tuple[list, list]:
     return train, val
 
 
-def _train_fold(train_examples, fold, checkpoint_root: Path, device: str, max_epochs: int, patience: int) -> tuple[list, list[dict[str, Any]]]:
+def _train_fold(train_examples, fold, checkpoint_root: Path, device: str, max_epochs: int, patience: int, scene_gate_mode: str = "hard") -> tuple[list, list[dict[str, Any]]]:
     inner_train, inner_val = _inner_split(train_examples)
     models, results = [], []
     for seed in H3_CONFIG["training_seeds"]:
@@ -97,7 +97,8 @@ def _train_fold(train_examples, fold, checkpoint_root: Path, device: str, max_ep
                             "device": str(device)})
             continue
         result = train_model(inner_train, inner_val, seed=int(seed), checkpoint_path=checkpoint,
-                             device=device, max_epochs=max_epochs, patience=patience)
+                             device=device, max_epochs=max_epochs, patience=patience,
+                             scene_gate_mode=scene_gate_mode)
         model, _ = load_model(checkpoint, device=device)
         models.append(model)
         results.append({"fold": fold, "seed": int(seed), "best_epoch": result.best_epoch,
@@ -270,7 +271,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     train_records: list[dict[str, Any]] = []
     for fold in ("dev_fold_1", "dev_fold_2", "dev_fold_3"):
         train_examples = [item for name, rows in fold_examples.items() if name != fold for item in rows]
-        fold_models[fold], fold_results = _train_fold(train_examples, fold, checkpoint_root, device, args.max_epochs, args.patience)
+        fold_models[fold], fold_results = _train_fold(train_examples, fold, checkpoint_root, device, args.max_epochs, args.patience, args.scene_gate_mode)
         train_records.extend(fold_results)
 
     # 2) Nested temperatures and OOF rows.
@@ -337,7 +338,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             model, metadata = load_model(checkpoint, device=device)
         else:
             result = train_model(final_inner_train, final_inner_val, seed=int(seed), checkpoint_path=checkpoint,
-                                 device=device, max_epochs=args.max_epochs, patience=args.patience)
+                                 device=device, max_epochs=args.max_epochs, patience=args.patience,
+                                 scene_gate_mode=args.scene_gate_mode)
             model, metadata = load_model(checkpoint, device=device)
         final_models.append(model)
         final_records.append({"seed": int(seed), "checkpoint": str(checkpoint),
@@ -403,6 +405,7 @@ def main() -> int:
     parser.add_argument("--max-epochs", type=int, default=None)
     parser.add_argument("--patience", type=int, default=None)
     parser.add_argument("--bootstrap-seed", type=int, default=7)
+    parser.add_argument("--scene-gate-mode", choices=("hard", "learned"), default="hard")
     parser.add_argument("--bootstrap-rounds", type=int, default=None)
     args = parser.parse_args()
     try:

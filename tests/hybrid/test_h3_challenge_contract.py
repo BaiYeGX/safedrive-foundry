@@ -59,6 +59,14 @@ class TestH3ChallengeContract(unittest.TestCase):
         self.assertTrue(torch.isfinite(full).all())
         self.assertTrue(torch.isfinite(masked).all())
 
+    def test_learned_scene_gate_accepts_zero_context(self) -> None:
+        model = WorldScorerModel(
+            d_model=64, layers=1, heads=2, ffn=128, scene_gate_mode="learned"
+        ).eval()
+        self.assertTrue(hasattr(model, "scene_gate_proj"))
+        out = model(torch.zeros(2, H3_CONTEXT_DIM), torch.randn(2, 10, 8) * 0.1)
+        self.assertTrue(torch.isfinite(out).all())
+
     def test_model_output_shape(self) -> None:
         model = WorldScorerModel(d_model=64, layers=1, heads=2, ffn=128).eval()
         out = model(torch.zeros(2, H3_CONTEXT_DIM), torch.zeros(2, 10, 8))
