@@ -13,13 +13,21 @@ CARLA Preflight: READY
 
 ```bash
 python scripts/h5_readiness.py
+python scripts/h5_calibrate_risk.py
 python scripts/h5_run.py --preflight
+```
+
+风险阈值校准 artifact：
+
+```text
+generated/h5/risk_calibration.json
 ```
 
 ## 2. H5 必须使用的新组件
 
 - `H5WorldRouter`：
-  - risk-gated defer（阈值 `0.35`，从 dev hard-unsafe 分支校准）；
+  - risk-gated defer（runtime 默认 `0.35` 保守阈值；dev 校准中点 `0.370274`）；
+  - probability temperature floor `0.5`（避免胜率概率饱和）；
   - minimum hold ticks；
   - hysteresis margin；
   - emergency_switch_margin（强优势可提前打破 hold）；

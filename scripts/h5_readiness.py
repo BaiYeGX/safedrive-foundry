@@ -50,6 +50,8 @@ def main() -> int:
     except Exception:
         checks["risk_gate_default"] = False
 
+    risk_cal = ROOT / "generated/h5/risk_calibration.json"
+    checks["risk_calibration_exists"] = risk_cal.exists()
     ready = all(checks.values())
     print(json.dumps({"ready": ready, "checks": checks}, ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if ready else 1
