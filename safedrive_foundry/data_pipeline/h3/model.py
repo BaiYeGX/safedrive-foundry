@@ -131,7 +131,7 @@ def _batch(examples: Sequence[PairExample], device: torch.device, *, swap: bool 
     return contexts, candidates, progress, jerk, risk, winner, ties
 
 
-def scorer_loss(outputs: Tensor, progress: Tensor, jerk: Tensor, risk: Tensor, winner: Tensor, ties: Tensor, *, temperature: float = 1.0) -> Tensor:
+def scorer_loss(outputs: Tensor, progress: Tensor, jerk: Tensor, risk: Tensor, winner: Tensor, ties: Tensor, *, temperature: float = 1.0, risk_ranking_weight: float = 0.0) -> Tensor:
     utility = outputs[:, :, 0]
     progress_mean, progress_logvar = outputs[:, :, 1], outputs[:, :, 2].clamp(-6.0, 5.0)
     jerk_mean, jerk_logvar = outputs[:, :, 3], outputs[:, :, 4].clamp(-6.0, 5.0)
@@ -140,8 +140,10 @@ def scorer_loss(outputs: Tensor, progress: Tensor, jerk: Tensor, risk: Tensor, w
     decisive = winner >= 0
     if bool(decisive.any()):
         target = (winner[decisive] == 0).float()
+        risk_penalty = nn.functional.softplus(outputs[:, :, 5])
+        ranking_utility = utility - float(risk_ranking_weight) * risk_penalty
         pair_loss = nn.functional.binary_cross_entropy_with_logits(
-            (utility[decisive, 0] - utility[decisive, 1]) / max(0.05, temperature), target
+            (ranking_utility[decisive, 0] - ranking_utility[decisive, 1]) / max(0.05, temperature), target
         )
     else:
         pair_loss = utility.sum() * 0.0
@@ -176,13 +178,13 @@ class TrainResult:
     device: str
 
 
-def _loss_for_examples(model: WorldScorerModel, examples: Sequence[PairExample], device: torch.device, *, temperature: float = 1.0) -> float:
+def _loss_for_examples(model: WorldScorerModel, examples: Sequence[PairExample], device: torch.device, *, temperature: float = 1.0, risk_ranking_weight: float = 0.0) -> float:
     if not examples:
         return float("nan")
     contexts, candidates, progress, jerk, risk, winner, ties = _batch(examples, device, swap=False)
     outputs = torch.stack([model(contexts[:, index], candidates[:, index]) for index in range(2)], dim=1)
     with torch.no_grad():
-        return float(scorer_loss(outputs, progress, jerk, risk, winner, ties, temperature=temperature).detach().cpu())
+        return float(scorer_loss(outputs, progress, jerk, risk, winner, ties, temperature=temperature, risk_ranking_weight=risk_ranking_weight).detach().cpu())
 
 
 def train_model(
@@ -195,6 +197,7 @@ def train_model(
     patience: int | None = None,
     device: str | torch.device = "cpu",
     scene_gate_mode: str = "hard",
+    risk_ranking_weight: float = 0.0,
 ) -> TrainResult:
     if not train_examples:
         raise ValueError("empty_training_examples")
@@ -222,14 +225,14 @@ def train_model(
             optimizer.zero_grad(set_to_none=True)
             contexts, candidates, progress, jerk, risk, winner, ties = _batch(batch_examples, torch_device, swap=True)
             outputs = torch.stack([model(contexts[:, index], candidates[:, index]) for index in range(2)], dim=1)
-            loss = scorer_loss(outputs, progress, jerk, risk, winner, ties, temperature=temperature)
+            loss = scorer_loss(outputs, progress, jerk, risk, winner, ties, temperature=temperature, risk_ranking_weight=risk_ranking_weight)
             if not torch.isfinite(loss):
                 raise RuntimeError(f"non_finite_training_loss:{epoch}")
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), float(optimizer_cfg["gradient_clip"]))
             optimizer.step()
         model.eval()
-        val_loss = _loss_for_examples(model, val_examples or train_examples, torch_device, temperature=temperature)
+        val_loss = _loss_for_examples(model, val_examples or train_examples, torch_device, temperature=temperature, risk_ranking_weight=risk_ranking_weight)
         if val_loss + 1e-8 < best_loss:
             best_loss = val_loss
             best_epoch = epoch
@@ -252,6 +255,7 @@ def train_model(
         "val_examples": len(val_examples),
         "temperature": temperature,
         "scene_gate_mode": scene_gate_mode,
+        "risk_ranking_weight": float(risk_ranking_weight),
     }
     torch.save({"state_dict": best_state, "metadata": metadata}, checkpoint_path)
     digest = hashlib.sha256(checkpoint_path.read_bytes()).hexdigest()

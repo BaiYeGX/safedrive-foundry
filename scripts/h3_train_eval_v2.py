@@ -80,7 +80,7 @@ def _inner_split(examples, val_ratio: float = 0.20) -> tuple[list, list]:
     return train, val
 
 
-def _train_fold(train_examples, fold, checkpoint_root: Path, device: str, max_epochs: int, patience: int, scene_gate_mode: str = "hard") -> tuple[list, list[dict[str, Any]]]:
+def _train_fold(train_examples, fold, checkpoint_root: Path, device: str, max_epochs: int, patience: int, scene_gate_mode: str = "hard", risk_ranking_weight: float = 0.0) -> tuple[list, list[dict[str, Any]]]:
     inner_train, inner_val = _inner_split(train_examples)
     models, results = [], []
     for seed in H3_CONFIG["training_seeds"]:
@@ -98,7 +98,8 @@ def _train_fold(train_examples, fold, checkpoint_root: Path, device: str, max_ep
             continue
         result = train_model(inner_train, inner_val, seed=int(seed), checkpoint_path=checkpoint,
                              device=device, max_epochs=max_epochs, patience=patience,
-                             scene_gate_mode=scene_gate_mode)
+                             scene_gate_mode=scene_gate_mode,
+                             risk_ranking_weight=risk_ranking_weight)
         model, _ = load_model(checkpoint, device=device)
         models.append(model)
         results.append({"fold": fold, "seed": int(seed), "best_epoch": result.best_epoch,
@@ -108,7 +109,7 @@ def _train_fold(train_examples, fold, checkpoint_root: Path, device: str, max_ep
     return models, results
 
 
-def _fit_fold_temperature(fold_models, fold_examples, current_fold: str, device: str) -> float:
+def _fit_fold_temperature(fold_models, fold_examples, current_fold: str, device: str, temperature_bounds) -> float:
     """Fit T on OOF predictions of the two training folds only."""
     deltas: list[float] = []
     targets: list[int] = []
@@ -118,7 +119,7 @@ def _fit_fold_temperature(fold_models, fold_examples, current_fold: str, device:
         rows = prediction_rows(fold_models[fold], examples, device=device)
         deltas.extend(row["delta"] for row in rows)
         targets.extend(row["target"] for row in rows)
-    return fit_temperature(deltas, targets)
+    return fit_temperature(deltas, targets, bounds=temperature_bounds)
 
 
 def _resource_benchmark(final_models, examples, device: str, pre_reserved_gib: float = 0.0) -> dict[str, Any]:
@@ -271,18 +272,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     train_records: list[dict[str, Any]] = []
     for fold in ("dev_fold_1", "dev_fold_2", "dev_fold_3"):
         train_examples = [item for name, rows in fold_examples.items() if name != fold for item in rows]
-        fold_models[fold], fold_results = _train_fold(train_examples, fold, checkpoint_root, device, args.max_epochs, args.patience, args.scene_gate_mode)
+        fold_models[fold], fold_results = _train_fold(train_examples, fold, checkpoint_root, device, args.max_epochs, args.patience, args.scene_gate_mode, args.risk_ranking_weight)
         train_records.extend(fold_results)
 
     # 2) Nested temperatures and OOF rows.
     fold_temperatures: dict[str, float] = {}
     fold_rows: dict[str, list[dict[str, Any]]] = {}
     for fold in ("dev_fold_1", "dev_fold_2", "dev_fold_3"):
-        fold_temperatures[fold] = _fit_fold_temperature(fold_models, fold_examples, fold, device)
+        fold_temperatures[fold] = _fit_fold_temperature(fold_models, fold_examples, fold, device, args.temperature_bounds)
         fold_rows[fold] = prediction_rows(fold_models[fold], fold_examples[fold], device=device)
     oof_rows = [row for fold in fold_rows.values() for row in fold]
     # metrics_from_rows needs one T; use pooled T on OOF deltas only for reporting.
-    pooled_t = fit_temperature([row["delta"] for row in oof_rows], [row["target"] for row in oof_rows])
+    pooled_t = fit_temperature([row["delta"] for row in oof_rows], [row["target"] for row in oof_rows], bounds=args.temperature_bounds)
     cv_metrics = metrics_from_rows(oof_rows, temperature=pooled_t)
 
     # 3) OOF ablation using per-fold temperature and pooled weighted metrics.
@@ -339,7 +340,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         else:
             result = train_model(final_inner_train, final_inner_val, seed=int(seed), checkpoint_path=checkpoint,
                                  device=device, max_epochs=args.max_epochs, patience=args.patience,
-                                 scene_gate_mode=args.scene_gate_mode)
+                                 scene_gate_mode=args.scene_gate_mode,
+                                 risk_ranking_weight=args.risk_ranking_weight)
             model, metadata = load_model(checkpoint, device=device)
         final_models.append(model)
         final_records.append({"seed": int(seed), "checkpoint": str(checkpoint),
@@ -406,9 +408,15 @@ def main() -> int:
     parser.add_argument("--patience", type=int, default=None)
     parser.add_argument("--bootstrap-seed", type=int, default=7)
     parser.add_argument("--scene-gate-mode", choices=("hard", "learned"), default="hard")
+    parser.add_argument("--risk-ranking-weight", type=float, default=0.0)
+    parser.add_argument("--temperature-bounds", default="0.05,10.0")
     parser.add_argument("--bootstrap-rounds", type=int, default=None)
     args = parser.parse_args()
     try:
+        bounds = [float(item.strip()) for item in args.temperature_bounds.split(",")]
+        if len(bounds) != 2 or bounds[0] <= 0 or bounds[1] <= bounds[0]:
+            raise ValueError("invalid_temperature_bounds")
+        args.temperature_bounds = bounds
         result = run(args)
         print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result["gate_status"] == "GATE_PASSED" else 1

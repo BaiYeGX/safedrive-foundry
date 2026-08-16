@@ -37,13 +37,13 @@ def _brier(probabilities: Sequence[float], targets: Sequence[int]) -> float:
     return sum((p - y) ** 2 for p, y in zip(probabilities, targets)) / len(probabilities) if probabilities else float("nan")
 
 
-def fit_temperature(deltas: Sequence[float], targets: Sequence[int]) -> float:
+def fit_temperature(deltas: Sequence[float], targets: Sequence[int], *, bounds: Sequence[float] | None = None) -> float:
     """Fit T* by NLL on provided (training-only) predictions."""
     if not deltas or not targets or len(deltas) != len(targets):
         return 1.0
     arr_deltas = np.array(deltas, dtype=np.float64)
     arr_targets = np.array(targets, dtype=np.float64)
-    lo, hi = (float(x) for x in H3_CONFIG["runtime"]["temperature_bounds"])
+    lo, hi = (float(x) for x in (bounds or H3_CONFIG["runtime"]["temperature_bounds"]))
 
     def nll(temp: float) -> float:
         t = max(lo, min(hi, float(temp)))

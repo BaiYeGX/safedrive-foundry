@@ -18,7 +18,7 @@ from data_pipeline.h3.challenge_matrix_v2 import (
 )
 from data_pipeline.h3.contracts import H3_CONTEXT_DIM
 from data_pipeline.h3.evaluate import metrics_from_rows, sigmoid
-from data_pipeline.h3.model import WorldScorerModel, _mask_context_tensor
+from data_pipeline.h3.model import WorldScorerModel, _mask_context_tensor, scorer_loss
 
 
 class TestH3ChallengeContract(unittest.TestCase):
@@ -66,6 +66,18 @@ class TestH3ChallengeContract(unittest.TestCase):
         self.assertTrue(hasattr(model, "scene_gate_proj"))
         out = model(torch.zeros(2, H3_CONTEXT_DIM), torch.randn(2, 10, 8) * 0.1)
         self.assertTrue(torch.isfinite(out).all())
+
+    def test_risk_ranking_weight_changes_pair_loss(self) -> None:
+        outputs = torch.zeros((2, 2, 6))
+        outputs[:, 0, 0] = 1.0
+        outputs[:, 1, 0] = -1.0
+        outputs[:, 0, 5] = 2.0
+        outputs[:, 1, 5] = -2.0
+        progress = torch.zeros((2, 2)); jerk = torch.zeros((2, 2)); risk = torch.ones((2, 2))
+        winner = torch.tensor([0, 0]); ties = torch.zeros((2,), dtype=torch.bool)
+        base = scorer_loss(outputs, progress, jerk, risk, winner, ties, risk_ranking_weight=0.0)
+        penalized = scorer_loss(outputs, progress, jerk, risk, winner, ties, risk_ranking_weight=1.0)
+        self.assertNotEqual(float(base), float(penalized))
 
     def test_natural_context_masks_only_target_region(self) -> None:
         ctx = torch.ones((2, H3_CONTEXT_DIM))
