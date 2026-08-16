@@ -67,13 +67,15 @@ def prediction_rows(
     device: str = "cpu",
     mask_context: bool = False,
     mask_candidate: bool = False,
+    context_mask_mode: str | None = None,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for example in examples:
         if not example.decisive:
             continue
         first, second, uncertainty = ensemble_predict(
-            models, example, device=device, mask_context=mask_context, mask_candidate=mask_candidate
+            models, example, device=device, mask_context=mask_context, mask_candidate=mask_candidate,
+            context_mask_mode=context_mask_mode,
         )
         delta = first.utility - second.utility
         predicted = 0 if delta >= 0.0 else 1

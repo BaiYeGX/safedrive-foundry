@@ -80,6 +80,7 @@ def normalized_prediction_rows(
     device: str = "cpu",
     mask_context: bool = False,
     mask_candidate: bool = False,
+    context_mask_mode: str | None = None,
     temperature: float | None = None,
 ) -> list[dict[str, Any]]:
     """Produce prediction rows using the normalized H4 ensemble.
@@ -95,7 +96,7 @@ def normalized_prediction_rows(
         utilities: list[list[float]] = [[], []]
         all_predictions: list[tuple[Any, Any]] = []
         for model_index, model in enumerate(models):
-            p0, p1 = predict_model(model, pair, device=device, mask_context=mask_context, mask_candidate=mask_candidate)
+            p0, p1 = predict_model(model, pair, device=device, mask_context=mask_context, mask_candidate=mask_candidate, context_mask_mode=context_mask_mode)
             all_predictions.append((p0, p1))
             mean, std = stats[model_index]
             utilities[0].append((p0.utility - mean) / max(1e-9, std))
@@ -307,11 +308,12 @@ def _normalized_pair_predict(
     pair: PairExample,
     *,
     device: str,
+    context_mask_mode: str | None = None,
 ) -> tuple[Any, Any, float]:
     utilities: list[list[float]] = [[], []]
     all_predictions = []
     for model_index, model in enumerate(models):
-        p0, p1 = predict_model(model, pair, device=device)
+        p0, p1 = predict_model(model, pair, device=device, context_mask_mode=context_mask_mode)
         all_predictions.append((p0, p1))
         mean, std = stats[model_index]
         utilities[0].append((p0.utility - mean) / max(1e-9, std))

@@ -18,7 +18,7 @@ from data_pipeline.h3.challenge_matrix_v2 import (
 )
 from data_pipeline.h3.contracts import H3_CONTEXT_DIM
 from data_pipeline.h3.evaluate import metrics_from_rows, sigmoid
-from data_pipeline.h3.model import WorldScorerModel
+from data_pipeline.h3.model import WorldScorerModel, _mask_context_tensor
 
 
 class TestH3ChallengeContract(unittest.TestCase):
@@ -66,6 +66,13 @@ class TestH3ChallengeContract(unittest.TestCase):
         self.assertTrue(hasattr(model, "scene_gate_proj"))
         out = model(torch.zeros(2, H3_CONTEXT_DIM), torch.randn(2, 10, 8) * 0.1)
         self.assertTrue(torch.isfinite(out).all())
+
+    def test_natural_context_masks_only_target_region(self) -> None:
+        ctx = torch.ones((2, H3_CONTEXT_DIM))
+        out = _mask_context_tensor(ctx, "actors")
+        self.assertTrue((out[:, 344:440] == 0.0).all())
+        self.assertTrue((out[:, :140] == 1.0).all())
+        self.assertTrue((out[:, 140:344] == 1.0).all())
 
     def test_model_output_shape(self) -> None:
         model = WorldScorerModel(d_model=64, layers=1, heads=2, ffn=128).eval()

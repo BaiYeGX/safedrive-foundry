@@ -267,6 +267,28 @@ def load_model(checkpoint_path: Path, *, device: str | torch.device = "cpu") -> 
     return model, dict(payload.get("metadata", {}))
 
 
+def _mask_context_tensor(context: Tensor, mode: str) -> Tensor:
+    """Apply a natural, non-global context ablation.
+
+    Layout: history 0:140, route 140:344, actors 344:440, lights 440:494,
+    ego-current 494:499.
+    """
+    masked = context.clone()
+    if mode == "history":
+        masked[:, :140] = 0.0
+    elif mode == "route":
+        masked[:, 140:344] = 0.0
+    elif mode == "actors":
+        masked[:, 344:440] = 0.0
+    elif mode == "lights":
+        masked[:, 440:494] = 0.0
+    elif mode == "zero":
+        masked.zero_()
+    else:
+        raise ValueError(f"unknown_context_mask_mode:{mode}")
+    return masked
+
+
 def predict_model(
     model: WorldScorerModel,
     example: PairExample,
@@ -274,12 +296,17 @@ def predict_model(
     device: str | torch.device = "cpu",
     mask_context: bool = False,
     mask_candidate: bool = False,
+    context_mask_mode: str | None = None,
 ) -> tuple[WorldPrediction, WorldPrediction]:
     device = torch.device(device)
     context = torch.tensor([list(item.context) for item in example.candidates], dtype=torch.float32, device=device)
     candidate = torch.tensor([list(item.candidate) for item in example.candidates], dtype=torch.float32, device=device)
+    if mask_context:
+        context = torch.zeros_like(context)
+    elif context_mask_mode is not None:
+        context = _mask_context_tensor(context, context_mask_mode)
     with torch.no_grad():
-        outputs = model(context, candidate, mask_context=mask_context, mask_candidate=mask_candidate)
+        outputs = model(context, candidate, mask_candidate=mask_candidate)
     predictions = []
     for index, item in enumerate(example.candidates):
         row = outputs[index].detach().cpu().tolist()
@@ -294,10 +321,14 @@ def ensemble_predict(
     device: str | torch.device = "cpu",
     mask_context: bool = False,
     mask_candidate: bool = False,
+    context_mask_mode: str | None = None,
 ) -> tuple[WorldPrediction, WorldPrediction, float]:
     if not models:
         raise ValueError("empty_model_ensemble")
-    all_predictions = [predict_model(model, example, device=device, mask_context=mask_context, mask_candidate=mask_candidate) for model in models]
+    all_predictions = [
+        predict_model(model, example, device=device, mask_context=mask_context, mask_candidate=mask_candidate, context_mask_mode=context_mask_mode)
+        for model in models
+    ]
     rows: list[WorldPrediction] = []
     utilities: list[list[float]] = [[], []]
     for index in range(2):
