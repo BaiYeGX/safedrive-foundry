@@ -216,6 +216,20 @@ sha256 9c281cd69a88880acc4a1f7ad3508477144f27e729ac2d542add7a56b5c2d803
 `sensor_tick=0.05` 在同步 world 首帧未发回精确 frame；最终让相机随唯一 20 Hz world
 tick 每帧采样后通过。失败没有改名为成功或删除。
 
+### H5 完整闭环（最终负结果）
+
+状态：`H5 COMPLETED / VERIFIED / GATE_FAILED / STOPPED`。
+
+最终运行：`h5-pilot-all2`，222/222 runs 完成。
+
+```text
+docs/runtime-evidence/h5/h5-pilot-all2/final-delivery.json
+evidence_sha256 846ef8a6f5ff6b3ca330a55ba53f69849f043346b74910f6a405eb95f5543517
+```
+
+关键门：safety non-inferior 通过；progress 净收益、chattering、resource 未通过。
+World 闭环收益不可复现，负结果保留。
+
 ## 2. 2026-08-12 路线收敛归档
 
 归档根：
@@ -284,5 +298,5 @@ sha256 bff2e26a9c7ff86a55ddb38fd4e2e09482468587e4dfc53c827ec9e4d00c53fb
 | H2 paired outcomes | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
 | H3 World development | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
 | H4 locked evaluation | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
-| H5 World on/off | `NOT_STARTED` |
+| H5 World on/off | `COMPLETED / VERIFIED / GATE_FAILED / STOPPED` |
 | H6 closure | `NOT_STARTED` |

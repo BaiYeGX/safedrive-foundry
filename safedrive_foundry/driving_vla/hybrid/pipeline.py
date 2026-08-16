@@ -68,6 +68,11 @@ class H1CandidatePipeline:
         # naturally shorter, but never an all-zero history.
         self._ego_history = deque(maxlen=20)
 
+    def seed_ego_history(self, entries) -> None:
+        """Preload observable ego history before the first online decision."""
+        for entry in entries:
+            self._ego_history.append(dict(entry))
+
     def decide(self, candidate_set: HybridCandidateSet) -> H1SafetyResult:
         guarded = self.guard.evaluate(candidate_set)
         features = None
@@ -88,12 +93,13 @@ class H1CandidatePipeline:
         successful_sources = {
             attempt.source for attempt in guarded.attempts if attempt.success
         }
+        world_enabled = bool(getattr(self.router, "requires_features", False))
         availability = ComponentAvailability(
             classic=HybridSource.EXPERT in successful_sources,
             vla=HybridSource.VLA in successful_sources,
-            world=False,
+            world=world_enabled,
             safety=True,
-            detail={"world": "H1_NOT_IMPLEMENTED"},
+            detail={"world": ("H5_WORLD_ROUTER" if world_enabled else "H1_NOT_IMPLEMENTED"), "selector": getattr(self.router, "selector_name", "")},
         )
         result = self.safety.tick(
             guarded.anchor.safety_snapshot,

@@ -39,6 +39,8 @@ class H5WorldRouter:
         hysteresis_margin: float = 0.05,
         emergency_switch_margin: float = 1.5,
         single_pass_grace_ticks: int = 3,
+        force_defer: bool = False,
+        scorer_deadline_ms: float = 50.0,
     ) -> None:
         if min_hold_ticks < 1:
             raise ValueError("min_hold_ticks_must_be_positive")
@@ -48,6 +50,10 @@ class H5WorldRouter:
         self.hysteresis_margin = float(hysteresis_margin)
         self.emergency_switch_margin = float(emergency_switch_margin)
         self.single_pass_grace_ticks = int(single_pass_grace_ticks)
+        self.force_defer = bool(force_defer)
+        self.scorer_deadline_ms = float(scorer_deadline_ms)
+        if self.scorer_deadline_ms <= 0.0:
+            raise ValueError("scorer_deadline_ms_must_be_positive")
         if self.emergency_switch_margin < self.hysteresis_margin:
             raise ValueError("emergency_switch_margin_must_be_ge_hysteresis_margin")
         if self.single_pass_grace_ticks < 0:
@@ -59,6 +65,11 @@ class H5WorldRouter:
         self._switch_count = 0
         self._defer_count = 0
         self._single_pass_count = 0
+        self._last_score = None
+
+    @property
+    def last_score(self):
+        return self._last_score
 
     def reset(self) -> None:
         self._last_selected_id = None
@@ -67,6 +78,13 @@ class H5WorldRouter:
         self._history.clear()
         self._switch_count = 0
         self._defer_count = 0
+        self._single_pass_count = 0
+
+    def _clear_hold(self) -> None:
+        # Keep cumulative metrics/history; only forget the current hold/source.
+        self._last_selected_id = None
+        self._last_selected_source = None
+        self._hold_count = 0
         self._single_pass_count = 0
 
     def metrics(self) -> dict:
@@ -99,6 +117,7 @@ class H5WorldRouter:
         candidate_set: HybridCandidateSet,
         features: Mapping[str, tuple[Sequence[float], Sequence[Sequence[float]]]] | None = None,
     ) -> RoutingResult:
+        self._last_score = None
         passed = [
             item for item in candidate_set.candidates
             if item.guard is not None and item.guard.passed
@@ -110,7 +129,7 @@ class H5WorldRouter:
             # selection do we reset to a fresh World session.
             self._single_pass_count += 1
             if self._single_pass_count >= self.single_pass_grace_ticks:
-                self.reset()
+                self._clear_hold()
             return replace(
                 result,
                 world=WorldDisposition.DEFERRED_NOT_APPLICABLE,
@@ -137,6 +156,14 @@ class H5WorldRouter:
             score = self.scorer.score_pair(payloads[0], payloads[1])
         except (TypeError, ValueError, RuntimeError):
             return self._defer(candidate_set, "invalid_input")
+
+        self._last_score = score
+
+        if float(getattr(score, "latency_ms", 0.0)) > self.scorer_deadline_ms:
+            return self._defer(candidate_set, "deadline")
+
+        if self.force_defer:
+            return self._defer(candidate_set, "forced_defer")
 
         if score.disposition != "ranked" or score.selected_candidate_key is None:
             return self._defer(candidate_set, score.defer_reason or "low_confidence")

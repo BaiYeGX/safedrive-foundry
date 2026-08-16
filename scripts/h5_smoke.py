@@ -55,8 +55,10 @@ from scripts.h1_hybrid_smoke import (  # noqa: E402
 
 
 def _load_scorer() -> NormalizedWorldScorer:
+    import hashlib
     import json as _json
     from data_pipeline.h3.model import load_model
+    from data_pipeline.h5.config import H5_CONFIG
 
     evidence = _json.loads(
         (ROOT / "docs/runtime-evidence/h4/h4-locked-20260816-final/final-delivery.json").read_text()
@@ -65,9 +67,23 @@ def _load_scorer() -> NormalizedWorldScorer:
     stats_list = [(float(item["mean"]), float(item["std"])) for item in stats["items"]]
     models = []
     for seed, info in FINAL_CHECKPOINTS.items():
-        model, _ = load_model(ROOT / info["path"], device="cuda")
+        path = ROOT / info["path"]
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != info["sha256"]:
+            raise ValueError(f"checkpoint_sha_mismatch:{path}")
+        model, _ = load_model(path, device="cuda")
         models.append(model)
-    return NormalizedWorldScorer(models, stats_list, device="cuda", temperature=float(H4_CONFIG["temperature"]))
+    return NormalizedWorldScorer(
+        models,
+        stats_list,
+        device="cuda",
+        temperature=float(H5_CONFIG["temperature"]),
+        risk_defer_probability=float(H5_CONFIG["risk_defer_probability"]),
+        probability_temperature_floor=float(H5_CONFIG["probability_temperature_floor"]),
+    )
 
 
 def main() -> int:

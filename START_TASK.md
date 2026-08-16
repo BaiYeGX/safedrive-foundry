@@ -1,4 +1,4 @@
-# 当前唯一任务：H4 Locked Evaluation（已完成）
+# 当前唯一任务：H6 Close Evidence（下一步）
 
 ## 状态
 
@@ -8,9 +8,14 @@ H1 hybrid candidate contract = VERIFIED / STOPPED
 H2 paired outcomes = COMPLETED / VERIFIED / GATE_PASSED / STOPPED
 H3 World scorer development = COMPLETED / VERIFIED / GATE_PASSED / STOPPED
 H4 locked evaluation = COMPLETED / VERIFIED / GATE_PASSED / STOPPED
-H5 World on/off closed loop = NOT_AUTHORIZED
+H5 World on/off closed loop = COMPLETED / VERIFIED / GATE_FAILED / STOPPED
 Online Oracle = PROHIBITED
 ```
+
+## H5 最终结论
+
+H5 完整闭环 222 runs 已执行，最终 `GATE_FAILED`。World 排序未带来可复现的闭环净收益；
+按冻结协议保留负结果，不重跑、不调门。下一步进入 H6 关闭。
 
 ## H4 目标
 

@@ -1,4 +1,31 @@
 # SafeDrive Foundry 进度
+## 2026-08-16 — H5 World on/off 完整闭环执行完成（负结果）
+
+状态：`H5 COMPLETED / VERIFIED / GATE_FAILED / STOPPED`。H6 closure 仍未开始。
+
+最终运行：`h5-pilot-all2`（同一 dataset 先 pilot 后 full）。
+
+Evidence：
+
+```text
+docs/runtime-evidence/h5/h5-pilot-all2/final-delivery.json
+evidence_sha256 846ef8a6f5ff6b3ca330a55ba53f69849f043346b74910f6a405eb95f5543517
+gate_status     GATE_FAILED
+gate.failures   ["reset_not_comparable:Town01__cut_in__s2__CloudyNoon:off", "progress_net_benefit", "chattering_noninferior", "resource"]
+```
+
+实测：
+
+- 222/222 runs 完成，协议完整性中 1 个 reset 不可比；
+- safety non-inferior：通过（on unsafe 4 vs off unsafe 6，无 on unsafe/off safe）；
+- progress net benefit：未通过，mean delta `0.2549`，lower 95 `-0.0709`；
+- chattering：未通过，on 总 switch 14 vs off 0；
+- resource：未通过，scorer deadline miss 1，P99 `47.22 ms`（<=50ms 但存在 1 miss）；
+- 结论：World 闭环收益不可复现，按冻结协议记录负结果，不重跑、不调门。
+
+H5 工程实现已落地：H5WorldRouter、74 个 locked-test 场景矩阵、off/on/defer 三臂
+collector、acceptance、orchestrator、风险/温度校准、readiness。
+
 
 ## 2026-08-16 — H4 Locked Evaluation 完成
 

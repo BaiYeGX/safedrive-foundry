@@ -14,6 +14,7 @@ CARLA Preflight: READY
 ```bash
 python scripts/h5_readiness.py
 python scripts/h5_calibrate_risk.py
+python scripts/h5_calibrate_temperature.py
 python scripts/h5_run.py --preflight
 ```
 
@@ -21,30 +22,32 @@ python scripts/h5_run.py --preflight
 
 ```text
 generated/h5/risk_calibration.json
+generated/h5/temperature_calibration.json
 ```
 
 ## 2. H5 必须使用的新组件
 
 - `H5WorldRouter`：
-  - risk-gated defer（runtime 默认 `0.35` 保守阈值；dev 校准中点 `0.370274`）；
-  - probability temperature floor `0.5`（避免胜率概率饱和）；
+  - risk-gated defer；
+  - probability temperature floor 0.5；
   - minimum hold ticks；
   - hysteresis margin；
-  - emergency_switch_margin（强优势可提前打破 hold）；
-  - zero-context defer（防止 scene gate 静默输出）；
+  - emergency_switch_margin；
+  - force_defer 模式；
+  - scorer deadline defer；
   - fallback 到 FrozenH1Router。
 - 路径：
   - `safedrive_foundry/data_pipeline/h5/runtime.py`
 
 ## 3. H5 实验设计
 
-建议三臂：
-
 | 臂 | selector | 说明 |
 |---|---|---|
 | off | FrozenH1Router | 非学习基线 |
 | on | H5WorldRouter | World + risk gate + hysteresis |
 | defer | H5WorldRouter 强制 defer | 等价于 off，用于检查系统开销 |
+
+场景矩阵：H4 locked test valid rows（74 个），3 臂共 222 次运行。
 
 主指标：
 
@@ -64,46 +67,9 @@ generated/h5/risk_calibration.json
 - chattering 未改善：停止并报告；
 - 资源超限：停止。
 
-## 5. 尚未完成
+## 5. 当前最终状态
 
-实际 closed-loop on/off 需要：
-
-- 新任务授权；
-- 冻结 H5 场景矩阵；
-- 运行真实 CARLA 闭环实验；
-- 生成 H5 Evidence。
-
-## 6. 当前 live smoke 状态
-
-`scripts/h5_smoke.py` 已成功执行一次 Town03 live smoke：
-
-```text
-run_id              h5-town03-1786855295418892365
-routing reason      h5_world_ranked
-selector            h5_world_v1
-selected            expert
-world               RANKED
-vla_forward_count   1
-ok                  true
-```
-
-Evidence：
-
-```text
-docs/runtime-evidence/h5/h5-smoke-20260816-ok/h5_smoke.json
-docs/runtime-evidence/h5/h5-smoke-3t-20260816-ok/h5_smoke.json
-docs/runtime-evidence/h5/h5-smoke-5t-20260816-ok/h5_smoke.json
-```
-
-3-tick / 5-tick smoke 验证了 per-frame candidate id 变化下 switch_count 正确按 source 统计：
-
-```text
-3-tick: decisions=3, switch_count=0, defer_count=0, online_history_ticks=3
-5-tick: decisions=5, switch_count=0, defer_count=0, online_history_ticks=5
-```
-
-之前因 CARLA 冷重启要求导致的失败也已保留：
-
-```text
-docs/runtime-evidence/h5/failed/h5-smoke-20260816-cold-restart-required/h5_smoke.json
-```
+- H5 工程代码已完成：矩阵、collector、acceptance、orchestrator。
+- 正式 pilot + full 已一次性执行：222/222 runs。
+- 最终 Evidence：`docs/runtime-evidence/h5/h5-pilot-all2/final-delivery.json`。
+- 结果：`GATE_FAILED`，World 闭环收益不可复现，负结果已冻结。

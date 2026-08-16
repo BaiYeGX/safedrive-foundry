@@ -1,8 +1,6 @@
-"""H5 closed-loop readiness package.
+"""H5 closed-loop on/off experiment package."""
 
-This package contains the World-on/off selector glue that must be used before
-entering closed-loop evaluation: risk-gated scoring and candidate hysteresis.
-"""
+from .config import H5_CONFIG, H5_CONFIG_SHA256
 from .runtime import H5WorldRouter
 
-__all__ = ["H5WorldRouter"]
+__all__ = ["H5_CONFIG", "H5_CONFIG_SHA256", "H5WorldRouter"]
