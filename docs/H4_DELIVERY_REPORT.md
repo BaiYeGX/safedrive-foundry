@@ -180,3 +180,20 @@ git diff --check
 - H5 不自动进入；
 - 不把 H4 离线准确率解释为闭环收益；
 - 不因 H4 通过而放松 Safety/Guard/Oracle 边界。
+
+## 7. 已知残余限制（不掩盖，如实保留）
+
+- H3 最终 Evidence 是由冻结时的 H3 代码生成；本任务修复了 H3 `defer_curve`、
+  split provenance 与资源 benchmark 代码。历史 Evidence 继续有效，但当前 H3 代码
+  重新运行同一 run-id 时会产生结构上更完整的 evidence，而不再是与原文件逐字节一致
+  的复现。
+- H4 开发过程中第一次 `evaluate` 因隔离审计把 test 内部重复 feature 误报为跨 split
+  重复而失败；修复审计逻辑后重新运行同一 run-id。第一次失败 payload 未保留为独立
+  evidence。严格意义上 H4 不是“从未失败过的一次盲测”，而是“最终脚本与最终 Evidence
+  通过，且最终脚本 SHA 已绑定”。
+- H4 resource benchmark 沿用 H3 的单对输入重复测量方式，用于稳定 microbenchmark；
+  它不代表 test set 全样本输入分布下的最坏尾延迟。
+- H4 Evidence 与所有 runtime evidence 一样位于 Git-ignored 本机目录，远程仓库只包含
+  H4 代码、测试、文档和 H4 证据路径/hash 说明。
+- `h5_authorized=true` 只是 H4 离线门与运营预检通过；它不是闭环安全性证明，H5 必须
+  单独授权并执行 closed-loop on/off。
