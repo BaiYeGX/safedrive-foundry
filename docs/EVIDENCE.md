@@ -20,7 +20,7 @@ dataset id 分别位于 `docs/runtime-evidence/h2/` 和 `generated/h2/paired-out
 
 ### H3 最终验收（H3v2）
 
-状态：`H3 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。H4 locked evaluation 与 H5 Closed-Loop 仍未授权。
+状态：`H3 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。H4 locked evaluation 已在后续完成；H5 Closed-Loop 仍未授权。
 
 最终运行：`h3-v2-20260815d-final`，联合 `h2-gatepass-20260813-routefix` 与
 `h3-challenge-v2-20260815d-dev`（96 场真实 CARLA Challenge，见 Challenge audit）。
@@ -54,7 +54,7 @@ challenge physical     7b27cc140dda3bc1bcf1d1587f95616dcd3c120c9596b0642caf63bd9
 | history sensitivity | >= 2pp | 28.57pp | PASSED |
 | ECE | <= 0.10 | 0.00113 | PASSED |
 | seed stability | >= 4/5 | 5/5 | PASSED |
-| P99 / VRAM / deadline | <= 50ms / <= 1.5GiB / 0 | 13.26ms / 0.0566GiB / 0 | PASSED |
+| P99 / VRAM / deadline | <= 50ms / <= 1.5GiB / 0 | 13.89ms / 0.0566GiB / 0 | PASSED |
 
 Challenge 数据质量门：96 terminal；78 valid；87 distinct；72 decisive；
 hard-unsafe branches 13；Expert/VLA wins 53/19；source-only baseline 0.7361；
@@ -67,6 +67,43 @@ candidate 分支被合同性关闭并退化为 no-action，因此 history sensit
 额外 learned 基线：candidate-only MLP OOF `1.0000`、full-feature MLP OOF `0.9560`；
 排序超越门按冻结口径只与最佳非学习简单规则 `candidate_only=0.9231` 比较，两个 MLP
 作为诊断对照报告，不替代简单规则门槛。
+
+### H4 Locked Evaluation（H4）
+
+状态：`H4 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。H5 Closed-Loop 仍未授权。
+
+最终运行：`h4-locked-20260816-final`。
+
+本机 artifact（均 Git-ignored）：
+
+```text
+docs/runtime-evidence/h4/h4-locked-20260816-final/
+generated/h4/h4-locked-20260816-final/
+```
+
+冻结 hash：
+
+```text
+evidence_sha256       5ef739dcd7b7e061b5df1350fecbc114636206c70f504c6c0b8012d8594245f6
+h3_evidence_sha256    f475309aca22148985e03ff1676eccdef2c0d56767c0aeb7ea714cdf47b9386e
+split_manifest_sha256 17dedd305aaf2933266a15345926f035aa7ebcd3210b6c636cc92d99e676b08c
+```
+
+最终门指标：
+
+| 检查项 | 要求 | 实测 | 状态 |
+|---|---:|---:|---|
+| isolation | 0 failures | passed | PASSED |
+| sufficient test power | >= 20 decisive | 64 | PASSED |
+| ranking vs best simple baseline | World > best simple | 1.0000 > 0.890625 | PASSED |
+| resource | <=50ms / <=1.5GiB / 0 miss | 15.23ms / 0.03125GiB / 0 | PASSED |
+| defer coverage | report | 0.984375 | report |
+| end-to-end vs fallback | report | 0.984375 > 0.890625 | report |
+| h5_authorized | — | true | report |
+
+H4 同时修复了 H3 raw 5-seed ensemble uncertainty 全 defer 的问题：使用 dev-only
+per-model utility normalization（冻结）后再集成，dev 和 locked test 的 defer coverage
+均恢复至接近/等于 1.0。
 
 ### H2 Evidence 边界
 
@@ -246,6 +283,6 @@ sha256 bff2e26a9c7ff86a55ddb38fd4e2e09482468587e4dfc53c827ec9e4d00c53fb
 | H1 independent candidates | `VERIFIED / STOPPED` |
 | H2 paired outcomes | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
 | H3 World development | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
-| H4 locked evaluation | `NOT_AUTHORIZED` |
+| H4 locked evaluation | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
 | H5 World on/off | `NOT_STARTED` |
 | H6 closure | `NOT_STARTED` |

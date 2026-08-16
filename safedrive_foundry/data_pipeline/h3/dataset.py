@@ -81,6 +81,8 @@ def build_split_manifest(
     dataset_id: str,
     physical_manifest_sha256: str,
     store_manifest_sha256: str,
+    challenge_physical_manifest_sha256: str | None = None,
+    challenge_store_manifest_sha256: str | None = None,
 ) -> dict[str, Any]:
     assignments = _split_lineages(records)
     # Exact numeric feature duplicates share a split (test has priority).
@@ -151,6 +153,10 @@ def build_split_manifest(
         "duplicate_lineages_grouped": duplicate_grouped,
         "rows": [row.to_dict() for row in rows],
     }
+    if challenge_physical_manifest_sha256 is not None:
+        payload["challenge_physical_manifest_sha256"] = challenge_physical_manifest_sha256
+    if challenge_store_manifest_sha256 is not None:
+        payload["challenge_store_manifest_sha256"] = challenge_store_manifest_sha256
     payload["manifest_sha256"] = stable_sha256(payload)
     return payload
 

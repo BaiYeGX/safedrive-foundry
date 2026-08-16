@@ -1,8 +1,38 @@
 # SafeDrive Foundry 进度
 
+## 2026-08-16 — H4 Locked Evaluation 完成
+
+状态：`H4 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。H5 Closed-Loop 与在线 Oracle 仍未授权。
+
+最终运行：`h4-locked-20260816-final`。
+
+Evidence：
+
+```text
+docs/runtime-evidence/h4/h4-locked-20260816-final/final-delivery.json
+evidence_sha256 5ef739dcd7b7e061b5df1350fecbc114636206c70f504c6c0b8012d8594245f6
+gate_status     GATE_PASSED
+gate.failures   []
+```
+
+实测：
+
+- test valid 74，decisive 64；World accuracy `1.0000`（64/64），AUROC `1.0000`；
+- best simple baseline `candidate_only=0.890625`；bootstrap delta `0.109375`，lower 95 `0.03125`；
+- defer coverage `0.984375`（63/64 ranked），ranked accuracy `1.0000`；
+- end-to-end accuracy `0.984375` vs h1_soft_selector `0.890625`；
+- Expert/VLA wins `39/25`；ECE `0.00884`；swap max error `0.0`；isolation `passed`；
+- P99 `15.23 ms`，增量显存 `0.03125 GiB`，0 deadline misses；
+- `h5_authorized = true`，但 H5 不自动进入。
+- 全量测试 `352 tests: 351 passed, 1 skipped, 0 failed`；compileall 与 `git diff --check` 通过。
+
+H4 使用 H3 5-seed final checkpoints 加 dev-only per-model utility normalization 修复了
+H3 raw ensemble uncertainty 导致的全 defer 问题；该 normalization 已冻结并写入 H4 evidence。
+
+
 ## 2026-08-15 — H3v2 真实 CARLA Challenge + 嵌套 OOF 最终验收
 
-状态：`H3 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。H4 locked evaluation、H5 Closed-Loop 与在线 Oracle 仍未授权。
+状态：`H3 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。H4 locked evaluation 已在后续完成；H5 Closed-Loop 与在线 Oracle 仍未授权。
 
 最终运行：`h3-v2-20260815d-final`。数据联合：
 `h2-gatepass-20260813-routefix`（120 H2）+ `h3-challenge-v2-20260815d-dev`（96 H3v2 Challenge）。
@@ -25,10 +55,10 @@ gate.failures []
 
 - OOF decisive accuracy `1.0000`（91/91）；best simple baseline `candidate_only=0.9231`（非学习简单规则口径）；额外 candidate-only MLP `1.0000`、full-feature MLP `0.9560`；
 - paired bootstrap delta `0.0769`，95% 下界 `0.0330`；
-- action sensitivity `0.2857`；history sensitivity `0.2857`；
+- action sensitivity `28.57pp`；history sensitivity `28.57pp`；
 - ECE `0.00113`（嵌套 T*=0.0500）；progress/jerk regret 不劣于基线；
 - 5/5 seeds `1.0000`；swap max error `0.0`；leakage `passed`；
-- P99 `13.26 ms`，增量显存 `0.0566 GiB`，0 deadline misses；
+- P99 `13.89 ms`，增量显存 `0.0566 GiB`，0 deadline misses；
 - 全量测试 `340 tests: 339 passed, 1 skipped, 0 failed`；`compileall` 与 `git diff --check` 通过。
 
 Challenge 数据质量门：
@@ -37,7 +67,7 @@ Challenge 数据质量门：
 - hard-unsafe branches 13；Expert/VLA wins 53/19；source-only 0.7361；
 - store manifest ok；offline-label permutation 全通过。
 
-H3v2 已冻结。H4 仍不授权。
+H3v2 已冻结（H4 后续已完成）。
 
 
 ## 2026-08-14 — H3 World Scorer 真实 CARLA 物理采集与端到端交付终态
