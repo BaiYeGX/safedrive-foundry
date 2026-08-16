@@ -250,3 +250,37 @@ python scripts/h5_readiness.py
 ```
 
 这意味着 H3/H4 的工程加固已完成，H5 可以进入闭环设计与执行阶段。H5 本身仍需单独授权和真实 CARLA 闭环验证。
+
+
+## 10. H3.1 Learned-Gate 正式试训结果（负结果保留）
+
+尝试：`h3-v2.1-learned-challenge-fast`
+
+配置：
+
+```text
+scene_gate_mode      = learned
+risk_ranking_weight  = 0.2
+temperature_bounds   = [0.5, 5.0]
+max_epochs           = 60
+patience             = 15
+```
+
+结果：
+
+```text
+OOF accuracy         1.0000 (91/91)
+best simple baseline 0.9231
+action sensitivity   28.57pp
+history sensitivity  0.00pp
+gate status          GATE_FAILED
+failures             history_sensitivity
+```
+
+结论：
+
+- learned scene gate 去除了硬编码开关；
+- 但当前 60 epoch 训练量下，模型仍不依赖 ego history；
+- 因此 H3.1 learned-gate 正式重训**未通过**；
+- 该负结果保留，不用于 H5；
+- H5 当前仍应使用已冻结并通过原 H3 gate 的 hard-gate checkpoint，同时在线 runtime 已具备 zero-context defer 防护。
