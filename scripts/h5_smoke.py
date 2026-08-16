@@ -73,6 +73,7 @@ def _load_scorer() -> NormalizedWorldScorer:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--map", default="Town03")
+    parser.add_argument("--ticks", type=int, default=1)
     parser.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args()
     args.evidence_dir.mkdir(parents=True, exist_ok=False)
@@ -143,55 +144,68 @@ def main() -> int:
             owner="sdf.h5.live_smoke",
         )
         runtime.start(spec)
+        if args.ticks < 1:
+            raise RuntimeError("TICKS_MUST_BE_POSITIVE")
         header = runtime.tick(carla.VehicleControl(throttle=0.0, brake=1.0))
-        anchor = _build_anchor(runtime, header, route)
-        generated = generate_hybrid_set(anchor, classic, vla)
         scorer = _load_scorer()
         h5_router = H5WorldRouter(scorer, min_hold_ticks=5, hysteresis_margin=0.05)
         pipeline = H1CandidatePipeline(router=h5_router)
-        result = pipeline.decide(generated)
-
-        if len(generated.candidates) != 2 or not all(attempt.success for attempt in generated.attempts):
-            raise RuntimeError("BOTH_SOURCES_NOT_GENERATED")
-        if result.routing.selected_candidate_id is None:
-            raise RuntimeError("NO_SELECTED_CANDIDATE")
-        if result.routing.reason not in {"h5_world_ranked", "h5_world_hold_hysteresis", "h5_defer:no_selection_space"}:
-            # A defer to fallback is acceptable in a smoke, but we must know it.
-            payload["h5_defer_reason"] = result.routing.reason
-
-        ego_actor = runtime._actors["ego"]
-        ego_state, _ = _ego_state(ego_actor)
         control_loop = ControlLoop()
-        applied = None
         from driving_vla.runtime.safety_control_bind import apply_safety_control
-        applied = apply_safety_control(
-            result.safety.decision,
-            result.guarded_set.to_policy_candidate_set(
-                tuple(
-                    item.candidate
-                    for item in result.guarded_set.candidates
-                    if item.candidate.candidate_id == result.routing.selected_candidate_id
-                )
-            ),
-            control_loop,
-            ego_state,
-            anchor.simulation_time_s,
-        )
-        if not applied.is_track_approved:
-            raise RuntimeError(f"CONTROL_NOT_TRACK_APPROVED:{applied.applied_mode.value}")
-        execution_header = runtime.tick(
-            carla.VehicleControl(throttle=applied.throttle, brake=applied.brake, steer=applied.steer)
-        )
+
+        routing_history = []
+        last_routing = None
+        last_safety = None
+        last_applied = None
+        execution_frame = None
+        for step in range(args.ticks):
+            anchor = _build_anchor(runtime, header, route)
+            generated = generate_hybrid_set(anchor, classic, vla)
+            if len(generated.candidates) != 2 or not all(attempt.success for attempt in generated.attempts):
+                raise RuntimeError("BOTH_SOURCES_NOT_GENERATED")
+            result = pipeline.decide(generated)
+            if result.routing.selected_candidate_id is None:
+                raise RuntimeError("NO_SELECTED_CANDIDATE")
+            routing_history.append(result.routing.to_dict())
+            last_routing = result.routing
+            last_safety = result.to_dict().get("safety")
+
+            ego_actor = runtime._actors["ego"]
+            ego_state, _ = _ego_state(ego_actor)
+            applied = apply_safety_control(
+                result.safety.decision,
+                result.guarded_set.to_policy_candidate_set(
+                    tuple(
+                        item.candidate
+                        for item in result.guarded_set.candidates
+                        if item.candidate.candidate_id == result.routing.selected_candidate_id
+                    )
+                ),
+                control_loop,
+                ego_state,
+                anchor.simulation_time_s,
+            )
+            if not applied.is_track_approved:
+                raise RuntimeError(f"CONTROL_NOT_TRACK_APPROVED:{applied.applied_mode.value}")
+            last_applied = applied
+            header = runtime.tick(
+                carla.VehicleControl(throttle=applied.throttle, brake=applied.brake, steer=applied.steer)
+            )
+            execution_frame = int(header.carla_frame)
+
         runtime.complete()
         runtime = None
         payload["runtime_cleanup"] = registry.record(run_id)
         payload.update({
             "ok": True,
             "run_id": run_id,
-            "routing": result.routing.to_dict(),
-            "safety": result.to_dict().get("safety"),
-            "applied_control": applied.to_dict(),
-            "execution_frame": int(execution_header.carla_frame),
+            "ticks_requested": args.ticks,
+            "routing_history": routing_history,
+            "routing": last_routing.to_dict(),
+            "router_metrics": h5_router.metrics(),
+            "safety": last_safety,
+            "applied_control": last_applied.to_dict(),
+            "execution_frame": execution_frame,
             "vla_forward_count": policy.forward_count,
             "configs": {
                 "scenario_sha256": ScenarioRuntime.config_hash(spec, profile),

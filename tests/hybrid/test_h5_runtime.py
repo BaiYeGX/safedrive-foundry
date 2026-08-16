@@ -30,10 +30,17 @@ class _Candidate:
         self.candidate_id = candidate_id
 
 
+class _Provenance:
+    def __init__(self, candidate_id: str):
+        self.source = type("Src", (), {"value": candidate_id.split(":")[-1]})()
+        self.candidate_id = candidate_id
+
+
 class _Item:
     def __init__(self, candidate_id: str, passed: bool = True):
         self.guard = _Guard(passed)
         self.candidate = _Candidate(candidate_id)
+        self.provenance = _Provenance(candidate_id)
 
 
 class _CandidateSet:
