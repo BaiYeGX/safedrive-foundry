@@ -338,9 +338,21 @@ def run_evaluate(args: argparse.Namespace, *, mode: str) -> dict[str, Any]:
     payload["evidence_sha256"] = stable_sha256(payload)
     evidence_dir = ROOT / "docs" / "runtime-evidence" / "h4" / args.run_id
     generated_dir = ROOT / "generated" / "h4" / args.run_id
+    lock_path = evidence_dir / "run.lock.json"
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    generated_dir.mkdir(parents=True, exist_ok=True)
+    if lock_path.exists():
+        raise RuntimeError(f"H4_RUN_LOCKED:{lock_path}")
     _write(evidence_dir / "final-delivery.json", payload)
     _write(generated_dir / "results.json", payload)
     _write(generated_dir / "normalization_stats.json", stats)
+    _write(lock_path, {
+        "run_id": args.run_id,
+        "mode": mode,
+        "script_sha256": payload["script_sha256"],
+        "evidence_sha256": payload["evidence_sha256"],
+        "locked": True,
+    })
     return {"ok": True, "gate_status": payload["gate_status"], "failures": gate["failures"], "evidence": str(evidence_dir / "final-delivery.json"), "evidence_sha256": payload["evidence_sha256"]}
 
 
@@ -368,7 +380,17 @@ def main() -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
     except BaseException as exc:
-        print(json.dumps({"ok": False, "error": f"{type(exc).__name__}:{exc}"}, sort_keys=True))
+        error_payload = {"ok": False, "run_id": args.run_id, "mode": args.mode,
+                         "error": f"{type(exc).__name__}:{exc}",
+                         "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+        if args.mode == "evaluate":
+            failure_dir = ROOT / "docs" / "runtime-evidence" / "h4" / "failed" / f"{args.run_id}-{int(time.time())}"
+            try:
+                _write(failure_dir / "error.json", error_payload)
+                error_payload["failure_evidence"] = str(failure_dir / "error.json")
+            except Exception:
+                pass
+        print(json.dumps(error_payload, sort_keys=True))
         return 2
 
 
