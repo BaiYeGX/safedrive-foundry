@@ -84,7 +84,7 @@ generated/h4/h4-locked-20260816-final/
 冻结 hash：
 
 ```text
-evidence_sha256       35e28958ddd98d9df7a980ffd707bf6049efb9685e22d335082f69916974e6e4
+evidence_sha256       325deb52ccb7fc7824b9a246b60bffd72f3ed68dfbad50e88cac8fea9aa0166d
 h3_evidence_sha256    f475309aca22148985e03ff1676eccdef2c0d56767c0aeb7ea714cdf47b9386e
 split_manifest_sha256 17dedd305aaf2933266a15345926f035aa7ebcd3210b6c636cc92d99e676b08c
 ```
