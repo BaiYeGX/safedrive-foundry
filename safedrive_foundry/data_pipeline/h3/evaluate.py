@@ -208,8 +208,14 @@ def defer_curve(models: Sequence[WorldScorerModel], examples: Sequence[PairExamp
     rows = prediction_rows(models, examples, device=device)
     rows_sorted = sorted(rows, key=lambda row: (row["uncertainty"], -abs(row["delta"])))
     curve: list[dict[str, Any]] = []
+    defer_margin = float(H3_CONFIG["runtime"]["defer_margin"])
     for cutoff in (0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.50, 0.60, 0.75, 0.90):
-        kept = [row for row in rows_sorted if row["uncertainty"] <= cutoff and abs(row["delta"]) / max(temperature, 1e-6) >= 0.0]
+        # Mirror the runtime scorer: cap uncertainty at 1.0 and require the
+        # frozen score margin.
+        kept = [
+            row for row in rows_sorted
+            if min(1.0, row["uncertainty"]) <= cutoff and abs(row["delta"]) >= defer_margin
+        ]
         if not kept:
             curve.append({"coverage": 0.0, "cutoff": cutoff, "accuracy": None, "n": 0})
             continue

@@ -120,7 +120,7 @@ def _fit_fold_temperature(fold_models, fold_examples, current_fold: str, device:
     return fit_temperature(deltas, targets)
 
 
-def _resource_benchmark(final_models, examples, device: str) -> dict[str, Any]:
+def _resource_benchmark(final_models, examples, device: str, pre_reserved_gib: float = 0.0) -> dict[str, Any]:
     if not examples:
         return {"passed": False, "reason": "no_examples"}
     scorer = WorldScorer(final_models, device=device, model_hash="h3-v2-runtime-benchmark",
@@ -145,13 +145,16 @@ def _resource_benchmark(final_models, examples, device: str) -> dict[str, Any]:
     latencies.sort()
     peak_gib = float(torch.cuda.max_memory_reserved()) / (1024.0 ** 3) if torch.cuda.is_available() else 0.0
     p50, p95, p99 = latencies[len(latencies)//2], latencies[int(0.95*(len(latencies)-1))], latencies[int(0.99*(len(latencies)-1))]
+    incremental_gib = max(0.0, peak_gib - pre_reserved_gib)
     return {
         "device": device,
         "gpu_available": bool(torch.cuda.is_available()),
         "p50_ms": p50, "p95_ms": p95, "p99_ms": p99,
         "deadline_misses": sum(item > float(H3_CONFIG["runtime"]["deadline_ms"]) for item in latencies),
-        "peak_reserved_gib": peak_gib, "incremental_gpu_gib": peak_gib,
-        "passed": p99 <= float(H3_CONFIG["runtime"]["deadline_ms"]) and peak_gib <= float(H3_CONFIG["runtime"]["max_incremental_gpu_gib"]),
+        "peak_reserved_gib": peak_gib,
+        "pre_reserved_gib": pre_reserved_gib,
+        "incremental_gpu_gib": incremental_gib,
+        "passed": p99 <= float(H3_CONFIG["runtime"]["deadline_ms"]) and incremental_gib <= float(H3_CONFIG["runtime"]["max_incremental_gpu_gib"]),
         "failure_reason": None,
     }
 
@@ -184,11 +187,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     records = read_h2_records(roots)
     dataset_id = args.run_id + "-combined" if args.challenge_dataset_id else (args.h2_dataset_id or H2_DATASET_ID)
     h2_identity = _store_identity(h2_root)
+    challenge_identity = _store_identity(challenge_root) if args.challenge_dataset_id else None
     split = build_split_manifest(
         records,
         dataset_id=dataset_id,
         physical_manifest_sha256=h2_identity["physical_manifest_sha256"],
         store_manifest_sha256=h2_identity["store_manifest_sha256"],
+        challenge_physical_manifest_sha256=challenge_identity["physical_manifest_sha256"] if challenge_identity else None,
+        challenge_store_manifest_sha256=challenge_identity["store_manifest_sha256"] if challenge_identity else None,
     )
     generated = ROOT / "generated" / "h3" / args.run_id
     evidence_dir = ROOT / "docs" / "runtime-evidence" / "h3" / args.run_id
@@ -317,6 +323,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         seed_metrics.append(metrics_from_rows(rows_for_seed, temperature=pooled_t))
 
     # 7) Final deployment ensemble (not used in any gate metric).
+    pre_reserved_gib = 0.0
+    if device == "cuda" and torch.cuda.is_available():
+        torch.cuda.init()
+        torch.cuda.synchronize()
+        pre_reserved_gib = float(torch.cuda.memory_reserved()) / (1024.0 ** 3)
     final_models = []
     final_records = []
     for seed in H3_CONFIG["training_seeds"]:
@@ -341,7 +352,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             torch.save(payload, ckpt)
         record["checkpoint_sha256"] = hashlib.sha256(ckpt.read_bytes()).hexdigest()
 
-    resource = _resource_benchmark(final_models, all_dev, device)
+    resource = _resource_benchmark(final_models, all_dev, device, pre_reserved_gib)
     defer = defer_curve(final_models, all_dev, device=device, temperature=pooled_t)
 
     # 8) Frozen H3 gate.

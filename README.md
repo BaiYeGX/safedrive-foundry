@@ -16,10 +16,13 @@ flowchart LR
     S --> M["MPC / PID"]
 ```
 
-当前状态：`H0 VERIFIED / H1 VERIFIED / H2 GATE_PASSED / H3 GATE_PASSED / STOPPED`。
+当前状态：`H0 VERIFIED / H1 VERIFIED / H2 GATE_PASSED / H3 GATE_PASSED /
+H4 GATE_PASSED / STOPPED`。
 H3v2 已基于冻结 H2 数据与新采集的 96 场真实 CARLA Challenge 数据完成嵌套 OOF
 训练与验收，最终 Evidence 为 `docs/runtime-evidence/h3/h3-v2-20260815d-final/`。
-H4 locked evaluation、H5 closed-loop 与在线 Oracle 仍未授权。
+H4 locked evaluation 已完成盲测，Evidence 为
+`docs/runtime-evidence/h4/h4-locked-20260816-final/`。
+H5 closed-loop 与在线 Oracle 仍未授权。
 
 ## 从这里开始
 
@@ -31,6 +34,7 @@ H4 locked evaluation、H5 closed-loop 与在线 Oracle 仍未授权。
 5. 环境、资源、证据分别见 [ENVIRONMENT](docs/ENVIRONMENT.md)、
    [RESOURCES](docs/RESOURCES.md)、[EVIDENCE](docs/EVIDENCE.md)。
 6. H3 完整交付与实施记录见 [H3_DELIVERY_REPORT](docs/H3_DELIVERY_REPORT.md)。
+7. H4 完整交付与实施记录见 [H4_DELIVERY_REPORT](docs/H4_DELIVERY_REPORT.md)。
 
 ## 固定边界
 

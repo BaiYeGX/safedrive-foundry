@@ -199,11 +199,11 @@ evidence_sha256 = f475309aca22148985e03ff1676eccdef2c0d56767c0aeb7ea714cdf47b938
 OOF decisive accuracy      1.0000 (91/91)
 best simple baseline       candidate_only 0.9231
 bootstrap delta            0.0769, lower_95 0.0330
-action sensitivity         0.2857
-history sensitivity        0.2857
+action sensitivity         28.57pp
+history sensitivity        28.57pp
 ECE                        0.00113
 nested T*                  0.0500
-P99 latency                13.08 ms
+P99 latency                13.89 ms
 incremental GPU            0.0566 GiB
 deadline misses            0
 seed accuracies            1.0 / 1.0 / 1.0 / 1.0 / 1.0
