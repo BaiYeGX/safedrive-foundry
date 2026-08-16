@@ -214,6 +214,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     device = "cuda" if torch.cuda.is_available() and args.device != "cpu" else "cpu"
     if device == "cpu":
         torch.set_num_threads(min(4, os.cpu_count() or 1))
+    base_reserved_gib = 0.0
+    if device == "cuda" and torch.cuda.is_available():
+        torch.cuda.init()
+        torch.cuda.synchronize()
+        base_reserved_gib = float(torch.cuda.memory_reserved()) / (1024.0 ** 3)
     checkpoint_root = generated / "checkpoints"
 
     baselines = {name: evaluate_baseline(all_dev, name) for name in BASELINE_NAMES}
@@ -323,11 +328,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         seed_metrics.append(metrics_from_rows(rows_for_seed, temperature=pooled_t))
 
     # 7) Final deployment ensemble (not used in any gate metric).
-    pre_reserved_gib = 0.0
-    if device == "cuda" and torch.cuda.is_available():
-        torch.cuda.init()
-        torch.cuda.synchronize()
-        pre_reserved_gib = float(torch.cuda.memory_reserved()) / (1024.0 ** 3)
     final_models = []
     final_records = []
     for seed in H3_CONFIG["training_seeds"]:
@@ -352,7 +352,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             torch.save(payload, ckpt)
         record["checkpoint_sha256"] = hashlib.sha256(ckpt.read_bytes()).hexdigest()
 
-    resource = _resource_benchmark(final_models, all_dev, device, pre_reserved_gib)
+    resource = _resource_benchmark(final_models, all_dev, device, base_reserved_gib)
     defer = defer_curve(final_models, all_dev, device=device, temperature=pooled_t)
 
     # 8) Frozen H3 gate.
