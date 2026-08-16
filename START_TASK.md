@@ -22,7 +22,7 @@ split 进行唯一一次盲测，报告排序、校准、defer、资源与两来
 
 ```text
 docs/runtime-evidence/h4/h4-locked-20260816-final/final-delivery.json
-evidence_sha256 5ef739dcd7b7e061b5df1350fecbc114636206c70f504c6c0b8012d8594245f6
+evidence_sha256 35e28958ddd98d9df7a980ffd707bf6049efb9685e22d335082f69916974e6e4
 gate_status     GATE_PASSED
 gate.failures   []
 ```
