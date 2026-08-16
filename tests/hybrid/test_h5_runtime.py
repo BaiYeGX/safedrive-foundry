@@ -136,6 +136,27 @@ class H5HysteresisTest(unittest.TestCase):
         self.assertEqual(m["switch_count"], 1)
         self.assertEqual(m["defer_count"], 1)
 
+    def test_hold_tracks_source_across_frame_ids(self):
+        router = H5WorldRouter(_Scorer("f1:expert", 1.0, -1.0), _Fallback(), min_hold_ticks=3, hysteresis_margin=0.05)
+        f1 = self._features(("f1:expert", "f1:vla"))
+        r1 = router.route(_CandidateSet(["f1:expert", "f1:vla"]), f1)
+        self.assertEqual(r1.selected_candidate_id, "f1:expert")
+        # New frame ids, same proposed source switch. Hold must keep expert
+        # source but select the current expert candidate id.
+        router.scorer = _Scorer("f2:vla", 0.2, -0.2)
+        f2 = self._features(("f2:expert", "f2:vla"))
+        r2 = router.route(_CandidateSet(["f2:expert", "f2:vla"]), f2)
+        self.assertEqual(r2.selected_candidate_id, "f2:expert")
+        self.assertEqual(r2.reason, "h5_world_hold_hysteresis")
+        self.assertEqual(router.metrics()["switch_count"], 0)
+        # After hold expires, switch by source is recorded.
+        router._hold_count = router.min_hold_ticks
+        router.scorer = _Scorer("f3:vla", 0.2, -0.2)
+        f3 = self._features(("f3:expert", "f3:vla"))
+        r3 = router.route(_CandidateSet(["f3:expert", "f3:vla"]), f3)
+        self.assertEqual(r3.selected_candidate_id, "f3:vla")
+        self.assertEqual(router.metrics()["switch_count"], 1)
+
     def test_defer_resets_and_falls_back(self):
         scorer = _Scorer(selected=None, disposition="defer_low_confidence", reason="risk")
         router = H5WorldRouter(scorer, _Fallback(), min_hold_ticks=3)
