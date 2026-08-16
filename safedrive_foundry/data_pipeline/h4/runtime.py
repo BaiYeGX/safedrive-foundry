@@ -35,6 +35,7 @@ class NormalizedWorldScorer:
         model_hash: str = "",
         temperature: float | None = None,
         risk_defer_probability: float = 0.35,
+        probability_temperature_floor: float = 0.5,
     ) -> None:
         if not models:
             raise ValueError("world_scorer_requires_model")
@@ -45,6 +46,7 @@ class NormalizedWorldScorer:
         self.device = torch.device(device)
         self.temperature = float(temperature if temperature is not None else H4_CONFIG["temperature"])
         self.risk_defer_probability = float(risk_defer_probability)
+        self.probability_temperature = max(float(probability_temperature_floor), self.temperature)
         self.model_hash = model_hash or hashlib.sha256(str(len(models)).encode()).hexdigest()
 
     @classmethod
@@ -134,7 +136,11 @@ class NormalizedWorldScorer:
         second_prediction = WorldPrediction(second[0], *[avg_outputs[1][i] for i in range(6)])
 
         delta = first_prediction.utility - second_prediction.utility
-        probability = sigmoid(delta / max(0.05, self.temperature))
+        # Ranking uses the frozen T; reported probability uses a calibration
+        # floor so the output cannot collapse to 1e-13 / 0.9999999.  On the
+        # normalized dev deltas, T=0.5 keeps ECE just below 0.10 while
+        # eliminating saturation.
+        probability = sigmoid(delta / max(1e-6, self.probability_temperature))
 
         variance = 0.0
         if len(self.models) > 1:

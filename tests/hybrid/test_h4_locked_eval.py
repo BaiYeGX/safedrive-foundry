@@ -177,6 +177,19 @@ class H4RuntimeRiskGateTest(unittest.TestCase):
         self.assertEqual(result.disposition, "defer_low_confidence")
         self.assertEqual(result.defer_reason, "context_masked_or_empty")
 
+    def test_probability_temperature_floor_prevents_saturation(self):
+        from data_pipeline.h4.runtime import NormalizedWorldScorer
+        scorer = NormalizedWorldScorer(
+            [FakeRiskModel(risk_logit=-5.0, utility_first=0.2, utility_second=-0.2)],
+            [(0.0, 1.0)],
+            device="cpu",
+            temperature=0.05,
+            probability_temperature_floor=0.5,
+        )
+        result = scorer.score_pair(*self._payloads())
+        self.assertGreater(result.probability_first_wins, 0.5)
+        self.assertLess(result.probability_first_wins, 0.8)
+
     def test_low_predicted_risk_ranks(self):
         from data_pipeline.h4.runtime import NormalizedWorldScorer
         scorer = NormalizedWorldScorer([FakeRiskModel(risk_logit=-5.0, utility_first=2.0, utility_second=-2.0)], [(0.0, 1.0)], device="cpu")
