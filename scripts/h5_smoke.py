@@ -203,6 +203,7 @@ def main() -> int:
             "routing_history": routing_history,
             "routing": last_routing.to_dict(),
             "router_metrics": h5_router.metrics(),
+            "online_history_ticks": len(pipeline._ego_history),
             "safety": last_safety,
             "applied_control": last_applied.to_dict(),
             "execution_frame": execution_frame,

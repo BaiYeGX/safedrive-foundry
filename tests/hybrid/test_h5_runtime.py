@@ -18,6 +18,7 @@ from driving_vla.hybrid.contracts import (
     WorldDisposition,
 )
 from data_pipeline.h5.runtime import H5WorldRouter
+from driving_vla.hybrid.pipeline import ego_history_entry
 
 
 class _Guard:
@@ -45,7 +46,13 @@ class _Item:
 
 class _CandidateSet:
     def __init__(self, ids):
-        self.candidates = [_Item(i) for i in ids]
+        self.candidates = []
+        for spec in ids:
+            if isinstance(spec, tuple):
+                candidate_id, passed = spec
+                self.candidates.append(_Item(candidate_id, passed))
+            else:
+                self.candidates.append(_Item(spec))
 
 
 class _Score:
@@ -83,6 +90,18 @@ class _Fallback:
             reason="fallback",
             difference=CandidateDifference(max_position_delta_m=1.0, rms_speed_delta_mps=0.6),
         )
+
+
+class H5PipelineHistoryTest(unittest.TestCase):
+    def test_ego_history_entry_uses_observable_fields(self):
+        snap = SimpleNamespace(ego_x=1.0, ego_y=2.0, ego_yaw=0.3, ego_v=5.0, ego_a=-0.2, simulation_time_s=12.5)
+        entry = ego_history_entry(snap)
+        self.assertEqual(entry["ego_x"], 1.0)
+        self.assertEqual(entry["ego_y"], 2.0)
+        self.assertEqual(entry["ego_yaw"], 0.3)
+        self.assertEqual(entry["ego_speed_mps"], 5.0)
+        self.assertEqual(entry["ego_acceleration_mps2"], -0.2)
+        self.assertEqual(entry["simulation_time_s"], 12.5)
 
 
 class H5HysteresisTest(unittest.TestCase):
@@ -156,6 +175,22 @@ class H5HysteresisTest(unittest.TestCase):
         r3 = router.route(_CandidateSet(["f3:expert", "f3:vla"]), f3)
         self.assertEqual(r3.selected_candidate_id, "f3:vla")
         self.assertEqual(router.metrics()["switch_count"], 1)
+
+    def test_single_pass_glitch_does_not_reset_hold(self):
+        router = H5WorldRouter(
+            _Scorer("f1:expert", 1.0, -1.0), _Fallback(),
+            min_hold_ticks=5, hysteresis_margin=0.05, emergency_switch_margin=1.5,
+            single_pass_grace_ticks=3,
+        )
+        r1 = router.route(_CandidateSet(["f1:expert", "f1:vla"]), self._features(("f1:expert", "f1:vla")))
+        self.assertEqual(r1.selected_candidate_id, "f1:expert")
+        # One frame where VLA Guard fails.
+        router.route(_CandidateSet([("f1:expert", True), ("f1:vla", False)]), self._features(("f1:expert", "f1:vla")))
+        # VLA returns; the previous expert hold must survive.
+        router.scorer = _Scorer("f2:vla", 0.2, -0.2)
+        r3 = router.route(_CandidateSet(["f2:expert", "f2:vla"]), self._features(("f2:expert", "f2:vla")))
+        self.assertEqual(r3.selected_candidate_id, "f2:expert")
+        self.assertEqual(r3.reason, "h5_world_hold_hysteresis")
 
     def test_defer_resets_and_falls_back(self):
         scorer = _Scorer(selected=None, disposition="defer_low_confidence", reason="risk")

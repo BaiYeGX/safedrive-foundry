@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 
 from driving_vla.hybrid.contracts import HybridCandidateSet, HybridSource, RoutingResult
@@ -40,6 +41,17 @@ class H1SafetyResult:
         }
 
 
+def ego_history_entry(snapshot) -> dict:
+    return {
+        "ego_x": float(snapshot.ego_x),
+        "ego_y": float(snapshot.ego_y),
+        "ego_yaw": float(snapshot.ego_yaw),
+        "ego_speed_mps": float(snapshot.ego_v),
+        "ego_acceleration_mps2": float(snapshot.ego_a),
+        "simulation_time_s": float(snapshot.simulation_time_s),
+    }
+
+
 class H1CandidatePipeline:
     def __init__(
         self,
@@ -51,15 +63,21 @@ class H1CandidatePipeline:
         self.safety = safety or SafetyKernel()
         self.guard = guard or CandidateGuard(self.safety.config)
         self.router = router or FrozenH1Router(self.safety.config)
+        # Online World features must use a real sliding ego-history window.
+        # Offline H3 context expects up to 20 ticks; the first online tick is
+        # naturally shorter, but never an all-zero history.
+        self._ego_history = deque(maxlen=20)
 
     def decide(self, candidate_set: HybridCandidateSet) -> H1SafetyResult:
         guarded = self.guard.evaluate(candidate_set)
         features = None
         if getattr(self.router, "requires_features", False):
             from data_pipeline.h3.live_features import build_live_features
+            snapshot = guarded.anchor.safety_snapshot
+            self._ego_history.append(ego_history_entry(snapshot))
             features = build_live_features(
                 guarded.anchor,
-                [],
+                list(self._ego_history),
                 guarded.candidates,
             )
         if getattr(self.router, "requires_features", False):

@@ -38,6 +38,7 @@ class H5WorldRouter:
         min_hold_ticks: int = 10,
         hysteresis_margin: float = 0.05,
         emergency_switch_margin: float = 1.5,
+        single_pass_grace_ticks: int = 3,
     ) -> None:
         if min_hold_ticks < 1:
             raise ValueError("min_hold_ticks_must_be_positive")
@@ -46,14 +47,18 @@ class H5WorldRouter:
         self.min_hold_ticks = int(min_hold_ticks)
         self.hysteresis_margin = float(hysteresis_margin)
         self.emergency_switch_margin = float(emergency_switch_margin)
+        self.single_pass_grace_ticks = int(single_pass_grace_ticks)
         if self.emergency_switch_margin < self.hysteresis_margin:
             raise ValueError("emergency_switch_margin_must_be_ge_hysteresis_margin")
+        if self.single_pass_grace_ticks < 0:
+            raise ValueError("single_pass_grace_ticks_must_be_nonnegative")
         self._last_selected_id: str | None = None
         self._last_selected_source: str | None = None
         self._hold_count = 0
         self._history: list[dict] = []
         self._switch_count = 0
         self._defer_count = 0
+        self._single_pass_count = 0
 
     def reset(self) -> None:
         self._last_selected_id = None
@@ -62,6 +67,7 @@ class H5WorldRouter:
         self._history.clear()
         self._switch_count = 0
         self._defer_count = 0
+        self._single_pass_count = 0
 
     def metrics(self) -> dict:
         return {
@@ -99,13 +105,19 @@ class H5WorldRouter:
         ]
         if len(passed) < 2:
             result = self.fallback.route(candidate_set)
-            self.reset()
+            # A single-frame Guard glitch must not erase the hysteresis state.
+            # Only after the configured grace period without a two-candidate
+            # selection do we reset to a fresh World session.
+            self._single_pass_count += 1
+            if self._single_pass_count >= self.single_pass_grace_ticks:
+                self.reset()
             return replace(
                 result,
                 world=WorldDisposition.DEFERRED_NOT_APPLICABLE,
                 reason="h5_not_applicable_single_or_zero_pass",
             )
 
+        self._single_pass_count = 0
         baseline = self.fallback.route(candidate_set)
         if baseline.selection_space.value == "NO_SELECTION_SPACE":
             return self._defer(candidate_set, "no_selection_space")
