@@ -25,7 +25,7 @@ from driving_vla.hybrid.generators import (
 )
 from driving_vla.hybrid.guard import CandidateGuard
 from driving_vla.hybrid.pipeline import H1CandidatePipeline, H1SafetyResult
-from driving_vla.hybrid.router import FrozenH1Router
+from driving_vla.hybrid.router import ClassicOnlyRouter, FrozenH1Router
 
 __all__ = [
     "CandidateDifference",
@@ -44,6 +44,7 @@ __all__ = [
     "WorldDisposition",
     "CandidateGuard",
     "ClassicExpertGenerator",
+    "ClassicOnlyRouter",
     "FrozenH1Router",
     "H1CandidatePipeline",
     "H1SafetyResult",

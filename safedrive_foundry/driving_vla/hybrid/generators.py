@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Protocol
 
-from classic_stack.geometry import ReferencePath
+from classic_stack.geometry import FrenetFrame, ReferencePath
 from classic_stack.planning.frenet import ActorState, FrenetPlanner, PlanRequest
 from driving_vla.adapter.policy_adapter import TrajectoryArray, arrays_to_candidate_set
 from driving_vla.hybrid.contracts import (
@@ -19,9 +20,13 @@ from driving_vla.hybrid.contracts import (
     ObservableAnchor,
 )
 from driving_vla.model.canonicalizer import (
+    CANONICALIZER_VERSION,
+    CanonicalizationError,
     CanonicalizationResult,
     TrajectoryCanonicalizer,
+    UpstreamPathSpeed,
     UpstreamTimedTrajectory,
+    cum_arclength,
     stable_sha256,
 )
 from driving_vla.model.lineage import file_sha256
@@ -75,6 +80,7 @@ def _candidate_with_provenance(
     generation_latency_s: float,
     generated_wall_time_s: float,
     uncertainty: float,
+    dynamics_meta_extra: dict[str, object] | None = None,
 ) -> HybridCandidate:
     candidate_id = f"{anchor.observation_id}:{source.value}"
     array = TrajectoryArray(
@@ -130,6 +136,7 @@ def _candidate_with_provenance(
             "generation_latency_s": generation_latency_s,
             "generated_wall_time_s": generated_wall_time_s,
             "coordinate_frame": "map",
+            **dict(dynamics_meta_extra or {}),
         },
     )
     candidate: PolicyCandidate = cset.candidates[0]
@@ -150,6 +157,55 @@ class ClassicExpertGenerator:
         self.planner = planner or FrenetPlanner()
         self.canonicalizer = canonicalizer or TrajectoryCanonicalizer()
         self.generator_hash = self.planner.config_hash
+        self.fallback_generator_id = "classic-bounded-stop@h6-v1"
+        self.fallback_generator_hash = combined_generator_hash(
+            planner_config=self.planner.config_hash,
+            bounded_stop="jerk-limited-centerline-v1",
+        )
+
+    def _bounded_stop(
+        self,
+        anchor: ObservableAnchor,
+        reference: ReferencePath,
+        *,
+        s0: float,
+        d0: float,
+    ) -> UpstreamTimedTrajectory:
+        """Always-defined conservative Classic proposal for planner failure.
+
+        This remains an independent Classic candidate.  It follows the
+        observable route, ramps braking with the Classic jerk/deceleration
+        limits, and fills the full shared horizon so same-tick fallback is
+        actually available to Safety.
+        """
+
+        frame = FrenetFrame(reference, self.planner.config.vehicle)
+        vehicle = self.planner.config.vehicle
+        dt = float(self.canonicalizer.dt_s)
+        v = max(0.0, float(anchor.bundle.ego_v))
+        a = 0.0
+        s = max(0.0, min(float(s0), reference.length))
+        points = []
+        for index in range(1, self.canonicalizer.t_steps + 1):
+            desired_a = -float(vehicle.max_decel_mps2) if v > 1e-6 else 0.0
+            max_delta = float(vehicle.max_jerk_mps3) * dt
+            a = max(a - max_delta, min(a + max_delta, desired_a))
+            next_v = max(0.0, v + a * dt)
+            s = min(reference.length, s + 0.5 * (v + next_v) * dt)
+            pose = frame.frenet_to_cartesian(s, d0)
+            points.append(
+                (
+                    index * dt,
+                    pose.x,
+                    pose.y,
+                    pose.yaw,
+                    next_v,
+                    a,
+                    frame.curvature_proxy(s, d0),
+                )
+            )
+            v = next_v
+        return UpstreamTimedTrajectory(points=tuple(points), frame="map")
 
     def generate(self, anchor: ObservableAnchor) -> HybridCandidate:
         t0 = time.perf_counter()
@@ -199,28 +255,45 @@ class ClassicExpertGenerator:
                 seed=int(anchor.bundle.carla_frame),
             )
         )
+        fallback_reason = None
         if not plan.ok or plan.trajectory is None:
-            raise RuntimeError(f"expert_plan_failed:{plan.failure_code}")
-        raw = UpstreamTimedTrajectory(
-            points=tuple(
-                (point.t, point.x, point.y, point.yaw, point.v, point.a, point.kappa)
-                for point in plan.trajectory.points
-            ),
-            frame="map",
-        )
-        canonical = self.canonicalizer.canonicalize_timed(raw, to_map=False)
+            fallback_reason = f"planner:{plan.failure_code}"
+            raw = self._bounded_stop(anchor, reference, s0=s0, d0=d0)
+        else:
+            raw = UpstreamTimedTrajectory(
+                points=tuple(
+                    (point.t, point.x, point.y, point.yaw, point.v, point.a, point.kappa)
+                    for point in plan.trajectory.points
+                ),
+                frame="map",
+            )
+        try:
+            canonical = self.canonicalizer.canonicalize_timed(raw, to_map=False)
+        except CanonicalizationError as exc:
+            if not str(exc).startswith("timed_horizon_too_short"):
+                raise
+            fallback_reason = f"canonical:{exc}"
+            raw = self._bounded_stop(anchor, reference, s0=s0, d0=d0)
+            canonical = self.canonicalizer.canonicalize_timed(raw, to_map=False)
         elapsed = time.perf_counter() - t0
+        used_fallback = fallback_reason is not None
         return _candidate_with_provenance(
             source=self.source,
             safety_source=CandidateSource.CLASSIC,
             anchor=anchor,
             trajectory=canonical.trajectory,
             canonical=canonical,
-            generator_id=self.generator_id,
-            generator_hash=self.generator_hash,
+            generator_id=(self.fallback_generator_id if used_fallback else self.generator_id),
+            generator_hash=(
+                self.fallback_generator_hash if used_fallback else self.generator_hash
+            ),
             generation_latency_s=elapsed,
             generated_wall_time_s=time.time(),
             uncertainty=0.0,
+            dynamics_meta_extra={
+                "classic_mode": "bounded_stop_fallback" if used_fallback else "frenet_st",
+                "classic_fallback_reason": fallback_reason,
+            },
         )
 
 
@@ -234,18 +307,83 @@ class NominalVLAGenerator:
             raise ValueError("generator_hash is required")
         self.policy = policy
         self.generator_id = policy.model_id
-        self.generator_hash = generator_hash
+        from driving_vla.hybrid.vla_smoother import VLASmootherConfig
+
+        self.generator_hash = combined_generator_hash(
+            nominal_model=generator_hash,
+            kinematic_filter=stable_sha256(asdict(VLASmootherConfig())),
+            bounded_canonical_repair="v1",
+        )
+
+    def _canonicalize_native(self, native, anchor: ObservableAnchor) -> CanonicalizationResult:
+        """Bound only numeric/path-coverage failures without inventing a route."""
+        try:
+            return self.policy.canonicalize_native(native)
+        except CanonicalizationError as exc:
+            message = str(exc)
+            path = tuple((float(x), float(y)) for x, y in native.path_map_xy)
+            speeds = tuple(max(0.0, float(value)) for value in native.speed_mps)
+            original_hash = stable_sha256(
+                {"kind": "path_speed", "path": path, "speed": speeds, "frame": "map"}
+            )
+            if message.startswith("insufficient_path_coverage") and len(path) >= 2:
+                available = cum_arclength(path)[-1]
+                requested = 0.0
+                previous = speeds[0] if speeds else 0.0
+                for index in range(10):
+                    speed = speeds[min(index, len(speeds) - 1)] if speeds else 0.0
+                    requested += 0.5 * (previous + speed) * 0.25
+                    previous = speed
+                if available <= 1e-6 or requested <= 1e-9:
+                    raise
+                scale = min(1.0, 0.98 * available / requested)
+                repaired_speeds = tuple(speed * scale for speed in speeds)
+                result = self.policy.canonicalizer.canonicalize_with_report(
+                    UpstreamPathSpeed(path_xy=path, speed_mps=repaired_speeds, frame="map"),
+                    to_map=False,
+                )
+            elif message == "degenerate_path" and speeds and max(speeds) <= 0.20 and path:
+                # A zero-speed collapsed path is a valid stop intent.  Add a
+                # millimetre numerical tangent solely so interpolation is defined.
+                x, y = path[0]
+                tangent = (
+                    x + 1e-3 * math.cos(anchor.bundle.ego_yaw),
+                    y + 1e-3 * math.sin(anchor.bundle.ego_yaw),
+                )
+                result = self.policy.canonicalizer.canonicalize_with_report(
+                    UpstreamPathSpeed(path_xy=((x, y), tangent), speed_mps=(0.0,) * 10, frame="map"),
+                    to_map=False,
+                )
+            else:
+                raise
+            return replace(
+                result,
+                report=replace(
+                    result.report,
+                    version=f"{CANONICALIZER_VERSION}+bounded-vla-repair-v1",
+                    input_sha256=original_hash,
+                ),
+            )
 
     def generate(self, anchor: ObservableAnchor) -> HybridCandidate:
+        from driving_vla.hybrid.vla_smoother import smooth_vla_trajectory
+
         t0 = time.perf_counter()
         native = self.policy.predict_native(anchor.bundle)
-        canonical = self.policy.canonicalize_native(native)
+        canonical = self._canonicalize_native(native, anchor)
+        smoothed_trajectory = smooth_vla_trajectory(canonical.trajectory, anchor)
+        if smoothed_trajectory is not canonical.trajectory:
+            new_report = replace(
+                canonical.report,
+                canonical_sha256=stable_sha256(smoothed_trajectory.points_xy_yaw_v_a_kappa),
+            )
+            canonical = replace(canonical, trajectory=smoothed_trajectory, report=new_report)
         elapsed = time.perf_counter() - t0
         return _candidate_with_provenance(
             source=self.source,
             safety_source=CandidateSource.VLA_FAST,
             anchor=anchor,
-            trajectory=canonical.trajectory,
+            trajectory=smoothed_trajectory,
             canonical=canonical,
             generator_id=self.generator_id,
             generator_hash=self.generator_hash,

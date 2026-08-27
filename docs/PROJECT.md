@@ -3,11 +3,16 @@
 ## 1. 研究问题
 
 在单机 CARLA 软件在环中，比较两个独立、可执行的候选来源：Classic Expert 与
-nominal VLA。先逐候选执行硬合同检查，再让 candidate-conditioned World 预测相对结果
-并排序。研究目标不是证明 World “会开车”，而是回答：
+nominal VLA。先逐候选执行合同检查，再让 candidate-conditioned World 预测相对结果
+并排序。H3–H5 的原始研究问题是：
 
 > 在候选、Safety、控制器和场景相同的条件下，World 排序是否比冻结的非学习 selector
 > 带来可复现的闭环净收益？
+
+H5 已用正式 Evidence 回答“没有达到门槛”。H6 不改写这个负结论，而是用户明确授权的
+新问题：能否重新训练一个综合评价更完整的 World，使它在至少 90% 的正式决策时刻真正
+给 VLA 更高评价；从 2026-08-27 起，VLA 实际执行硬门修订为至少 75%，Classic + MRM
+合计最多 25%。
 
 ## 2. 固定系统边界
 
@@ -65,12 +70,13 @@ source id 只用于 provenance 和分层报告；World 训练默认不把 source
 
 ## 5. 选择逻辑
 
-1. 两候选都未通过 Guard：调用现有 Safety 回退。
-2. 仅一个通过：直接把该候选交给 Safety，World 不制造选择。
-3. 两个通过且 World defer：使用冻结 Safety soft score，并以 Classic、candidate id 稳定
+1. 两候选都被 Guard `REJECT`：调用现有 Safety 回退。
+2. 仅一个候选为 `PASS/REVIEW`：直接把该候选交给 Safety，World 不制造选择。
+3. 两个候选为 `PASS/REVIEW` 且 World defer：使用冻结 Safety soft score，并以 Classic、candidate id 稳定
    破平；H1 中 World 恒为 defer。
-4. 两个通过且 World 有效：按 World score 排序，再交给 Safety。
-5. Safety 可拒绝或降级最终选择；World 无权覆盖。
+4. 两个候选为 `PASS/REVIEW` 且 World 有效：按 World score 排序，再交给 Safety。
+5. H6 中首选 VLA 可先做一次有边界修复；失败后检查同一 tick Expert，两者都失败才 MRM。
+6. Safety 可拒绝或降级最终选择；World 无权覆盖。
 
 H1 的近重复门冻结为最大逐点位置差 `0.5 m` 与 RMS 速度差 `0.5 m/s`；两者同时不超过
 阈值才标记 `NO_SELECTION_SPACE`。生成 wall deadline 冻结为 `2.5 s`，Safety 原有
@@ -93,8 +99,13 @@ H3/H4 再证明 World 学到了 action-conditioned 差异：
 - 单机 16GB 资源与在线 deadline 可接受。
 
 H5 最终以闭环 on/off 判定：安全指标不退化，路线完成/进度或效率有可复现净收益，
-且尾延迟、显存、回退率没有抵消收益。未满足即记录负结果，不能只凭离线 accuracy
-宣称 World 有效。
+且尾延迟、显存、回退率没有抵消收益。该门已正式失败，不能只凭离线 accuracy 改写。
+
+H6 使用两个分开的口径：World 原始双候选评分中 VLA 真正较高的 tick `>=90%`，VLA
+最终实际执行 tick `>=75%`，Classic + MRM 合计 `<=25%`。同时，相对纯 Classic 的
+不安全率增量 `<=1pp`，
+paired progress bootstrap lower-95 `>=0`，并通过延迟、切换、ping-pong、训练/验收 seed
+隔离和 provenance 门。开发态强制 VLA 数据不允许进入正式 claim。
 
 ## 7. 非目标
 

@@ -7,6 +7,8 @@ import sys
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "safedrive_foundry"))
 
@@ -33,6 +35,7 @@ from safety_kernel.contracts.types import (  # noqa: E402
     TrafficLightObs,
 )
 from safety_kernel.validator.checks import run_full_checks, hard_violations  # noqa: E402
+from safety_kernel.repair.longitudinal_qp import _arc_lengths, _lead_s_profile  # noqa: E402
 
 
 def _straight_pts(
@@ -123,6 +126,87 @@ class G202RepairabilityTests(unittest.TestCase):
         self.assertFalse(is_longitudinally_repairable(["c1:numeric:non_finite_at_index_0"]))
         self.assertFalse(is_longitudinally_repairable(["c1:road:offroad"]))
         self.assertFalse(is_longitudinally_repairable(["c1:freshness:stale_age:1.0"]))
+
+    def test_lead_envelope_includes_both_vehicle_half_lengths(self) -> None:
+        cfg = load_safety_config()
+        points = _straight_pts(n=5, v=2.0)
+        actor = TrackedObject(
+            actor_id="lead",
+            class_name="vehicle",
+            x=10.0,
+            y=0.0,
+            yaw=0.0,
+            vx=0.0,
+            vy=0.0,
+            length_m=4.5,
+            width_m=1.9,
+            observed_time_s=1.0,
+        )
+        obs = _obs(ego_v=2.0, actors=(actor,))
+        times = np.array([point.t for point in points], dtype=float)
+        cap = _lead_s_profile(
+            obs,
+            _arc_lengths(points),
+            points,
+            times,
+            cfg,
+            min_gap_m=cfg.qp.min_gap_m,
+            time_headway_s=cfg.qp.time_headway_s,
+        )
+        expected = 10.0 - (
+            cfg.qp.min_gap_m
+            + 0.5 * cfg.length_m
+            + 0.5 * actor.length_m
+            + cfg.collision_inflate_m
+        )
+        self.assertAlmostEqual(float(cap[0]), expected)
+
+    def test_lead_prediction_is_aligned_to_first_candidate_timestamp(self) -> None:
+        cfg = load_safety_config()
+        points = tuple(
+            TrajectoryPoint(
+                t=0.25 * (index + 1),
+                x=0.5 * index,
+                y=0.0,
+                yaw=0.0,
+                kappa=0.0,
+                v=2.0,
+                a=0.0,
+                jerk=0.0,
+            )
+            for index in range(5)
+        )
+        actor = TrackedObject(
+            actor_id="moving-lead",
+            class_name="vehicle",
+            x=10.0,
+            y=0.0,
+            yaw=0.0,
+            vx=4.0,
+            vy=0.0,
+            length_m=4.5,
+            width_m=1.9,
+            observed_time_s=1.0,
+        )
+        obs = _obs(now=1.0, ego_v=2.0, actors=(actor,))
+        times = np.array([point.t for point in points], dtype=float)
+        cap = _lead_s_profile(
+            obs,
+            _arc_lengths(points),
+            points,
+            times,
+            cfg,
+            min_gap_m=cfg.qp.min_gap_m,
+            time_headway_s=cfg.qp.time_headway_s,
+        )
+        clearance = (
+            cfg.qp.min_gap_m
+            + actor.vx * cfg.qp.time_headway_s
+            + 0.5 * cfg.length_m
+            + 0.5 * actor.length_m
+            + cfg.collision_inflate_m
+        )
+        self.assertAlmostEqual(float(cap[0]), 10.0 + 4.0 * 0.25 - clearance)
 
 
 class G202LongitudinalQPScenarioTests(unittest.TestCase):
@@ -296,6 +380,35 @@ class G202LongitudinalQPScenarioTests(unittest.TestCase):
             self.assertLessEqual(p.a, self.cfg.max_accel_mps2 + 1e-3)
             self.assertGreaterEqual(p.a, -self.cfg.max_decel_mps2 - 1e-3)
             self.assertLessEqual(abs(p.jerk), self.cfg.max_jerk_mps3 + 0.5)
+
+    def test_lateral_acceleration_is_repaired_by_speed_not_hidden(self) -> None:
+        points = tuple(
+            TrajectoryPoint(
+                t=point.t,
+                x=point.x,
+                y=point.y,
+                yaw=point.yaw,
+                kappa=0.20,
+                v=8.0,
+                a=0.0,
+                jerk=0.0,
+            )
+            for point in _straight_pts(n=17, v=8.0)
+        )
+        cand = _cand(points)
+        result = self.iface.repair(
+            cand,
+            _obs(ego_v=8.0),
+            mode=RepairMode.LONGITUDINAL,
+            now_s=1.0,
+            reject_hints=["raw:dynamics:lat_accel"],
+        )
+        self.assertTrue(result.success, msg=f"{result.reason} {result.solver_trace}")
+        assert result.candidate is not None
+        self.assertLessEqual(
+            max(abs(point.kappa) * point.v * point.v for point in result.candidate.points),
+            self.cfg.max_lateral_accel_mps2 + 1e-3,
+        )
 
     def test_stale_input_contract(self) -> None:
         cand = _cand(_straight_pts(), now=0.0)

@@ -34,6 +34,10 @@ from safety_kernel.contracts.types import (  # noqa: E402
     TrafficLightObs,
 )
 from safety_kernel.validator.checks import hard_violations, run_full_checks  # noqa: E402
+from safety_kernel.repair.rato_scp import (  # noqa: E402
+    _actor_xy_at_candidate_time,
+    _regularize_route_progress,
+)
 
 
 def _straight_pts(
@@ -197,6 +201,23 @@ def _with_rato_enabled(cfg: SafetyKernelConfig, enabled: bool) -> SafetyKernelCo
 
 
 class G203EligibilityTests(unittest.TestCase):
+    def test_actor_prediction_includes_candidate_anchor_time(self) -> None:
+        actor = TrackedObject(
+            actor_id="moving",
+            class_name="vehicle",
+            x=10.0,
+            y=5.0,
+            yaw=0.0,
+            vx=4.0,
+            vy=-2.0,
+            length_m=4.5,
+            width_m=1.9,
+            observed_time_s=0.9,
+        )
+        x, y = _actor_xy_at_candidate_time(actor, _obs(now=1.0), 0.25)
+        self.assertAlmostEqual(x, 11.4)
+        self.assertAlmostEqual(y, 4.3)
+
     def test_corridor_gate(self) -> None:
         cfg = load_safety_config()
         obs_ok = _obs(half_width=3.5)
@@ -210,9 +231,27 @@ class G203EligibilityTests(unittest.TestCase):
     def test_hint_eligibility(self) -> None:
         self.assertTrue(is_rato_eligible_hints(["c:collision:collision_envelope"]))
         self.assertTrue(is_rato_eligible_hints(["c:road:offroad"]))
+        self.assertTrue(is_rato_eligible_hints(["c:dynamics:lat_accel"]))
+        self.assertTrue(is_rato_eligible_hints(["c:dynamics:curvature"]))
+        self.assertTrue(is_rato_eligible_hints(["c:trackability:teleport"]))
+        self.assertTrue(is_rato_eligible_hints(["c:trackability:yaw_rate"]))
         self.assertFalse(is_rato_eligible_hints(["c:rules:red_light_approach"]))
         self.assertFalse(is_rato_eligible_hints(["c:numeric:non_finite"]))
         self.assertFalse(is_rato_eligible_hints(["c:freshness:stale_age"]))
+
+    def test_bounded_point_jump_progress_is_regularized(self) -> None:
+        import numpy as np
+
+        repaired = _regularize_route_progress(
+            np.array([0.0, 0.75, 3.50, 4.25]),
+            np.array([0.0, 0.25, 0.50, 0.75]),
+            np.array([3.0, 3.0, 3.0, 3.0]),
+            max_accel_mps2=3.0,
+            terminal_s_m=20.0,
+        )
+        self.assertTrue(np.all(np.diff(repaired) >= 0.0))
+        self.assertLess(repaired[2] - repaired[1], 1.60)
+        self.assertGreater(repaired[-1], repaired[0])
 
 
 class G203RatoScenarioTests(unittest.TestCase):

@@ -221,8 +221,6 @@ def is_rato_eligible_hints(reject_messages: Sequence[str]) -> bool:
         "freshness",
         "time_order",
         "privilege",
-        "teleport",
-        "yaw_rate",
         "missing_candidate",
     )
     lateral_tokens = (
@@ -232,8 +230,13 @@ def is_rato_eligible_hints(reject_messages: Sequence[str]) -> bool:
         "cut_in",
         "static",
         "lateral",
+        "lat_accel",
+        "curvature",
         "narrow",
         "lane",
+        "trackability",
+        "teleport",
+        "yaw_rate",
     )
     # Pure red-light / speed without collision/road should stay longitudinal-only
     # unless also marked lateral (cascade may still force try when QP progress low).

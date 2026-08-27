@@ -23,7 +23,7 @@ flowchart TD
 | H3 | 共享 candidate-conditioned World scorer | 优于无动作与简单动力学/奖励基线 |
 | H4 | 锁定 split、阈值、checkpoint 后盲测 | 不读测试标签，不调门 |
 | H5 | 同候选集 World on/off 闭环 A/B | 安全不退化且效率/完成率有净收益 |
-| H6 | 冻结结论、失败和资源；可选 Safety 扩展 | 研究 claim 与工程 claim 分开 |
+| H6 | 三态 Guard、World v3 重训与 VLA-primary 闭环 | World 高分>=90%、实际 VLA>=75%，安全/进度门通过 |
 
 ## H0 — 收敛
 
@@ -91,10 +91,21 @@ CV/CTRV、手写 reward 及简单 MLP 基线比较。只有 candidate conditioni
 主结论看闭环碰撞/违规、路线完成、进度、舒适、接管/回退、deadline miss 与资源。
 只有安全不退化且任务收益可复现，才能声明 World 有用。
 
-## H6 — 关闭
+## H6 — VLA-primary 重训与关闭
 
-冻结正结果、负结果、失败尝试、配置、hash、资源和限制。完整 Safety 能力是可选独立
-工程扩展，不作为 World 排序有效性的前置条件，也不能被学习模块修改。
+H5 的负结论冻结后，H6 按用户新目标独立开展：Guard 使用 `PASS/REVIEW/REJECT`，把边界
+候选交给 World；World v3 分开学习任务效果与可信/风险；Safety 保留最后硬权限，并在 VLA
+失败后使用同一 tick Expert 兜底。
+
+H6 训练矩阵与正式矩阵 seed 隔离。正式 gate 同时看 World 原始双候选评分和最终执行：
+World 真正给 VLA 更高综合分的比例必须至少 90%，VLA 最终实际执行比例至少 75%，
+Classic + MRM 合计不超过 25%。相对纯 Classic 不安全率最多增加 1pp，配对进度 bootstrap
+95% 下界不得为负，并通过资源、切换、ping-pong 和 provenance 检查。开发强制 VLA 只用于
+收集训练 outcome，不能作为正式结果。2026-08-20 已冻结的 90% 实际执行负结果保持原样，
+新 75% 门必须使用新 schema/config/hash 和新的 held-out seed lineage。
+
+当前状态是 `IMPLEMENTED / MEASURED / NOT_VERIFIED`。必须先采新训练矩阵、重训，通过
+held-out pilot 后再跑 full；无论最终正负都冻结配置、hash、资源和限制，不能降低门槛。
 
 ## 方法依据
 

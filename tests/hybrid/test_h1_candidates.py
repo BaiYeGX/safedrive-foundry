@@ -32,7 +32,7 @@ from driving_vla.hybrid.generators import (  # noqa: E402
 )
 from driving_vla.hybrid.guard import CandidateGuard  # noqa: E402
 from driving_vla.hybrid.pipeline import H1CandidatePipeline  # noqa: E402
-from driving_vla.hybrid.router import FrozenH1Router  # noqa: E402
+from driving_vla.hybrid.router import ClassicOnlyRouter, FrozenH1Router  # noqa: E402
 from driving_vla.model.canonicalizer import (  # noqa: E402
     CanonicalizationError,
     TrajectoryCanonicalizer,
@@ -216,9 +216,38 @@ class HybridGenerationAndGuardTest(unittest.TestCase):
         vla = next(
             item for item in self.generated.candidates if item.provenance.source is HybridSource.VLA
         )
-        self.assertEqual(vla.provenance.generator_hash, "fake-simlingo-hash")
+        self.assertEqual(len(vla.provenance.generator_hash), 64)
+        self.assertNotEqual(vla.provenance.generator_hash, "fake-simlingo-hash")
         self.assertEqual(vla.candidate.source, CandidateSource.VLA_FAST)
         self.assertEqual(vla.candidate.dynamics_meta["observation_id"], "obs-20")
+
+    def test_classic_planner_failure_yields_a_traced_full_horizon_stop(self) -> None:
+        normal = ClassicExpertGenerator()
+        failed_planner = SimpleNamespace(
+            config=normal.planner.config,
+            config_hash=normal.planner.config_hash,
+            plan=lambda _request: SimpleNamespace(
+                ok=False,
+                trajectory=None,
+                failure_code="NO_FEASIBLE_SPEED",
+            ),
+        )
+        candidate = ClassicExpertGenerator(planner=failed_planner).generate(make_anchor())
+        self.assertEqual(len(candidate.candidate.points), 10)
+        self.assertAlmostEqual(candidate.candidate.points[-1].t, 2.5)
+        self.assertEqual(
+            candidate.candidate.dynamics_meta["classic_mode"],
+            "bounded_stop_fallback",
+        )
+        self.assertIn(
+            "NO_FEASIBLE_SPEED",
+            candidate.candidate.dynamics_meta["classic_fallback_reason"],
+        )
+        self.assertEqual(candidate.provenance.generator_id, "classic-bounded-stop@h6-v1")
+        guarded = CandidateGuard().evaluate(
+            HybridCandidateSet(make_anchor(), (candidate,), ())
+        )
+        self.assertTrue(guarded.candidates[0].guard.passed)
 
     def test_guard_passes_both_and_preserves_stage_order(self) -> None:
         guarded = CandidateGuard().evaluate(self.generated)
@@ -265,8 +294,92 @@ class HybridGenerationAndGuardTest(unittest.TestCase):
         )
         cset = HybridCandidateSet(self.generated.anchor, (moved,), self.generated.attempts[:1])
         result = CandidateGuard().evaluate(cset).candidates[0].guard
-        self.assertEqual(result.verdict, GuardVerdict.REJECT)
-        self.assertTrue(any("route_navigation:road:offroad" in reason for reason in result.reject_reasons))
+        self.assertEqual(result.verdict, GuardVerdict.REVIEW)
+        self.assertTrue(result.passed)
+        self.assertTrue(any("route_navigation:road:offroad" in reason for reason in result.review_reasons))
+
+    def test_gross_finite_off_corridor_reaches_world_for_bounded_repair(self) -> None:
+        original = self.generated.candidates[0]
+        # Keep the first point close enough to be a plausible current-frame
+        # continuation, then drift far outside the corridor without a numeric
+        # jump or malformed contract.
+        points = tuple(
+            replace(point, y=3.0 + 0.5 * index)
+            for index, point in enumerate(original.candidate.points)
+        )
+        canonical_hash = stable_sha256(
+            tuple((p.x, p.y, p.yaw, p.v, p.a, p.kappa) for p in points)
+        )
+        moved = replace(
+            original,
+            candidate=replace(original.candidate, points=points),
+            provenance=replace(original.provenance, canonical_sha256=canonical_hash),
+        )
+        cset = HybridCandidateSet(
+            self.generated.anchor, (moved,), self.generated.attempts[:1]
+        )
+        result = CandidateGuard().evaluate(cset).candidates[0].guard
+        self.assertEqual(result.verdict, GuardVerdict.REVIEW)
+        self.assertTrue(result.passed)
+        self.assertTrue(
+            any("route_navigation:road:offroad" in reason for reason in result.review_reasons)
+        )
+
+    def test_gross_but_finite_lateral_acceleration_reaches_world_as_review(self) -> None:
+        original = self.generated.candidates[0]
+        points = tuple(replace(point, v=10.0, kappa=0.30) for point in original.candidate.points)
+        canonical_hash = stable_sha256(
+            tuple((p.x, p.y, p.yaw, p.v, p.a, p.kappa) for p in points)
+        )
+        curved_fast = replace(
+            original,
+            candidate=replace(original.candidate, points=points),
+            provenance=replace(original.provenance, canonical_sha256=canonical_hash),
+        )
+        cset = HybridCandidateSet(
+            self.generated.anchor, (curved_fast,), self.generated.attempts[:1]
+        )
+        result = CandidateGuard().evaluate(cset).candidates[0].guard
+        self.assertEqual(result.verdict, GuardVerdict.REVIEW)
+        self.assertTrue(any("dynamics:lat_accel" in reason for reason in result.review_reasons))
+
+    def test_bounded_point_gap_is_review_but_obvious_jump_is_rejected(self) -> None:
+        original = self.generated.candidates[0]
+
+        def guarded_with_jump(delta_x: float):
+            points = list(original.candidate.points)
+            points[5] = replace(points[5], x=points[5].x + delta_x)
+            points_tuple = tuple(points)
+            moved = replace(
+                original,
+                candidate=replace(original.candidate, points=points_tuple),
+                provenance=replace(
+                    original.provenance,
+                    canonical_sha256=stable_sha256(
+                        tuple(
+                            (p.x, p.y, p.yaw, p.v, p.a, p.kappa)
+                            for p in points_tuple
+                        )
+                    ),
+                ),
+            )
+            return CandidateGuard().evaluate(
+                HybridCandidateSet(
+                    self.generated.anchor, (moved,), self.generated.attempts[:1]
+                )
+            ).candidates[0].guard
+
+        bounded = guarded_with_jump(2.0)
+        self.assertEqual(bounded.verdict, GuardVerdict.REVIEW)
+        self.assertTrue(
+            any("trackability:teleport" in reason for reason in bounded.review_reasons)
+        )
+
+        gross = guarded_with_jump(6.0)
+        self.assertEqual(gross.verdict, GuardVerdict.REJECT)
+        self.assertTrue(
+            any("trackability:teleport" in reason for reason in gross.reject_reasons)
+        )
 
     def test_route_revision_mismatch_rejects_in_binding_stage(self) -> None:
         original = self.generated.candidates[0]
@@ -336,7 +449,8 @@ class HybridGenerationAndGuardTest(unittest.TestCase):
             no_limit_anchor, (fast,), self.generated.attempts[:1]
         )
         fast_result = CandidateGuard().evaluate(fast_set).candidates[0].guard
-        self.assertTrue(any("dynamics_trackability:dynamics" in reason for reason in fast_result.reject_reasons))
+        self.assertEqual(fast_result.verdict, GuardVerdict.REVIEW)
+        self.assertTrue(any("dynamics_trackability:dynamics" in reason for reason in fast_result.review_reasons))
 
         first = original.candidate.points[0]
         actor = TrackedObject(
@@ -379,8 +493,9 @@ class HybridGenerationAndGuardTest(unittest.TestCase):
             self.generated.attempts[:1],
         )
         result = CandidateGuard(control_factory=BrakeOnly).evaluate(cset).candidates[0].guard
-        self.assertEqual(result.verdict, GuardVerdict.REJECT)
-        self.assertTrue(any("controller_mode" in reason for reason in result.reject_reasons))
+        self.assertEqual(result.verdict, GuardVerdict.REVIEW)
+        self.assertTrue(result.passed)
+        self.assertTrue(any("controller_mode" in reason for reason in result.review_reasons))
 
 
 class H1RoutingAndSafetyTest(unittest.TestCase):
@@ -448,6 +563,21 @@ class H1RoutingAndSafetyTest(unittest.TestCase):
         self.assertEqual(result_a.selection_space, SelectionSpace.NO_SELECTION_SPACE)
         self.assertEqual(result_a.selected_candidate_id, expert_id)
         self.assertEqual(result_a.selected_candidate_id, result_b.selected_candidate_id)
+
+    def test_classic_only_baseline_never_executes_vla(self) -> None:
+        router = ClassicOnlyRouter()
+        result = router.route(self.guarded)
+        expert = next(
+            item for item in self.guarded.candidates
+            if item.provenance.source is HybridSource.EXPERT
+        )
+        self.assertEqual(result.selected_candidate_id, expert.candidate.candidate_id)
+        self.assertEqual(result.preference_order, (expert.candidate.candidate_id,))
+        safety_input = router.safety_input(self.guarded, result)
+        self.assertEqual(
+            tuple(item.source for item in safety_input.candidates),
+            (CandidateSource.CLASSIC,),
+        )
 
     def test_selected_safety_executed_and_applied_ids_are_continuous(self) -> None:
         result = H1CandidatePipeline().decide(self.generated)

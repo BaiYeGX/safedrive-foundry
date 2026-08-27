@@ -40,6 +40,11 @@ from safety_kernel.validator.checks import (
 
 
 GENERATION_DEADLINE_S = 2.5
+IMMINENT_COLLISION_S = 0.75
+OBVIOUS_COLLISION_PENETRATION_M = 0.50
+GROSS_DYNAMICS_MARGIN = -5.0
+GROSS_START_GAP_M = 2.0
+GROSS_TRACKABILITY_GAP_M = 2.0
 
 
 def _margin(name: str, ok: bool, message: str, value: float | None = None) -> ConstraintMargin:
@@ -61,7 +66,12 @@ def _checks(stage: str, margins: Sequence[ConstraintMargin]) -> list[GuardCheck]
 
 
 class CandidateGuard:
-    """Fail-closed ordered Guard; rejected candidates never reach a selector."""
+    """Three-state, observable-only candidate triage.
+
+    PASS is clean, REVIEW is allowed to reach World and must be checked by
+    final Safety, and REJECT is reserved for malformed/binding failures or an
+    obvious, imminent, non-repairable problem.
+    """
 
     def __init__(
         self,
@@ -99,6 +109,7 @@ class CandidateGuard:
             ("observable_collision", lambda: self._collision_checks(candidate_set, item)),
         )
         rejects: list[str] = []
+        reviews: list[str] = []
         for stage, function in stages:
             try:
                 margins = function()
@@ -107,31 +118,104 @@ class CandidateGuard:
             all_margins.extend(margins)
             all_checks.extend(_checks(stage, margins))
             violations = hard_violations(margins)
-            if violations:
-                rejects.extend(
-                    f"{stage}:{margin.name}:{margin.message}" for margin in violations
-                )
+            blocking = []
+            for margin in violations:
+                reason = f"{stage}:{margin.name}:{margin.message}"
+                if self._is_hard_reject(stage, margin):
+                    rejects.append(reason)
+                    blocking.append(margin)
+                else:
+                    reviews.append(reason)
+            if blocking:
                 break
         else:
             controller_margins, controller_mode = self._controller_checks(candidate_set, item)
             all_margins.extend(controller_margins)
             all_checks.extend(_checks("controller_feasibility", controller_margins))
             violations = hard_violations(controller_margins)
-            rejects.extend(
-                f"controller_feasibility:{margin.name}:{margin.message}"
-                for margin in violations
-            )
+            for margin in violations:
+                reason = f"controller_feasibility:{margin.name}:{margin.message}"
+                if self._is_hard_reject("controller_feasibility", margin):
+                    rejects.append(reason)
+                else:
+                    reviews.append(reason)
 
-        verdict = GuardVerdict.REJECT if rejects else GuardVerdict.PASS
+        verdict = (
+            GuardVerdict.REJECT
+            if rejects
+            else GuardVerdict.REVIEW
+            if reviews
+            else GuardVerdict.PASS
+        )
         return GuardResult(
             candidate_id=item.candidate.candidate_id,
             verdict=verdict,
             checks=tuple(all_checks),
             reject_reasons=tuple(rejects),
+            review_reasons=tuple(reviews),
             latency_ms=(time.perf_counter() - started) * 1000.0,
             margins=tuple(all_margins),
             controller_mode=controller_mode,
         )
+
+    @staticmethod
+    def _is_hard_reject(stage: str, margin: ConstraintMargin) -> bool:
+        """Keep only indisputable failures ahead of World.
+
+        Thresholds are deliberately expressed in physical terms.  Borderline
+        collision, road, rule, dynamics and controller findings are REVIEW so
+        the richer World ranker and the final Safety repair chain can decide.
+        """
+        if stage in {"contract", "binding_freshness"}:
+            return True
+        if stage == "route_navigation":
+            if margin.name == "road":
+                # A finite off-corridor proposal is not itself an executable
+                # trajectory, but it is still a useful World candidate: the
+                # bounded RATO path can project it back into the observable
+                # legal corridor and the final validator must then pass it.
+                # Rejecting here prevented World and Safety from seeing the
+                # very cases the repair path is designed to handle.
+                return False
+            if margin.name == "navigation_start":
+                return margin.margin <= -GROSS_START_GAP_M
+            return False
+        if stage == "dynamics_trackability":
+            if margin.name == "trackability":
+                if margin.message in {"zero_dt", "too_short"}:
+                    return True
+                if margin.message == "teleport":
+                    # The validator's label also covers small point-spacing /
+                    # speed inconsistencies.  Those are finite and RATO can
+                    # rebuild their geometry, so only an unmistakably large
+                    # spatial jump is a Guard-level hard reject.
+                    return margin.margin <= -GROSS_TRACKABILITY_GAP_M
+                return False
+            # Finite speed/accel/jerk/curvature findings can be reduced by the
+            # bounded Safety repair chain.  Keep them visible to World as
+            # REVIEW; final Safety still requires a full successful recheck.
+            return False
+        if stage == "observable_collision":
+            if margin.message in {
+                "non_finite_actor",
+                "illegal_actor_size",
+                "non_finite_distance",
+                "non_finite_margin",
+            }:
+                return True
+            first_t = margin.first_violation_time_s
+            return bool(
+                first_t is not None
+                and first_t <= IMMINENT_COLLISION_S
+                and margin.margin <= -OBVIOUS_COLLISION_PENETRATION_M
+            )
+        if stage == "controller_feasibility":
+            return margin.name in {
+                "minimum_execution_horizon",
+                "controller_finite",
+                "controller_bounds",
+            }
+        return True
 
     def _contract_checks(
         self, candidate_set: HybridCandidateSet, item: HybridCandidate
@@ -315,4 +399,11 @@ class CandidateGuard:
         )
 
 
-__all__ = ["CandidateGuard", "GENERATION_DEADLINE_S"]
+__all__ = [
+    "CandidateGuard",
+    "GENERATION_DEADLINE_S",
+    "GROSS_DYNAMICS_MARGIN",
+    "GROSS_TRACKABILITY_GAP_M",
+    "IMMINENT_COLLISION_S",
+    "OBVIOUS_COLLISION_PENETRATION_M",
+]

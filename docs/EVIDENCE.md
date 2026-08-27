@@ -216,6 +216,99 @@ sha256 9c281cd69a88880acc4a1f7ad3508477144f27e729ac2d542add7a56b5c2d803
 `sensor_tick=0.05` 在同步 world 首帧未发回精确 frame；最终让相机随唯一 20 Hz world
 tick 每帧采样后通过。失败没有改名为成功或删除。
 
+### H6 VLA-primary Evidence
+
+状态：`H6 IMPLEMENTED / MEASURED / NOT_VERIFIED`。开发 Evidence 与正式负结果分开解释，
+不得把开发强制采样当作 held-out 正式验收：
+
+2026-08-27 用户把后续正式 VLA 实际执行硬门修订为 `>=75%`，Classic + MRM 合计
+`<=25%`；World 原始双候选高分门仍为 `>=90%`。这只适用于下一条新配置、新 schema、
+新 hash 和新 held-out seed lineage，不回写或重新解释下述 2026-08-20 原 90% 正式失败。
+迭代与交接合同见 [`H6_VLA75_HANDOFF.md`](H6_VLA75_HANDOFF.md)。
+
+2026-08-20 已完成一轮平衡开发训练和一次 seed 101 正式 pilot。平衡训练仍是开发
+Evidence；正式 pilot 是冻结负结果：
+
+```text
+generated/h5/h6-vla90-train-pilot-20260820-v2/
+docs/runtime-evidence/h6/h6-vla90-train-pilot-20260820-v2/
+generated/h6/world-v3-vla90-pilot-20260820-v3/
+
+generated/h5/h6-vla90-formal-pilot-20260820-v1/
+docs/runtime-evidence/h6/h6-vla90-formal-pilot-20260820-v1/final-delivery.json
+formal evidence_sha256 8dae5c2e661abafc1dceab633d3338201a7fe1e6b50ecd5e334641aa68223194
+```
+
+24-pair 开发训练中，seed 89/97 的 VLA 实际执行分别为 `566/600 = 94.33%` 和
+`544/600 = 90.67%`。旧的场景第一拍校准给出 World VLA 高分 `11/12 = 91.67%` 并通过
+readiness，但正式 600-tick 结果只有 World VLA 高分 `131/600 = 21.83%`、VLA 实际
+`285/600 = 47.50%`，因此 gate 按原门槛失败。正式安全增量为 0、进度 bootstrap lower-95
+为 `+0.629m`、scorer P99 `9.12ms` 且 0 deadline miss；切换、ping-pong 和 provenance
+也失败。
+
+正式 Guard 对 VLA 为 `PASS 453 / REVIEW 147 / REJECT 0`，Safety 只产生 18 次 Classic
+fallback，并成功执行 RATO 42 / QP 26。该证据明确否定“正式占比低是 Guard/Safety 大量
+杀 VLA”：当前主因是 World 逐 tick 泛化和第一拍校准口径。校准代码已改为逐 on-arm tick
+检查覆盖率，paired whole-policy outcome 只检查安全/进度；GPU credits 用尽使修正后的
+重训练尚未执行。
+
+所有 72 条新 CARLA 运行都记录独立 20Hz 跟车视角：开发 48 条每条 `285–847` 次更新，
+正式 24 条每条 `390–1113` 次更新，错误数为 0。
+
+此前 H6 开发失败 Evidence 继续保留：
+
+```text
+docs/runtime-evidence/h6/h6-vla90-explore-20260819/
+docs/runtime-evidence/h6/h6-vla90-explore2-20260819/
+docs/runtime-evidence/h6/h6-vla90-explore3-20260819/
+docs/runtime-evidence/h6/h6-vla90-train-pilot-20260819-v1/
+docs/runtime-evidence/h6/h6-vla90-train-pilot2-20260819-v1/
+docs/runtime-evidence/h6/h6-vla90-train-pilot3-20260819-v1/
+docs/runtime-evidence/h6/h6-camera-follow-smoke-20260819-v1/
+docs/runtime-evidence/h6/h6-vla90-train-pilot4-20260819-v1/
+```
+
+第二组在 Town03 单场景 50 tick 开发强制采样中，World 选择 VLA 50/50，最终实际 VLA
+48/50（96%），且该短跑记录到的碰撞、红灯、越界均为 0。但 Classic 候选生成不完整，
+off baseline 被污染，配置 hash 明确为 development/nonformal；acceptance 还报告 provenance、
+switch/ping-pong 等失败。因此这个 96% 只证明执行链可以让 VLA 主驾，不能证明正式目标
+已达标。
+
+第三组随后暴露 Classic 短时域失败和 VLA 3.5m/s² 高于 Safety 3.0m/s²。代码已增加完整
+时域 Classic 受限停车候选，并把 VLA 滤波加速度与横向加速度收至 2.8m/s²；按同问题最多
+两次差异化修复规则未继续第四次 CARLA 开发重跑。
+
+12-pair 训练 pilot 的 VLA 实际执行率按两次实质修复从 `422/600 = 70.33%`
+升到 `486/600 = 81.00%`，再升到 `532/600 = 88.67%`。最后一轮 Guard 为
+`PASS 292 / REVIEW 302 / REJECT 6`，开发路由把 VLA 排第一 `588/600`，最终为
+VLA 532 / Expert 64 / MRM 4。因此当前主限制在最终 Safety/修复器，而不是 Guard
+大量硬杀或 World 不愿把 VLA 排在前面。
+
+`pilot3` 因用户观察到视角未持续跟车而主动中断，保留失败 Evidence。修复后的单场景
+camera smoke 在 off/on 分别记录 572/473 次跟车更新且零错误；最后 pilot4 的
+24 个回放均记录 `266–1138` 次更新，零错误。
+
+retrain 编排 Evidence SHA256：
+
+```text
+pilot1 a609462acec348906391b8d5199b45728d9060413dbf83e9808ce4f8941aecaa
+pilot2 089a2c2d69b8041e45ea6ad6d98c9913a9062ecd162faa40d1056470166c6852
+pilot3 38c4768edc0d981d17a36f82e1e81f43b3af9b1d59d9fe4233ff6f05d0310eb9
+pilot4 a2196fe97d614a27e081c1727ee9fa33fe6b0583a0f59ac0b07d599d0c41fc71
+camera b373c7a6434d65bc2030bf31dfe2de8fdedaec07c3542941384071950ee2263e
+```
+
+pilot4 中 on/off 不安全运行数均为 `2/12`，VLA-on 总进度 `106.79m` vs
+Classic-off `50.14m`。训练 loader 在首个只有 42/50 VLA 执行的 episode 按 90%
+来源纯度门停止，没有输出 checkpoint。该失败及 Town03/Town05 红灯场景两个 arm
+的红灯违规均原样保留。
+
+下一条 H6 Evidence 仍缺：通过质量门的 108-pair 新闭环开发训练矩阵、按 tick-wise
+口径重训练并通过 readiness 的 World、用户授权的新 held-out seed lineage 的 12-pair
+pilot 与 108-pair full。新正式 gate 直接从原始 World 双候选评分计算 VLA 高分比例
+`>=90%`，另算 VLA 实际执行比例 `>=75%` 和 Classic+MRM `<=25%`。只有 VLA 一条幸存或
+开发强制选择均不能计入 World 高分。seed 101 已消耗，不能复用；历史失败不改写。
+
 ### H5 完整闭环（最终负结果）
 
 状态：`H5 COMPLETED / VERIFIED / GATE_FAILED / STOPPED`。
@@ -299,4 +392,4 @@ sha256 bff2e26a9c7ff86a55ddb38fd4e2e09482468587e4dfc53c827ec9e4d00c53fb
 | H3 World development | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
 | H4 locked evaluation | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
 | H5 World on/off | `COMPLETED / VERIFIED / GATE_FAILED / STOPPED` |
-| H6 closure | `NOT_STARTED` |
+| H6 VLA-primary redesign | `IMPLEMENTED / MEASURED / NOT_VERIFIED` |

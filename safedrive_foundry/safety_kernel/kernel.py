@@ -333,7 +333,19 @@ class SafetyKernel:
         for cand in ordered:
             joined = " ".join(reject_reasons).lower()
             tokens = (
-                ("collision", "road", "offroad", "cut_in", "static", "lateral")
+                (
+                    "collision",
+                    "road",
+                    "offroad",
+                    "cut_in",
+                    "static",
+                    "lateral",
+                    "lat_accel",
+                    "curvature",
+                    "trackability",
+                    "teleport",
+                    "yaw_rate",
+                )
                 if for_rato
                 else ("collision", "rules", "dynamics", "red_light", "speed")
             )

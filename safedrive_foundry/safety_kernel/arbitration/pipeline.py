@@ -10,7 +10,7 @@ Caller must state-lock elevated observation faults before invoking this pipeline
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from safety_kernel.arbitration.degradation import degrade_candidate_set
@@ -420,7 +420,25 @@ class ArbitrationPipeline:
                 selected=False,
             )
         stages.append(PipelineStage.ARBITRATE.value)
-        ranked = rank_candidates(prefilter_passed, scores)
+        # A World router may provide an explicit preference order.  Safety
+        # validates in that order, while retaining its own soft scores only for
+        # audit.  Missing/duplicate ids are ignored and every remaining
+        # candidate is appended deterministically.
+        preferred_ids = tuple(dict.fromkeys(candidate_set.preference_order))
+        if preferred_ids:
+            preference_rank = {
+                candidate_id: index for index, candidate_id in enumerate(preferred_ids)
+            }
+            ranked = sorted(
+                prefilter_passed,
+                key=lambda candidate: (
+                    preference_rank.get(candidate.candidate_id, len(preference_rank)),
+                    candidate.candidate_id,
+                ),
+            )
+            notes.append("external_preference_order")
+        else:
+            ranked = rank_candidates(prefilter_passed, scores)
         ranked_ids = tuple(c.candidate_id for c in ranked)
         # max_final_candidates is a primary preference window for audit only;
         # hard-legal candidates beyond top-K are still checked before repair.
@@ -431,8 +449,41 @@ class ArbitrationPipeline:
         chosen: PolicyCandidate | None = None
         all_margins: list = []
         chosen_rank_idx = -1
+        repair_result: RepairResult | None = None
+        preferred_repair_decision: SafetyDecision | None = None
+        events: list[SafetyEvent] = []
         for rank_idx, cand in enumerate(ranked):
             margins = run_full_checks(cand, obs, self.config, now_s=now_s)
+            if chosen is not None:
+                # The winner is already fixed.  Validate every remaining
+                # candidate for offline supervision/audit only; this must not
+                # change the decision, trigger repair, or contaminate the
+                # selected trajectory's margins/reject reasons.
+                viol = hard_violations(margins)
+                a = audits_map[cand.candidate_id]
+                reason = (
+                    f"{cand.candidate_id}:"
+                    + ",".join(f"{v.name}:{v.message}" for v in viol)
+                    if viol
+                    else None
+                )
+                audits_map[cand.candidate_id] = CandidateAudit(
+                    candidate_id=a.candidate_id,
+                    source=a.source,
+                    version_hint=a.version_hint,
+                    prefilter_ok=True,
+                    final_ok=not bool(viol),
+                    soft_score=a.soft_score,
+                    reject_reasons=(
+                        tuple(a.reject_reasons) + (reason,)
+                        if reason is not None
+                        else a.reject_reasons
+                    ),
+                    degradation=a.degradation,
+                    repaired=False,
+                    selected=False,
+                )
+                continue
             all_margins.extend(margins)
             viol = hard_violations(margins)
             a = audits_map[cand.candidate_id]
@@ -451,6 +502,78 @@ class ArbitrationPipeline:
                     repaired=False,
                     selected=False,
                 )
+                # When World explicitly asks for VLA first, give a repairable
+                # VLA one bounded QP/RATO attempt before falling through to the
+                # Expert from the same tick.  The repaired trajectory is still
+                # fully revalidated inside repair_fn.
+                if (
+                    rank_idx == 0
+                    and bool(preferred_ids)
+                    and cand.source in {CandidateSource.VLA_FAST, CandidateSource.VLA_SLOW}
+                ):
+                    if PipelineStage.REPAIR.value not in stages:
+                        stages.append(PipelineStage.REPAIR.value)
+                    single_set = replace(
+                        candidate_set,
+                        candidates=(cand,),
+                        preference_order=(cand.candidate_id,),
+                    )
+                    repaired_decision, attempted_repair, repair_events = repair_fn(
+                        candidate_set=single_set,
+                        obs=obs,
+                        now_s=now_s,
+                        availability=availability,
+                        mode=mode,
+                        reject_reasons=[reason],
+                        prefilter_ids=(cand.candidate_id,),
+                        all_margins=list(margins),
+                        base_latency_ms=(time.perf_counter() - t0) * 1000.0,
+                    )
+                    events.extend(repair_events)
+                    repair_result = attempted_repair
+                    if (
+                        repaired_decision is not None
+                        and attempted_repair is not None
+                        and attempted_repair.success
+                    ):
+                        preferred_repair_decision = repaired_decision
+                        chosen = repaired_decision.accepted_candidate
+                        chosen_rank_idx = rank_idx
+                        audits_map[cand.candidate_id] = CandidateAudit(
+                            candidate_id=a.candidate_id,
+                            source=a.source,
+                            version_hint=a.version_hint,
+                            prefilter_ok=True,
+                            final_ok=False,
+                            soft_score=a.soft_score,
+                            reject_reasons=tuple(a.reject_reasons) + (reason,),
+                            degradation=a.degradation,
+                            repaired=True,
+                            selected=True,
+                            repair_attempted=True,
+                            repair_success=True,
+                        )
+                        notes.append(f"preferred_vla_repaired_via_{attempted_repair.mode.value}")
+                        continue
+                    audits_map[cand.candidate_id] = CandidateAudit(
+                        candidate_id=a.candidate_id,
+                        source=a.source,
+                        version_hint=a.version_hint,
+                        prefilter_ok=True,
+                        final_ok=False,
+                        soft_score=a.soft_score,
+                        reject_reasons=tuple(a.reject_reasons) + (reason,),
+                        degradation=a.degradation,
+                        repaired=False,
+                        selected=False,
+                        repair_attempted=attempted_repair is not None,
+                        repair_success=(
+                            None
+                            if attempted_repair is None
+                            else bool(attempted_repair.success)
+                        ),
+                    )
+                    notes.append("preferred_vla_repair_failed_try_expert")
                 continue
             chosen = cand
             chosen_rank_idx = rank_idx
@@ -466,18 +589,22 @@ class ArbitrationPipeline:
                 repaired=False,
                 selected=True,
             )
-            break
+            continue
         if chosen is not None and chosen_rank_idx >= primary_k:
             notes.append("final_sweep_beyond_topk")
 
-        repair_result: RepairResult | None = None
-        events: list[SafetyEvent] = []
         decision: SafetyDecision
 
-        if chosen is not None:
+        if chosen is not None and preferred_repair_decision is not None:
+            decision = preferred_repair_decision
+        elif chosen is not None:
             from safety_kernel.validator.engine import _decision_id
 
             latency_ms = (time.perf_counter() - t0) * 1000.0
+            used_same_tick_expert_fallback = (
+                chosen.source is CandidateSource.CLASSIC
+                and "preferred_vla_repair_failed_try_expert" in notes
+            )
             accept_reasons = list(reject_pool)
             if (
                 chosen.source is CandidateSource.CLASSIC
@@ -494,7 +621,11 @@ class ArbitrationPipeline:
                 post_repair_trajectory_id=chosen.candidate_id,
                 executed_trajectory_id=chosen.candidate_id,
                 constraint_margins=tuple(all_margins),
-                decision_kind=DecisionKind.ACCEPT,
+                decision_kind=(
+                    DecisionKind.CLASSIC_FALLBACK
+                    if used_same_tick_expert_fallback
+                    else DecisionKind.ACCEPT
+                ),
                 modification_norm=0.0,
                 slack=min((m.margin for m in all_margins), default=0.0),
                 progress_loss=0.0,
@@ -513,7 +644,8 @@ class ArbitrationPipeline:
             )
         else:
             # --- REPAIR ---
-            stages.append(PipelineStage.REPAIR.value)
+            if PipelineStage.REPAIR.value not in stages:
+                stages.append(PipelineStage.REPAIR.value)
             repaired_decision, repair_result, repair_events = repair_fn(
                 candidate_set=candidate_set,
                 obs=obs,

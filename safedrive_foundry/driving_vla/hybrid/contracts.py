@@ -28,6 +28,7 @@ class HybridSource(str, Enum):
 
 class GuardVerdict(str, Enum):
     PASS = "PASS"
+    REVIEW = "REVIEW"
     REJECT = "REJECT"
 
 
@@ -172,15 +173,30 @@ class GuardResult:
     checks: tuple[GuardCheck, ...]
     reject_reasons: tuple[str, ...]
     latency_ms: float
+    review_reasons: tuple[str, ...] = ()
     margins: tuple[ConstraintMargin, ...] = ()
     controller_mode: str | None = None
 
     @property
     def passed(self) -> bool:
+        """Whether the candidate may reach World/Safety.
+
+        REVIEW is intentionally eligible: Guard has found something that the
+        final Safety layer must validate or repair, but not a malformed or
+        obviously impossible candidate.
+        """
+        return self.verdict is not GuardVerdict.REJECT
+
+    @property
+    def clean_pass(self) -> bool:
         return self.verdict is GuardVerdict.PASS
 
+    @property
+    def needs_review(self) -> bool:
+        return self.verdict is GuardVerdict.REVIEW
+
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "candidate_id": self.candidate_id,
             "verdict": self.verdict.value,
             "checks": [check.to_dict() for check in self.checks],
@@ -200,6 +216,9 @@ class GuardResult:
                 for margin in self.margins
             ],
         }
+        if self.review_reasons:
+            payload["review_reasons"] = list(self.review_reasons)
+        return payload
 
 
 @dataclass(frozen=True)
@@ -272,7 +291,10 @@ class HybridCandidateSet:
                 raise HybridContractError("candidate_observation_mismatch")
 
     def to_policy_candidate_set(
-        self, candidates: tuple[PolicyCandidate, ...] | None = None
+        self,
+        candidates: tuple[PolicyCandidate, ...] | None = None,
+        *,
+        preference_order: tuple[str, ...] = (),
     ) -> PolicyCandidateSet:
         selected = tuple(item.candidate for item in self.candidates) if candidates is None else candidates
         bundle = self.anchor.bundle
@@ -287,6 +309,7 @@ class HybridCandidateSet:
             candidates=selected,
             schema_version=SCHEMA_VERSION,
             coordinate_frame="map",
+            preference_order=preference_order,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -309,9 +332,18 @@ class RoutingResult:
     reason: str
     difference: CandidateDifference | None
     scores: Mapping[str, float] = field(default_factory=dict)
+    review_candidate_ids: tuple[str, ...] = ()
+    preference_order: tuple[str, ...] = ()
+    # Raw and stabilized choices are separate audit channels.  The defaults
+    # preserve the H1/H5 serialized contract for old callers.
+    raw_preferred_candidate_id: str | None = None
+    raw_preferred_source: str | None = None
+    raw_gate_reasons: Mapping[str, Any] = field(default_factory=dict)
+    stabilized_preferred_candidate_id: str | None = None
+    stabilized_preferred_source: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "pass_candidate_ids": list(self.pass_candidate_ids),
             "rejected_candidate_ids": list(self.rejected_candidate_ids),
             "selected_candidate_id": self.selected_candidate_id,
@@ -322,6 +354,21 @@ class RoutingResult:
             "difference": None if self.difference is None else self.difference.to_dict(),
             "scores": dict(self.scores),
         }
+        if self.review_candidate_ids:
+            payload["review_candidate_ids"] = list(self.review_candidate_ids)
+        if self.preference_order:
+            payload["preference_order"] = list(self.preference_order)
+        if self.raw_preferred_candidate_id is not None:
+            payload["raw_preferred_candidate_id"] = self.raw_preferred_candidate_id
+        if self.raw_preferred_source is not None:
+            payload["raw_preferred_source"] = self.raw_preferred_source
+        if self.raw_gate_reasons:
+            payload["raw_gate_reasons"] = dict(self.raw_gate_reasons)
+        if self.stabilized_preferred_candidate_id is not None:
+            payload["stabilized_preferred_candidate_id"] = self.stabilized_preferred_candidate_id
+        if self.stabilized_preferred_source is not None:
+            payload["stabilized_preferred_source"] = self.stabilized_preferred_source
+        return payload
 
 
 __all__ = [

@@ -234,8 +234,49 @@ def check_dynamics(candidate: PolicyCandidate, cfg: SafetyKernelConfig) -> Const
     return ConstraintMargin(name="dynamics", margin=worst if math.isfinite(worst) else 1.0, hard=True, message="ok")
 
 
-def _actor_radius(actor: TrackedObject, cfg: SafetyKernelConfig) -> float:
-    return 0.5 * math.hypot(actor.length_m, actor.width_m) + cfg.collision_inflate_m + 0.5 * cfg.width_m
+def _obb_signed_margin(
+    *,
+    ego_x: float,
+    ego_y: float,
+    ego_yaw: float,
+    actor_x: float,
+    actor_y: float,
+    actor_yaw: float,
+    actor_length_m: float,
+    actor_width_m: float,
+    cfg: SafetyKernelConfig,
+) -> float:
+    """SAT separation for two oriented vehicle boxes.
+
+    Positive means a separating gap exists.  Negative means the boxes overlap,
+    with the magnitude representing the shallowest penetration.  This avoids
+    the old half-diagonal circles which treated adjacent lanes as collisions.
+    """
+    ego_axes = (
+        (math.cos(ego_yaw), math.sin(ego_yaw)),
+        (-math.sin(ego_yaw), math.cos(ego_yaw)),
+    )
+    actor_axes = (
+        (math.cos(actor_yaw), math.sin(actor_yaw)),
+        (-math.sin(actor_yaw), math.cos(actor_yaw)),
+    )
+    delta = (actor_x - ego_x, actor_y - ego_y)
+    ego_half = (0.5 * cfg.length_m, 0.5 * cfg.width_m)
+    actor_half = (0.5 * actor_length_m, 0.5 * actor_width_m)
+    worst_gap = -float("inf")
+    for axis in (*ego_axes, *actor_axes):
+        center_distance = abs(delta[0] * axis[0] + delta[1] * axis[1])
+        ego_radius = (
+            ego_half[0] * abs(ego_axes[0][0] * axis[0] + ego_axes[0][1] * axis[1])
+            + ego_half[1] * abs(ego_axes[1][0] * axis[0] + ego_axes[1][1] * axis[1])
+        )
+        actor_radius = (
+            actor_half[0] * abs(actor_axes[0][0] * axis[0] + actor_axes[0][1] * axis[1])
+            + actor_half[1] * abs(actor_axes[1][0] * axis[0] + actor_axes[1][1] * axis[1])
+        )
+        gap = center_distance - ego_radius - actor_radius - cfg.collision_inflate_m
+        worst_gap = max(worst_gap, gap)
+    return worst_gap
 
 
 def check_collision(
@@ -278,15 +319,28 @@ def check_collision(
     first_t = None
     actor_hit = None
     for p in candidate.points:
-        # Constant-velocity actor prediction for hard envelope.
-        dt = p.t - candidate.points[0].t
+        # Actor state is measured at actor.observed_time_s.  Candidate times are
+        # relative to the current anchor, so the first point at t=0.25 must use
+        # actor position + velocity*0.25 (the old code lagged every actor by one
+        # planning step).
         for actor in obs.actors:
             if actor.lost:
                 continue
+            dt = max(0.0, obs.simulation_time_s - actor.observed_time_s + p.t)
             ax = actor.x + actor.vx * dt
             ay = actor.y + actor.vy * dt
-            dist = math.hypot(p.x - ax, p.y - ay)
-            if not math.isfinite(dist):
+            margin = _obb_signed_margin(
+                ego_x=p.x,
+                ego_y=p.y,
+                ego_yaw=p.yaw,
+                actor_x=ax,
+                actor_y=ay,
+                actor_yaw=actor.yaw,
+                actor_length_m=actor.length_m,
+                actor_width_m=actor.width_m,
+                cfg=cfg,
+            )
+            if not math.isfinite(margin):
                 return ConstraintMargin(
                     name="collision",
                     margin=-1.0,
@@ -295,8 +349,6 @@ def check_collision(
                     actor_id=actor.actor_id,
                     message="non_finite_distance",
                 )
-            radius = _actor_radius(actor, cfg)
-            margin = dist - radius
             if margin < worst:
                 worst = margin
             if margin < 0.0 and first_t is None:
@@ -351,17 +403,47 @@ def check_rules(
             distance = light.stop_line_distance_m if light.stop_line_distance_m is not None else light.distance_m
             if distance > cfg.red_light_stop_distance_m:
                 continue
-            # Near red light: trajectory must not carry high speed through the stop zone.
+            # Judge the actual stop-line plan, not every approach point.  A car
+            # may legally approach faster than 1 m/s if its planned braking can
+            # still stop before the line.  Candidate path length is the only
+            # observable route-progress proxy available in this contract.
+            if distance < -1.0:
+                continue
+            travelled = 0.0
+            previous_x, previous_y = obs.ego_x, obs.ego_y
+            terminal_speed = 0.0
+            crossed_at = None
             for p in candidate.points:
-                if p.t > 2.0:
-                    break
-                margin = cfg.red_light_max_approach_speed_mps - abs(p.v)
-                if margin < worst:
-                    worst = margin
-                if margin < 0.0 and first_t is None:
-                    first_t = p.t
-                    rule_id = f"red_light:{light.light_id}"
-                    msg = "red_light_approach"
+                travelled += math.hypot(p.x - previous_x, p.y - previous_y)
+                previous_x, previous_y = p.x, p.y
+                terminal_speed = abs(p.v)
+                if travelled > distance + 0.25 and crossed_at is None:
+                    crossed_at = p.t
+
+            # Evaluate the trajectory as a plan.  Requiring every approach
+            # point to be able to stop *again from that point* incorrectly
+            # rejected trajectories that were already braking.  A legal plan
+            # must not cross the line and, at its terminal state, must retain
+            # enough room for a bounded stop beyond the finite horizon.
+            crossing_margin = distance - travelled + 0.25
+            terminal_remaining = distance - travelled
+            terminal_stopping_distance = (
+                terminal_speed * terminal_speed
+                / max(0.1, 2.0 * cfg.max_decel_mps2)
+                + 0.50
+            )
+            stopping_margin = terminal_remaining - terminal_stopping_distance
+            margin = min(crossing_margin, stopping_margin)
+            if margin < worst:
+                worst = margin
+            if margin < 0.0 and first_t is None:
+                first_t = crossed_at if crossed_at is not None else candidate.points[-1].t
+                rule_id = f"red_light:{light.light_id}"
+                msg = (
+                    "red_light_crossing"
+                    if crossed_at is not None
+                    else "red_light_unstoppable"
+                )
     if worst < 0.0:
         return ConstraintMargin(
             name="rules",

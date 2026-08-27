@@ -45,6 +45,13 @@ class FrozenH1Router:
                 if item.guard is None or not item.guard.passed
             )
         )
+        review_ids = tuple(
+            sorted(
+                item.candidate.candidate_id
+                for item in passed
+                if bool(getattr(item.guard, "needs_review", False))
+            )
+        )
         if not passed:
             return RoutingResult(
                 pass_candidate_ids=(),
@@ -55,6 +62,8 @@ class FrozenH1Router:
                 selector="none",
                 reason="zero_guard_pass_safety_fallback",
                 difference=None,
+                review_candidate_ids=(),
+                preference_order=(),
             )
         if len(passed) == 1:
             return RoutingResult(
@@ -66,6 +75,8 @@ class FrozenH1Router:
                 selector="direct_single_pass",
                 reason="single_guard_pass",
                 difference=None,
+                review_candidate_ids=review_ids,
+                preference_order=pass_ids,
             )
 
         left, right = passed[0].candidate, passed[1].candidate
@@ -104,6 +115,8 @@ class FrozenH1Router:
             ),
             difference=difference,
             scores={score.candidate_id: score.total for score in scores},
+            review_candidate_ids=review_ids,
+            preference_order=tuple(candidate.candidate_id for candidate in ranked),
         )
 
     @staticmethod
@@ -122,8 +135,69 @@ class FrozenH1Router:
         return candidate_set.to_policy_candidate_set(selected)
 
 
+class ClassicOnlyRouter:
+    """Explicit Classic-only baseline; never leaks VLA into the off arm."""
+
+    selector_name = "classic_only_baseline"
+
+    def route(self, candidate_set: HybridCandidateSet) -> RoutingResult:
+        eligible = tuple(
+            item
+            for item in candidate_set.candidates
+            if item.guard is not None and item.guard.passed
+        )
+        expert = tuple(
+            item for item in eligible if str(item.provenance.source.value) == "expert"
+        )
+        rejected_ids = tuple(
+            sorted(
+                item.candidate.candidate_id
+                for item in candidate_set.candidates
+                if item.guard is None or not item.guard.passed
+            )
+        )
+        if not expert:
+            return RoutingResult(
+                pass_candidate_ids=(),
+                rejected_candidate_ids=rejected_ids,
+                selected_candidate_id=None,
+                selection_space=SelectionSpace.ZERO_PASS,
+                world=WorldDisposition.DEFERRED_NOT_APPLICABLE,
+                selector=self.selector_name,
+                reason="classic_baseline_unavailable",
+                difference=None,
+                review_candidate_ids=(),
+                preference_order=(),
+            )
+        if len(expert) != 1:
+            raise RuntimeError("classic_baseline_requires_one_expert")
+        selected = expert[0]
+        candidate_id = selected.candidate.candidate_id
+        return RoutingResult(
+            pass_candidate_ids=(candidate_id,),
+            rejected_candidate_ids=rejected_ids,
+            selected_candidate_id=candidate_id,
+            selection_space=SelectionSpace.SINGLE_PASS,
+            world=WorldDisposition.DEFERRED_NOT_APPLICABLE,
+            selector=self.selector_name,
+            reason="classic_only_baseline",
+            difference=None,
+            review_candidate_ids=(candidate_id,)
+            if bool(getattr(selected.guard, "needs_review", False))
+            else (),
+            preference_order=(candidate_id,),
+        )
+
+    @staticmethod
+    def safety_input(
+        candidate_set: HybridCandidateSet, routing: RoutingResult
+    ) -> PolicyCandidateSet:
+        return FrozenH1Router.safety_input(candidate_set, routing)
+
+
 __all__ = [
     "FrozenH1Router",
+    "ClassicOnlyRouter",
     "MAX_DUPLICATE_POSITION_DELTA_M",
     "MAX_DUPLICATE_RMS_SPEED_DELTA_MPS",
 ]

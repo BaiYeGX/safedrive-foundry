@@ -592,7 +592,22 @@ class ScenarioRuntime:
         assert self.world is not None
         blueprints = self.world.get_blueprint_library()
         for actor_spec in spec.ordered_actors():
-            actor = self.world.try_spawn_actor(blueprints.find(actor_spec.blueprint), actor_spec.transform)
+            bp_found = blueprints.find(actor_spec.blueprint)
+            actor = self.world.try_spawn_actor(bp_found, actor_spec.transform)
+            if actor is None:
+                try:
+                    import carla as _carla
+                    raised = _carla.Transform(
+                        _carla.Location(
+                            x=float(actor_spec.transform.location.x),
+                            y=float(actor_spec.transform.location.y),
+                            z=float(actor_spec.transform.location.z) + 0.8,
+                        ),
+                        actor_spec.transform.rotation,
+                    )
+                    actor = self.world.try_spawn_actor(bp_found, raised)
+                except Exception:
+                    pass
             if actor is None:
                 raise RuntimeViolation(f"spawn_failed actor={actor_spec.name}")
             self._actors[actor_spec.name] = actor

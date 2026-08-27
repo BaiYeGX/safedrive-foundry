@@ -126,6 +126,7 @@ def degrade_candidate_set(
         candidates=tuple(out),
         schema_version=candidate_set.schema_version,
         coordinate_frame=candidate_set.coordinate_frame,
+        preference_order=candidate_set.preference_order,
     )
     return degraded_set, reasons
 

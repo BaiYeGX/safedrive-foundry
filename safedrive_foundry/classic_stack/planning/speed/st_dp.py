@@ -203,7 +203,13 @@ def solve_st_dp(
                 return [], "ST_INFEASIBLE_STOP"
             partial_stop = True
     else:
-        for ti in range(grid.t_bins):
+        # A receding-horizon planner must return a full-horizon nominal
+        # profile.  Searching every time layer lets the progress reward choose
+        # a short prefix (observed at 1.4--2.0 s), which later violates the
+        # shared 2.5 s candidate contract and makes the Expert disappear.
+        # Occupied/stop cases have their own explicit prefix semantics above;
+        # ordinary driving does not.
+        for ti in (grid.t_bins - 1,):
             for si in range(grid.s_bins):
                 if cost[ti][si] >= INF / 2:
                     continue

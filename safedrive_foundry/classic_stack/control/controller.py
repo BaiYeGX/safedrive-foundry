@@ -306,10 +306,12 @@ class ControlLoop:
                 ey = -math.sin(ref.yaw) * (x - ref.x) + math.cos(ref.yaw) * (y - ref.y)
                 epsi = wrap_angle(yaw - ref.yaw)
                 ev = v - ref.v
-                cost_grad_s += w["w_cte"] * ey * 0.1 + w["w_heading"] * epsi + w["w_steer"] * s_cmd + w["w_dsteer"] * (
+                cost_grad_s += w["w_cte"] * ey * 0.1 + w["w_heading"] * epsi + w["w_steer"] * s_cmd + w.get("w_dsteer", 0.5) * (
                     s_cmd - steer
                 )
-                cost_grad_a += w["w_speed"] * ev + w["w_accel"] * a_cmd
+                cost_grad_a += w["w_speed"] * ev + w["w_accel"] * a_cmd + w.get("w_daccel", 0.5) * (
+                    a_cmd - accel
+                )
             # gradient step
             s_new = clamp(s_cmd - 0.15 * cost_grad_s, -cfg.max_steer_rad, cfg.max_steer_rad)
             a_new = clamp(a_cmd - 0.15 * cost_grad_a, -cfg.max_brake_mps2, cfg.max_accel_mps2)

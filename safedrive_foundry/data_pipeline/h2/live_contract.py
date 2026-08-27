@@ -101,6 +101,58 @@ def route_projection(x: float, y: float, route: Sequence[tuple[float, float]]) -
     return best_s, best_distance
 
 
+def route_follow_steer(
+    x: float,
+    y: float,
+    yaw: float,
+    speed_mps: float,
+    route: Sequence[tuple[float, float]],
+    *,
+    min_lookahead_m: float = 4.0,
+    speed_lookahead_s: float = 1.2,
+    wheelbase_m: float = 2.875,
+    max_wheel_angle_rad: float = 0.60,
+    max_normalized_steer: float = 0.35,
+) -> float:
+    """Return a bounded CARLA steer command that follows ``route``.
+
+    This is used only by opt-in live pre-roll scripts.  It prevents a long
+    throttle-only pre-roll from driving straight through a curved route while
+    leaving all frozen H2-H5 collection behaviour unchanged.
+    """
+
+    if len(route) < 2 or max_wheel_angle_rad <= 0.0:
+        return 0.0
+    projected_s, _ = route_projection(x, y, route)
+    lookahead = max(float(min_lookahead_m), max(0.0, float(speed_mps)) * float(speed_lookahead_s))
+    target_s = projected_s + lookahead
+    accumulated = 0.0
+    target_x, target_y = float(route[-1][0]), float(route[-1][1])
+    for index in range(1, len(route)):
+        ax, ay = route[index - 1]
+        bx, by = route[index]
+        segment = math.hypot(float(bx) - float(ax), float(by) - float(ay))
+        if segment <= 1e-9:
+            continue
+        if accumulated + segment >= target_s:
+            fraction = max(0.0, min(1.0, (target_s - accumulated) / segment))
+            target_x = float(ax) + fraction * (float(bx) - float(ax))
+            target_y = float(ay) + fraction * (float(by) - float(ay))
+            break
+        accumulated += segment
+
+    dx, dy = target_x - float(x), target_y - float(y)
+    distance_sq = dx * dx + dy * dy
+    if distance_sq <= 1e-9:
+        return 0.0
+    local_y = -math.sin(float(yaw)) * dx + math.cos(float(yaw)) * dy
+    curvature = 2.0 * local_y / distance_sq
+    wheel_angle = math.atan(float(wheelbase_m) * curvature)
+    normalized = wheel_angle / float(max_wheel_angle_rad)
+    limit = abs(float(max_normalized_steer))
+    return max(-limit, min(limit, normalized))
+
+
 def rms(values: Sequence[float]) -> float:
     return math.sqrt(sum(float(value) ** 2 for value in values) / len(values)) if values else 0.0
 
@@ -174,6 +226,6 @@ def make_branch_outcome(
 __all__ = [
     "COLLECTOR_VERSION", "SCENARIO_ALGORITHM_VERSION", "actor_initial_state",
     "candidate_snapshot", "kinematic_metrics", "make_branch_outcome",
-    "point_to_polyline_distance", "reset_signature", "rms", "route_projection",
+    "point_to_polyline_distance", "reset_signature", "rms", "route_follow_steer", "route_projection",
     "trajectory_sha256",
 ]

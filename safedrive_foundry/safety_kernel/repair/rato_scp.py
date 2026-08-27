@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import replace
 from typing import Sequence
 
 import numpy as np
@@ -84,6 +85,63 @@ def _yaw_kappa(xs: np.ndarray, ys: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return yaw, kappa
 
 
+def _actor_xy_at_candidate_time(
+    actor: object,
+    obs: ObservableSnapshot,
+    candidate_t_s: float,
+) -> tuple[float, float]:
+    """Align actor prediction to a candidate's anchor-relative timestamp."""
+
+    dt = max(
+        0.0,
+        float(obs.simulation_time_s)
+        - float(getattr(actor, "observed_time_s"))
+        + float(candidate_t_s),
+    )
+    return (
+        float(getattr(actor, "x")) + float(getattr(actor, "vx")) * dt,
+        float(getattr(actor, "y")) + float(getattr(actor, "vy")) * dt,
+    )
+
+
+def _regularize_route_progress(
+    s_ref: np.ndarray,
+    times: np.ndarray,
+    v_seed: np.ndarray,
+    *,
+    max_accel_mps2: float,
+    terminal_s_m: float,
+) -> np.ndarray:
+    """Remove bounded longitudinal point jumps before lateral reconstruction.
+
+    Guard admits small spacing/speed mismatches for repair.  RATO previously
+    changed only lateral offsets and therefore reproduced the same bad
+    longitudinal step during revalidation.  This caps each forward step to a
+    conservative version of the validator's reachable envelope while keeping
+    route order and as much of the proposed progress as possible.
+    """
+
+    s = np.asarray(s_ref, dtype=float).copy()
+    if s.size == 0:
+        return s
+    s = np.clip(s, 0.0, max(0.0, float(terminal_s_m)))
+    for k in range(1, len(s)):
+        dt = max(float(times[k] - times[k - 1]), 1e-3)
+        average_speed = 0.5 * (
+            abs(float(v_seed[k - 1])) + abs(float(v_seed[k]))
+        )
+        # Validator allows +1 m position slack.  Reserve 0.25 m so floating
+        # point noise and the reconstructed lateral component cannot put the
+        # repaired point back on the hard boundary.
+        reachable = (
+            average_speed * dt
+            + 0.5 * max_accel_mps2 * dt * dt
+            + 0.75
+        )
+        s[k] = min(max(float(s[k]), float(s[k - 1])), float(s[k - 1]) + reachable)
+    return s
+
+
 class RestrictedRatoScpRepair:
     """Secondary restricted RATO-SCP repairer (Frenet lateral SCP + speed re-profile)."""
 
@@ -154,6 +212,14 @@ class RestrictedRatoScpRepair:
         n = len(points)
         times = np.array([p.t for p in points], dtype=float)
         s_ref, d_ref, _, _, _, _ = frenet_of_trajectory(points, frame)
+        v_seed = np.array([max(0.0, p.v) for p in points], dtype=float)
+        s_ref = _regularize_route_progress(
+            s_ref,
+            times,
+            v_seed,
+            max_accel_mps2=cfg.max_accel_mps2,
+            terminal_s_m=float(frame.s[-1]),
+        )
         d_bound = frame.lateral_room_m
 
         # Seed lateral offsets: free-side dodge guess, optional warm start blend.
@@ -297,7 +363,7 @@ class RestrictedRatoScpRepair:
             ys=ys,
             yaw=yaw,
             kappa=kappa,
-            v_seed=np.array([max(0.0, p.v) for p in points], dtype=float),
+            v_seed=v_seed,
             obs=obs,
             ego_v=max(0.0, float(obs.ego_v if math.isfinite(obs.ego_v) else points[0].v)),
             ego_a=float(obs.ego_a if math.isfinite(obs.ego_a) else points[0].a),
@@ -414,6 +480,46 @@ class RestrictedRatoScpRepair:
                 ),
                 metrics=metrics,
                 reason="timeout",
+            )
+
+        # The SCP uses a cheap circular envelope while optimizing, but the
+        # deployed validator uses oriented vehicle boxes plus every other hard
+        # constraint.  Never advertise a repaired trajectory as executable
+        # until that final contract has passed.  This catches shallow
+        # corner-overlap cases that the optimizer's approximation can miss.
+        from safety_kernel.validator.checks import hard_violations, run_full_checks
+
+        revalidation_violations = hard_violations(
+            run_full_checks(repaired, obs, cfg, now_s=now)
+        )
+        if revalidation_violations:
+            violation_summary = ",".join(
+                f"{margin.name}:{margin.message}" for margin in revalidation_violations
+            )
+            return RepairResult(
+                mode=RepairMode.RATO,
+                success=False,
+                candidate=None,
+                pre_repair_id=candidate.candidate_id,
+                post_repair_id=None,
+                solver_trace=SolverTrace(
+                    status=SolverStatus.REVALIDATE_FAIL,
+                    iterations=total_qp_iters,
+                    primal_residual=0.0,
+                    dual_residual=0.0,
+                    objective=prev_obj if math.isfinite(prev_obj) else 0.0,
+                    latency_ms=latency_ms,
+                    warm_started=warm_any,
+                    backend=last_backend,
+                    message=violation_summary,
+                    extras={
+                        "scp_iters": scp_iters_done,
+                        "deadline_ms": rato.deadline_ms,
+                        "revalidation_failed": True,
+                    },
+                ),
+                metrics=metrics,
+                reason="revalidate_fail",
             )
 
         self._last_d = d_cur.copy()
@@ -535,18 +641,14 @@ class RestrictedRatoScpRepair:
         frame = build_corridor_frame(obs, cfg)
         assert frame is not None
         xs_lin, ys_lin, nxs, nys = xy_from_frenet(s_ref, d_cur, frame)
-        t0p = float(times[0])
-
         for k in range(n):
-            dt = float(times[k] - t0p)
             px, py = float(xs_lin[k]), float(ys_lin[k])
             nx, ny = float(nxs[k]), float(nys[k])
             s_k = float(s_ref[k])
             for actor in obs.actors:
                 if actor.lost:
                     continue
-                ax = actor.x + actor.vx * dt
-                ay = actor.y + actor.vy * dt
+                ax, ay = _actor_xy_at_candidate_time(actor, obs, float(times[k]))
                 radius = _actor_radius(actor.length_m, actor.width_m, cfg)
                 a_s, a_d, _, _, _, _ = project_xy(frame, ax, ay)
                 # Longitudinal proximity gate: only constrain when s-near the actor.
@@ -615,9 +717,7 @@ class RestrictedRatoScpRepair:
             for actor in obs.actors:
                 if actor.lost:
                     continue
-                dt = float(times[k] - t0p)
-                ax = actor.x + actor.vx * dt
-                ay = actor.y + actor.vy * dt
+                ax, ay = _actor_xy_at_candidate_time(actor, obs, float(times[k]))
                 a_s, a_d, _, _, _, _ = project_xy(frame, ax, ay)
                 radius = _actor_radius(actor.length_m, actor.width_m, cfg)
                 long_gate = 0.5 * actor.length_m + cfg.collision_inflate_m + 0.5 * cfg.length_m + 1.0
@@ -662,7 +762,6 @@ class RestrictedRatoScpRepair:
         """Initial lateral profile: reference + free-side dodge near actors."""
         cfg = self.config
         d = d_ref.copy()
-        t0p = float(times[0])
         n = len(d)
         for k in range(n):
             s_k = float(s_ref[k])
@@ -670,9 +769,7 @@ class RestrictedRatoScpRepair:
             for actor in obs.actors:
                 if actor.lost:
                     continue
-                dt = float(times[k] - t0p)
-                ax = actor.x + actor.vx * dt
-                ay = actor.y + actor.vy * dt
+                ax, ay = _actor_xy_at_candidate_time(actor, obs, float(times[k]))
                 a_s, a_d, _, _, _, _ = project_xy(frame, ax, ay)  # type: ignore[arg-type]
                 long_gate = 0.5 * actor.length_m + cfg.collision_inflate_m + 0.5 * cfg.length_m + 2.0
                 if abs(s_k - a_s) > long_gate + 3.0:
@@ -709,19 +806,18 @@ class RestrictedRatoScpRepair:
         cfg = self.config
         d = d_cur.copy()
         xs, ys, _, _ = xy_from_frenet(s_ref, d, frame)  # type: ignore[arg-type]
-        t0p = float(times[0])
         for _ in range(3):
             worst = 0.0
             worst_k = -1
             worst_side = 1.0
             for k in range(len(d)):
-                dt = float(times[k] - t0p)
                 px, py = float(xs[k]), float(ys[k])
                 for actor in obs.actors:
                     if actor.lost:
                         continue
-                    ax = actor.x + actor.vx * dt
-                    ay = actor.y + actor.vy * dt
+                    ax, ay = _actor_xy_at_candidate_time(
+                        actor, obs, float(times[k])
+                    )
                     radius = _actor_radius(actor.length_m, actor.width_m, cfg)
                     margin = math.hypot(px - ax, py - ay) - radius
                     if margin < worst:
@@ -872,6 +968,22 @@ class RestrictedRatoScpRepair:
                     jerk=jerk,
                 )
             )
+        # Lateral-acceleration capping above can lower the speed after the
+        # first yaw-rate pass.  Re-apply the yaw envelope with the *final*
+        # speeds so a repaired curve cannot fail revalidation merely because
+        # its earlier, faster speed was used to bound heading change.
+        bounded: list[TrajectoryPoint] = [pts[0]]
+        for k in range(1, len(pts)):
+            previous = bounded[-1]
+            current = pts[k]
+            dt = max(float(current.t - previous.t), 1e-3)
+            max_dyaw = abs(previous.v) * cfg.max_curvature_per_m * dt + 0.35
+            dyaw = (current.yaw - previous.yaw + math.pi) % (2.0 * math.pi) - math.pi
+            yaw_k = current.yaw
+            if abs(dyaw) > max_dyaw:
+                yaw_k = previous.yaw + math.copysign(max_dyaw, dyaw)
+            bounded.append(replace(current, yaw=float(yaw_k)))
+        pts = bounded
         return pts
 
     def _min_collision_margin(
@@ -883,14 +995,11 @@ class RestrictedRatoScpRepair:
         if not obs.actors:
             return 1.0
         worst = float("inf")
-        t0 = points[0].t
         for p in points:
-            dt = p.t - t0
             for actor in obs.actors:
                 if actor.lost:
                     continue
-                ax = actor.x + actor.vx * dt
-                ay = actor.y + actor.vy * dt
+                ax, ay = _actor_xy_at_candidate_time(actor, obs, float(p.t))
                 radius = _actor_radius(actor.length_m, actor.width_m, cfg)
                 worst = min(worst, math.hypot(p.x - ax, p.y - ay) - radius)
         return float(worst if math.isfinite(worst) else 1.0)

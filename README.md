@@ -1,7 +1,7 @@
 # SafeDrive Foundry
 
 SafeDrive Foundry 是面向单机 CARLA–ROS 2 软件在环研究的 Hybrid 驾驶项目。活动项目
-只使用 H 路线：Classic Expert 与 nominal VLA 独立提议轨迹，逐候选 Guard 先过滤，
+只使用 H 路线：Classic Expert 与 nominal VLA 独立提议轨迹，逐候选 Guard 先做三态审查，
 candidate-conditioned World 只负责排序或 defer，最终由 Safety 与 MPC/PID 执行。
 
 ```mermaid
@@ -17,14 +17,16 @@ flowchart LR
 ```
 
 当前状态：`H0 VERIFIED / H1 VERIFIED / H2 GATE_PASSED / H3 GATE_PASSED /
-H4 GATE_PASSED / H5 GATE_FAILED / STOPPED`。
+H4 GATE_PASSED / H5 GATE_FAILED / STOPPED / H6 IMPLEMENTED + MEASURED, NOT_VERIFIED`。
 H3v2 已基于冻结 H2 数据与新采集的 96 场真实 CARLA Challenge 数据完成嵌套 OOF
 训练与验收，最终 Evidence 为 `docs/runtime-evidence/h3/h3-v2-20260815d-final/`。
 H4 locked evaluation 已完成盲测，Evidence 为
 `docs/runtime-evidence/h4/h4-locked-20260816-final/`。
 H5 完整闭环 on/off 已执行 222 runs，最终 Evidence 为
 `docs/runtime-evidence/h5/h5-pilot-all2/final-delivery.json`，结果为 `GATE_FAILED`，
-World 闭环收益不可复现。在线 Oracle 仍被禁止。
+World 闭环收益不可复现。H6 已实现三态 Guard、World v3 与 VLA-primary 验收链，但新训练
+矩阵、重训练和 held-out formal pilot/full 尚未完成；开发态 96% 不能当正式结论。在线
+Oracle 仍被禁止。
 
 ## 从这里开始
 
@@ -40,6 +42,10 @@ World 闭环收益不可复现。在线 Oracle 仍被禁止。
 8. H5 进入检查见 [H5_ENTRY](docs/H5_ENTRY.md)。
 9. H5 实验矩阵见 [H5_EXPERIMENT_MATRIX](docs/H5_EXPERIMENT_MATRIX.md)。
 10. H5 最终负结果见 [PROGRESS](PROGRESS.md) 与 `docs/runtime-evidence/h5/h5-pilot-all2/`。
+11. H6 当前合同、开发失败与下一验收顺序见 [START_TASK](START_TASK.md) 和
+    [EVIDENCE](docs/EVIDENCE.md)。
+12. H6 的 75% 实际主驾修订、逐 tick 诊断、研究依据和新对话接手顺序见
+    [H6_VLA75_HANDOFF](docs/H6_VLA75_HANDOFF.md)。
 
 ## 固定边界
 

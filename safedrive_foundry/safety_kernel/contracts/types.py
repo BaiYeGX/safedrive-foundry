@@ -107,6 +107,9 @@ class PolicyCandidateSet:
     candidates: tuple[PolicyCandidate, ...]
     schema_version: str
     coordinate_frame: str = "map"
+    # Optional upstream ranking.  Safety may reject or repair in this order,
+    # but never treats the order as proof of safety.
+    preference_order: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

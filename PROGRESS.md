@@ -1,4 +1,254 @@
 # SafeDrive Foundry 进度
+
+## 2026-08-27 — H6 VLA75 v2 工程闭环已落地，正式证据仍未验证
+
+状态仍为 `H6 IMPLEMENTED / MEASURED / NOT_VERIFIED`；没有把离线/单元测试结果写成
+CARLA 正式通过。已按用户计划切换到分支 `codex/h6-vla75-completion`，未 commit、未
+push，并在 Git-ignored 的
+`generated/h6/h6-vla75-worktree-baseline/` 保存了 tracked binary patch、任务相关
+untracked 快照、工作树状态和 SHA256 manifest，保留原有 H6 开发成果可恢复。
+
+本轮完成的 v2 工程范围：
+
+- 新增 `safedrive.h6.vla75.v2` 配置/哈希、A/B/C 正式 lineage（`103/107`、`109/113`、
+  `127/131`）、12-pair pilot 与 108-pair full 矩阵；seed 101 仍只保留为已消耗的旧
+  诊断数据，开发 seed 固定为 `89/97`；旧 `h6-vla90-*` 配置、hash、acceptance 和
+  Evidence 接口未改写。
+- 新增 `WorldVLA75Prediction`/`WorldVLA75Scorer` 的 14-output source-blind 模型，保留
+  World v3 原 12 个输出，并加入 preference utility、executability、paired coverage、
+  group-DRO 和 event-aware temporal loss；训练器实际按 `pair_id × arm × tick` 接入
+  event-aware 相邻 tick loss，并按固定 v2 字典序选择 checkpoint；旧 World v3
+  loader/模型接口继续可用。
+- 新增逐 tick raw gate（双候选完整评分、score/preference/trust/risk 四项）、实际
+  `AppliedControl.executed_id` 绑定的 75% gate、Classic+MRM 25% gate、target-only
+  unsafe、paired progress bootstrap、资源/切换/ping-pong、Guard/World/Safety/repair
+  转移矩阵和完整 provenance 校验。EMA/hold/force-VLA/单候选幸存不能提高 raw 90%。
+- 新增温度校准、VLA75 temporal stabilizer、repair 后 final validation、正式 run-lock
+  （配置/矩阵/checkpoint/ensemble/calibration/代码 scoped hash/完整 dirty worktree
+  identity），并将 run-lock 与 dataset、lineage、matrix scope 绑定；正式 collector
+  使用并记录 run-lock 中冻结的 router calibration，拒绝 summary/lock 参数漂移。
+- collector 记录 raw/stabilized/selected/safety-executed/applied 链、repair 输入输出、
+  模型/feature/worktree hash、phase 边界和独立 spectator follow；Classic-only baseline
+  仍不把 VLA 候选交给控制。
+- CLI 已支持 `--contract vla75-v2`、`--formal-lineage a|b|c`、`--run-lock`，新正式
+  dataset 必须为 `h6-vla75-*`；readiness 对 summary schema、三模型 seed `11/23/37`、
+  开发数据隔离、90% raw calibration、75% applied proxy、90% outcome attribution purity
+  和 CUDA 做硬检查。
+
+离线验证（本轮实际运行）：
+
+```text
+/home/sdf/.venvs/sdf/bin/python -m unittest discover -s tests -t . -v
+436 tests: 435 passed, 1 skipped, 0 failed
+/home/sdf/.venvs/sdf/bin/python -m compileall -q safedrive_foundry scripts tests
+passed
+git diff --check
+passed
+```
+
+新增的 VLA75 hardening 回归覆盖缺双评分仍留在分母、unknown/orphan/non-TRACK applied、
+executed↔applied ID 不一致、repair final validation、temporal break、group-DRO、14-output
+source-blind 模型、run-lock 矩阵内容篡改，以及 summary checkpoint 顺序/ensemble hash
+绑定；本轮新增 hardening 测试 16 项均通过。
+
+正式 lineage 状态账本已接入编排器：pilot 失败或 full 失败写入不可重复使用的终态，
+full 必须先有同一 run-lock 的通过 pilot；pilot 通过后升级 full 会保留 pilot hash/history，
+A/B/C 三条均失败时返回整体关闭标记，避免重复盲测或改写负 Evidence。
+
+环境硬门按规范执行：`doctor` 报告 GPU 不可见、CARLA RPC 未启动；`sim preflight --json`
+为 `RETRYABLE_FAILURE / SERVER_NOT_RUNNING`。按允许的唯一恢复动作执行一次 `sim ensure`，
+但因 CARLA 配置备份路径为只读而返回 `FAILED_FINAL / Read-only file system`；随后唯一一次
+复查仍为 `RETRYABLE_FAILURE`。因此未运行 CUDA 训练、CARLA pilot/full、正式 lineage 或
+acceptance，不能声明 H6 `VERIFIED`、不能声明 90%/75% 门通过。环境诊断输出已保留在
+`docs/environment/evidence/g0-05/doctor.{json,md}`。
+
+正式接管顺序保持冻结：恢复 GPU/CUDA 与 CARLA 权限后，只用 seed 89/97 重训并通过新的
+tick-wise readiness；再生成同一 lineage 的不可变 run-lock，跑 12-pair pilot，pilot 全门
+通过后才可跑 108-pair full。任一 lineage 失败即冻结该 lineage 的负 Evidence；三条均失败
+后正式关闭 H6，不降低门槛、不复用 seed 101、不删除失败记录。
+## 2026-08-27 — H6 前向实际主驾门修订为 75%，完成逐 tick 诊断与迭代交接
+
+状态仍为 `H6 IMPLEMENTED / MEASURED / NOT_VERIFIED`。用户把下一条正式 lineage 的
+VLA 最终实际执行硬门从 90% 修订为 `>=75%`，Classic + MRM 合计 `<=25%`；此前要求的
+World 原始双候选高分门没有撤回，仍为 `>=90%`。历史 `h6-vla90-*` Evidence 保持原合同，
+不能按新门回写成成功。
+
+重新读取 seed 101 正式 600 tick 后确认：World 选择 VLA 303 次，Safety 仅 18 次回到
+Expert，最终 VLA 285 次。达到 75% 至少需要 450 次 VLA，还差 165 tick；若 fallback
+固定为 18 次，World 至少要选择 VLA 468 次，若维持当前 5.94% fallback 比例则约需 479
+次。Guard 对 VLA 仍为 `PASS 453 / REVIEW 147 / REJECT 0`，所以主瓶颈不是 Guard。
+
+World 590 个完整双评分 tick 中只有 131 个同时通过分数、可信和风险门；74 个只差可信，
+87 个分数低但可信/风险通过，64 个分数与可信同时失败，234 个分数/可信/风险全失败，另
+有 10 个 missing pair。即使只降低可信门也远不足以达到目标，必须重新训练排名、风险和
+时间一致性。
+
+新增 `docs/H6_VLA75_HANDOFF.md`，记录新验收合同、逐地图/场景诊断、SelectiveNet、
+learning-to-defer、DAgger/SafeDAgger、group DRO、temporal consistency、calibration/
+conformal risk control 等一手研究依据，以及新对话的实施顺序。同步更新 START_TASK、
+ROADMAP、PROJECT、WORLD_MODEL、EVIDENCE 和 README，避免新对话继续误用实际 90% 门。
+
+本轮只修改文档，没有训练、CARLA 运行或正式 seed 操作。当前完整代码回归的最近实测仍为
+`419 tests: 418 passed, 1 skipped, 0 failed`；本轮检查 8 个活动/交接文档的本地链接，
+0 个缺失，`git diff --check` 通过。GPU/CUDA readiness 仍未恢复，新模型、24-pair 新
+开发 pilot、完整 108-pair 训练和新 held-out formal 均未执行。
+
+## 2026-08-20 — H6 平衡训练通过旧 readiness，但正式逐 tick gate 失败
+
+状态：`H6 IMPLEMENTED / MEASURED / NOT_VERIFIED`。没有进入 108-pair full；H5 的正式
+负结论不变。
+
+本轮先修复了紧急场景把 ego 错误投影到路线终点的问题，并完成新的平衡训练 pilot：
+
+- `h6-vla90-train-pilot-20260820-v2` 共 24 pair / 48 runs，训练和校准 seed 都覆盖
+  free-flow、紧急刹车、加塞、红灯四类场景；
+- seed 89 的 VLA 实际执行 `566/600 = 94.33%`，Expert 33、MRM 1；seed 97 为
+  `544/600 = 90.67%`，Expert 54、MRM 2；两个 split 的 on/off 不安全运行数分别同为
+  `2/12`；
+- 新训练 loader 按 tick 保存真实执行 outcome mask，并加入 12 条整段 exact-reset
+  Classic-off/VLA-primary-on 配对排名监督；World 三模型训练使用 1212 train / 1212 val
+  rows；
+- 旧校准只在每场第一拍检查 World 分数，得到 `11/12 = 91.67%`、可信门 `0.943988`、
+  风险上限 `0.35`、进度差 `+5.259m`，readiness 当时无失败项。该模型为
+  `generated/h6/world-v3-vla90-pilot-20260820-v3/training-summary.json`。
+
+随后运行一次隔离 seed 101 的正式 12-pair pilot：
+
+```text
+dataset  h6-vla90-formal-pilot-20260820-v1
+evidence docs/runtime-evidence/h6/h6-vla90-formal-pilot-20260820-v1/final-delivery.json
+sha256   8dae5c2e661abafc1dceab633d3338201a7fe1e6b50ecd5e334641aa68223194
+```
+
+正式结果为 `GATE_FAILED`：
+
+- World 严格 VLA 高分 `131/600 = 21.83%`，VLA 实际执行 `285/600 = 47.50%`，远低于
+  两个 90% 门；Classic 实际 315，MRM 0；
+- Guard 对 600 个 VLA 候选为 `PASS 453 / REVIEW 147 / REJECT 0`；Safety 仅 18 次
+  Classic fallback，并成功执行 RATO 42、QP 26。因此正式低占比主因是 World，不是
+  Guard/Safety 大量杀 VLA；
+- on/off 不安全运行数同为 `3/12`，unsafe delta 0；进度 mean `+2.455m`，bootstrap
+  lower-95 `+0.629m`；scorer P99 `9.12ms`，0 deadline miss；
+- 31 次切换（1.033/s）和 5 个 ping-pong 场景失败；Town01 aggressive 最后 10 tick 的
+  Expert 因 navigation-start 距离 5.73–8.79m 被 Guard 硬拒，World 合法地没有收到双候选，
+  acceptance 同时记录 10 个 missing-pair provenance failure；
+- Town03 free-flow 的 on/off 各撞静态物一次；Town03/Town05 red-light on/off 均闯灯。
+  训练 Town03 red-light 还记录了 `other_actor_id=0`、水平冲量 0 的连续竖直接触，坡路
+  预滚高度/路线需要独立修复。
+
+由此确认旧 readiness 存在口径漏洞：它用每场第一拍的 12 个分数代表正式 600 tick。
+代码已改为用校准集每一个 on-arm tick 检查 90% World 高分，整段 paired outcome 只检查
+安全和进度；新增回归保证“第一拍好看、全程只有 80%”不能通过。22 项 World 专项和
+compileall 已通过。计划用开发数据重训验证新门时，GPU 执行被工作区系统以
+`workspace credits exhausted` 拒绝；没有绕过，也没有生成新 summary。
+
+验证：全量 `419 tests: 418 passed, 1 skipped, 0 failed`；`compileall` 通过。GPU 重训练
+命令未获执行权限，因此不能声称新 tick-wise calibration 已实测通过或失败。
+
+跟车视角：平衡训练 48 runs 每条 `285–847` 次更新，正式 24 runs 每条 `390–1113` 次；
+全部 `spectator_follow_error=null`。后续所有真实 CARLA 测试继续强制跟车。
+
+停止边界：seed 101 已被正式失败消耗，不能调参后重跑冒充 held-out；未获用户新 seed
+lineage 授权前不继续 formal，GPU credits 恢复前也无法完成新 tick-wise readiness。
+
+## 2026-08-19 — H6 训练 pilot 两轮修复后仍差 1.33pp，跟车视角已修复
+
+状态：`H6 IMPLEMENTED / MEASURED / NOT_VERIFIED`。已完成真实 CARLA 12-pair training pilot
+的初始运行和两次有实质差异的修复验证；因仍未达 90%，训练 loader 正确拒绝数据，
+没有生成新 World checkpoint，也没有进入 formal seed。
+
+三轮实测：
+
+- `h6-vla90-train-pilot-20260819-v1`：VLA `422/600 = 70.33%`，Classic-off 因 80 tick
+  直线预滚只完整执行 468/600，数据来源纯度门拒绝；
+- `h6-vla90-train-pilot2-20260819-v1`：沿路线且保留场景原始预滚后，Classic-off
+  `600/600`，VLA `486/600 = 81.00%`，仍被 VLA 来源纯度门拒绝；
+- `h6-vla90-train-pilot4-20260819-v1`：修复动态红灯时序、前车半车长缺失和有限动力学
+  越界误硬拒后，VLA `532/600 = 88.67%`，Expert 64 tick，MRM 4 tick。训练在
+  `Town01__free_flow` 仅 `42/50` VLA 的第一个不纯 episode 处停止；这是诚实失败，
+  没有降低 90% 门槛。
+
+最后一轮的实际分层证据：
+
+- 600 个 VLA 候选的 Guard 结果为 `PASS 292 / REVIEW 302 / REJECT 6`；只有 1% 被 Guard
+  硬杀，说明 Guard 已不是主要瓶颈；
+- 开发路由在 `588/600 = 98%` tick 把 VLA 排在第一；因此这批数据不能用来证明新 World
+  已学会 90%，但它能明确证明“World 不选 VLA”不是当前实际执行不足的主因；
+- 最终 Safety 中，VLA 原样通过 291 tick，纵向 QP 修复成功 224 tick，RATO 修复成功
+  17 tick；57 tick 改用 Expert，4 tick 进 MRM。未执行 VLA 的主要原因是 33 次
+  `red_light_unstoppable`、18 次碰撞包络、6 次横向加速度、2 次超速，以及 6 个真正
+  offroad 的 Guard REJECT；一个 tick 可同时有多个原因；
+- 24 次 RATO 修复在最终重验时仍因 yaw-rate/碰撞失败。Town05 emergency 的 VLA 从上轮
+  `17/50` 升到 `49/50`，证明补入前车半车长的修复有效；Town03 aggressive 仍受急弯
+  yaw-rate/碰撞重验限制；
+- on/off 的不安全运行数同为 `2/12`，均是 Town03/Town05 红灯场景的红灯违规；
+  VLA-on 总进度 `106.79m` vs Classic-off `50.14m`。这些只是开发训练 pilot 诊断，
+  不是 formal acceptance。
+
+用户指出视角没有跟车后，中断了 `pilot3`并保留 `KeyboardInterrupt` Evidence。
+`scripts/h5_collect.py` 改为独立 20 Hz 后台跟车视角，不再等候慢速的模型/规划循环。
+`h6-camera-follow-smoke-20260819-v1` 单场景完成；off/on 分别更新 572/473 次且无错误。
+最后 24 个 pilot4 运行每场更新 `266–1138` 次，全部 `spectator_follow_error=null`。
+
+停止原因：同一 pilot 已用完初始实现加两次实质修复上限，不进行第三次边跑边改。
+下一个独立任务应重新设计按 tick 的 VLA/修复 VLA 训练标签，并在新数据集前专门改善
+红灯停车、碰撞纵向规划和急弯修复。
+
+验证：全量 `409 tests: 408 passed, 1 skipped, 0 failed`；`compileall` 通过。全量回归包含
+跟车线程在决策计算期间仍持续更新、动态红灯时序、前车半车长、有限动力学
+`REVIEW` 和横向加速度纵向修复的新回归。
+
+## 2026-08-19 — H6 VLA 主驾改造已实现，正式 90% 门尚未验证
+
+状态：`H6 IMPLEMENTED / MEASURED / NOT_VERIFIED`。H0–H4 历史结论不变；H5 仍是
+`VERIFIED / GATE_FAILED / STOPPED`，没有用 H6 开发结果覆盖 H5 的负结论。
+
+本轮按用户明确目标把“World 在 90% 情况下真给 VLA 高分、VLA 实际执行也至少 90%，
+Classic 约 10% 兜底”落成了独立 H6 合同：
+
+- Guard 由二态改为 `PASS / REVIEW / REJECT`。轻微道路、规则、碰撞预测、动力学或控制
+  擦边进入 `REVIEW` 并交给 World；只有坏数据/绑定、严重偏航或越界、明显迫近碰撞和
+  不可执行合同硬拒绝。World 仍看不到 `REJECT` 候选。
+- 修正了 Guard/Safety 大量误杀的两个来源：碰撞从过大的外接圆改为车辆有向矩形，actor
+  预测对齐候选时间；红灯从“整条轨迹都必须接近停车”改为检查能否在停止线前停车或是否
+  真正越线。最终 Safety 的硬碰撞、红灯、越界和状态机没有删除。
+- World v3 使用共享、source-blind 的候选编码，分别预测综合任务效果、进度及方差、完成、
+  碰撞、红灯、越界、舒适性、修复成功率和可信度。正式 VLA-primary 必须同时满足 VLA
+  综合分不低于 Expert、可信门通过、风险门通过；高可信不能伪造高综合分。
+- Safety 接收完整 World 顺序：VLA 第一时先做一次有边界且最终重验的修复，失败后使用同
+  一 tick Expert；两者都不安全才 MRM。RATO 新增最终硬规则复查，修复器不能把车辆矩形
+  仍有角部重叠的轨迹谎报为成功。
+- VLA 增加意图保持的运动学滤波，几何、航向、曲率、速度和加速度一起重算，并把加速度/
+  横向加速度上限收进最终 Safety 数值内。Classic 规划失败或短时域时生成有 provenance
+  的完整时域受限停车候选；off arm 使用纯 Classic router，不再被 VLA 污染。
+- H6 训练闭环和正式验收隔离：训练 seed `89/97`，正式 seed `101/103`，各 108 pair / 12
+  pilot。训练只载入真实 Classic-only off 与 development VLA-primary on 的配对结果；正式
+  seed 被 loader/readiness 明确拒绝。
+- 正式门直接审计 World 的两条原始评分，只有 Expert/VLA 都被评分且 VLA 综合分不低于
+  Expert、可信和风险门都过，才计入 World 的 90%；只有一条 VLA 幸存不能冒充 World 高分。
+  同时要求实际 VLA `>=90%`、相对纯 Classic 不安全率增量 `<=1pp`、配对进度 bootstrap
+  lower-95 `>=0`、P99/0 deadline miss、低切换且无 ping-pong。
+
+真实 CARLA 开发测量（全部非正式，失败原样保留）：
+
+- `h6-vla90-explore-20260819`：两候选均 50/50 Guard eligible，但零速预滚与旧近重复 defer
+  使 VLA 实际 0%；
+- `h6-vla90-explore2-20260819`：开发强制采样中 World 选 VLA 50/50、实际 VLA 48/50
+  （96%），本短跑碰撞/红灯/越界为 0，进度约 3.03m；但 Classic 生成不完整、baseline
+  被污染且配置非正式，`final-delivery.json` 正确判为失败；
+- `h6-vla90-explore3-20260819`：纯 Classic baseline 暴露短时域生成失败；on arm 在 17 tick
+  后暴露 VLA 3.5m/s² 超过 Safety 3.0m/s²。之后完成了 Classic 受限停车和 VLA 2.8m/s²
+  滤波修复，但按同问题最多两次差异化修复规则未做第四次 CARLA 重跑。
+
+旧 H2/H3 数据训练出的 `generated/h6/world-v3-dev-v1/training-summary.json` 无法通过严格
+校准：旧数据里 VLA 进度总体为负，不能通过调门伪造 90%。下一步必须先采新 H6 training
+matrix、重训并通过 readiness，再跑 held-out formal pilot/full。
+
+验证：专项 60 项通过；修复后全量 `399 tests: 398 passed, 1 skipped, 0 failed`；随后新增
+“必须有 Expert/VLA 双评分、纯 Classic 基线和 90% 训练标签纯度”的 29 项 World/路由/Safety 专项也通过。正式 108-pair 训练、
+新 World checkpoint、12-pair formal pilot 与 108-pair full acceptance 均未执行，因此不得
+写成 `VERIFIED` 或声称已达到正式 90%。
+
 ## 2026-08-16 — H5 World on/off 完整闭环执行完成（负结果）
 
 状态：`H5 COMPLETED / VERIFIED / GATE_FAILED / STOPPED`。H6 closure 仍未开始。

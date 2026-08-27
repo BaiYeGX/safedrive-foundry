@@ -78,6 +78,8 @@ class CandidateAudit:
     degradation: DegradationReason
     repaired: bool
     selected: bool
+    repair_attempted: bool = False
+    repair_success: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -91,6 +93,8 @@ class CandidateAudit:
             "degradation": self.degradation.value,
             "repaired": self.repaired,
             "selected": self.selected,
+            "repair_attempted": self.repair_attempted,
+            "repair_success": self.repair_success,
         }
 
 

@@ -264,11 +264,21 @@ def train_model(
 
 def load_model(checkpoint_path: Path, *, device: str | torch.device = "cpu") -> tuple[WorldScorerModel, dict]:
     payload = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    scene_gate_mode = str(payload.get("metadata", {}).get("scene_gate_mode", "hard"))
-    model = WorldScorerModel(**H3_CONFIG["model"], scene_gate_mode=scene_gate_mode).to(device)
+    meta = dict(payload.get("metadata", {}))
+    cfg = meta.get("config", H3_CONFIG["model"])
+    scene_gate_mode = str(meta.get("scene_gate_mode", cfg.get("scene_gate_mode", "hard")))
+    model_kwargs = {
+        "d_model": int(cfg.get("d_model", 128)),
+        "layers": int(cfg.get("layers", 2)),
+        "heads": int(cfg.get("heads", 4)),
+        "ffn": int(cfg.get("ffn", 256)),
+        "dropout": float(cfg.get("dropout", 0.1)),
+        "scene_gate_mode": scene_gate_mode,
+    }
+    model = WorldScorerModel(**model_kwargs).to(device)
     model.load_state_dict(payload["state_dict"])
     model.eval()
-    return model, dict(payload.get("metadata", {}))
+    return model, meta
 
 
 def _mask_context_tensor(context: Tensor, mode: str) -> Tensor:

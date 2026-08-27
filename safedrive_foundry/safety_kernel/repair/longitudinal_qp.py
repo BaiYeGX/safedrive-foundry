@@ -84,12 +84,21 @@ def _lead_s_profile(
     for actor in obs.actors:
         if actor.lost:
             continue
-        rel_x = actor.x - points[0].x
-        rel_y = actor.y - points[0].y
+        v_long = actor.vx * ux + actor.vy * uy
+        # ``points[0]`` is already t0 seconds in the future.  Predict the
+        # actor to that same instant before expressing its longitudinal
+        # position relative to the first path point.  The old code compared a
+        # current actor pose with a future ego pose and lagged every lead by
+        # one candidate step (normally 0.25 s).
+        actor_age_to_first = max(
+            0.0,
+            float(obs.simulation_time_s) - float(actor.observed_time_s) + t0,
+        )
+        rel_x = actor.x + actor.vx * actor_age_to_first - points[0].x
+        rel_y = actor.y + actor.vy * actor_age_to_first - points[0].y
         s_actor0 = rel_x * ux + rel_y * uy
         if s_actor0 < -1.0:
             continue
-        v_long = actor.vx * ux + actor.vy * uy
         for k, t in enumerate(times):
             dt = float(t - t0)
             s_actor = s_actor0 + v_long * dt
@@ -97,6 +106,7 @@ def _lead_s_profile(
                 min_gap_m
                 + max(0.0, v_long) * time_headway_s
                 + 0.5 * cfg.length_m
+                + 0.5 * max(0.1, float(actor.length_m))
                 + cfg.collision_inflate_m
             )
             s_max[k] = min(s_max[k], s_actor - gap)
@@ -270,6 +280,13 @@ class LongitudinalQPRepair:
         v_max = cfg.max_speed_mps
         if cfg.enforce_speed_limit and obs.speed_limit_mps is not None:
             v_max = min(v_max, obs.speed_limit_mps + cfg.speed_limit_margin_mps)
+        v_limits = np.full(n, v_max, dtype=float)
+        for k, point in enumerate(points):
+            if abs(point.kappa) > 1e-6:
+                v_limits[k] = min(
+                    v_limits[k],
+                    math.sqrt(0.98 * cfg.max_lateral_accel_mps2 / abs(point.kappa)),
+                )
 
         # z = [v0, a..., sl_stop(n), sl_lead(n), sl_v(n)]
         n_dyn = 1 + n_a
@@ -365,10 +382,10 @@ class LongitudinalQPRepair:
         for k in range(n):
             # 0 <= v
             add(V[k].copy(), 0.0, float("inf"))
-            # v - slack_v <= v_max
+            # v - slack_v <= pointwise speed/lateral-acceleration cap
             r = V[k].copy()
             r[off_sv + k] -= 1.0
-            add(r, -float("inf"), v_max)
+            add(r, -float("inf"), float(v_limits[k]))
             # slack_v bounds
             r = np.zeros(n_var)
             r[off_sv + k] = 1.0
@@ -474,7 +491,7 @@ class LongitudinalQPRepair:
             v_k = float(max(0.0, v_opt[k]))
             if red_active and (times[k] - times[0]) <= 2.0 + 1e-9:
                 v_k = min(v_k, cfg.red_light_max_approach_speed_mps)
-            v_k = min(v_k, v_max)
+            v_k = min(v_k, float(v_limits[k]))
             new_pts.append(
                 TrajectoryPoint(
                     t=float(times[k]),
@@ -598,4 +615,3 @@ class LongitudinalQPRepair:
             metrics=metrics,
             reason=reason,
         )
-

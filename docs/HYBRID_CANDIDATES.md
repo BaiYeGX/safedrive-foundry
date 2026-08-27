@@ -46,7 +46,7 @@ H1 的公开 source 为 `expert | vla`，在兼容的 Safety v1 合同中分别�
 hash 组合 model id、checkpoint SHA256 与 Hydra 配置 SHA256；route revision 是规范化
 route polyline SHA256。
 
-## 5. Guard 顺序
+## 5. Guard 顺序与三态结果
 
 每条候选独立检查：
 
@@ -57,27 +57,46 @@ route polyline SHA256。
 5. 静态/当前可观测碰撞约束；
 6. controller feasibility 与最小执行时域。
 
-Guard 只给 `PASS` 或 `REJECT(reasons)`；World 不接收 REJECT candidate。Guard 不使用
-rollout future 或 Oracle。
+H6 起 Guard 给三种结果：
+
+- `PASS`：合同干净，正常进入 World；
+- `REVIEW`：候选基本可执行，但道路/规则/碰撞预测/动力学/控制检查处于边界，仍进入
+  World，由 World 结合场景、效果和可信度综合比较；
+- `REJECT`：坏数据或绑定、严重路线/道路偏离、非有限数/跳点、明显迫近碰撞或不可执行
+  控制合同，World 不得接收或复活。有限的速度/加速度/jerk/曲率越界改为 `REVIEW`，
+  交给 World 排序并在最终 Safety 中修复、重验。
+
+Guard 不使用 rollout future 或 Oracle。`REVIEW` 不是 Safety 通过证书：World 排序后最终
+候选仍必须经过 Safety 的完整硬检查。
 
 候选生成 wall latency 的硬门为 `2.5 s`；它与 Safety 既有 `0.25 s` simulation freshness
 门独立。某阶段硬失败后不再运行后续可能不安全的检查，最后一阶段使用隔离的
-`ControlLoop` dry-run 验证最小执行时域与控制可行性。
+`ControlLoop` dry-run 验证最小执行时域与控制可行性。碰撞检查使用车辆有向矩形并把
+actor 状态预测到每个候选点的真实相对时间；红灯检查判断是否能在停止线前停车或是否
+真正越线，不再因为一条正在合理制动的轨迹前段速度较高就直接拒绝。
 
 ## 6. set-level 规则
 
-- 0 PASS：Safety 回退；
-- 1 PASS：直接进入 Safety，World defer；
-- 2 PASS：计算逐点位置与速度差异；H1 中 World 始终 defer；
+- 0 eligible（`PASS/REVIEW`）：Safety 回退；
+- 1 eligible：直接进入 Safety，World defer；
+- 2 eligible：计算逐点位置与速度差异；H1 中 World 始终 defer；
 - `max position delta <= 0.5 m` 且 `RMS speed delta <= 0.5 m/s` 时标记
   `NO_SELECTION_SPACE`；
-- 两条 PASS 无论是否近重复，H1 都复用冻结 Safety soft score，并以 Classic、candidate id
+- 两条 eligible 无论是否近重复，H1 都复用冻结 Safety soft score，并以 Classic、candidate id
   稳定破平；
 - slot 顺序每次可置换，语义只由 candidate id/provenance 确定。
 
-router 只向 Safety 提交选中的单条候选；Safety 再执行既有硬检查/修复。控制绑定必须能
-解析 `selected id → final/repair id → executed id → applied id`，不存在 first-available
+H6 的 World v3 即使两条轨迹近重复也实际打分，避免旧 `NO_SELECTION_SPACE` 直接绕过
+World；旧 World/H1 仍保留冻结行为。H6 router 把所有 eligible 候选按 World 顺序交给
+Safety：首选 VLA 若硬检查失败，先做一次有边界且最终重验的修复，仍失败则检查同一 tick
+Expert；两者都失败才进入 MRM。控制绑定必须能解析
+`selected id → final/repair id → executed id → applied id`，不存在无记录的 first-available
 回退。
+
+H6 还在 generator 侧做两项不改变来源独立性的修复：VLA 使用意图保持运动学滤波，把
+`x/y/yaw/kappa/v/a` 一致重算并保持在 Safety 数值内；Classic 主规划失败或只返回短前缀时，
+生成带明确 `classic-bounded-stop` provenance 的完整时域受限停车候选。两者都不是从另一
+来源复制轨迹。
 
 ## 7. H1 验收
 

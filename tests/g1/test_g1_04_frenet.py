@@ -83,6 +83,7 @@ class G104FrenetTests(unittest.TestCase):
         profile, err = solve_st_dp(grid, v0=6.0, v_target=6.0, vehicle=vehicle, stop_at_s=None)
         self.assertIsNone(err, err)
         self.assertGreaterEqual(len(profile), 2)
+        self.assertAlmostEqual(profile[-1][0], (t_bins - 1) * grid.dt)
         self.assertIsNone(validate_profile_kinematics(profile, vehicle=vehicle))
         # Wall of occupancy should block progress
         wall = [[False] * s_bins for _ in range(t_bins)]

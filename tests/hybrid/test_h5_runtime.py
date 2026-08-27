@@ -78,6 +78,31 @@ class _Scorer:
         return _Score(self.selected, self.utility_first, self.utility_second, self.disposition, self.reason)
 
 
+class _V3Scorer:
+    vla_trust_threshold = 0.8
+    vla_risk_ceiling = 0.2
+
+    def score_pair(self, first, second):
+        predictions = []
+        for key, _context, _candidate in (first, second):
+            is_vla = key.endswith(":vla")
+            predictions.append(
+                SimpleNamespace(
+                    candidate_key=key,
+                    utility=1.0 if not is_vla else 2.0,
+                    trust_probability=0.95 if is_vla else 0.9,
+                    unsafe_probability=0.05,
+                )
+            )
+        return SimpleNamespace(
+            disposition="ranked",
+            selected_candidate_key=next(item.candidate_key for item in predictions if item.candidate_key.endswith(":expert")),
+            defer_reason=None,
+            latency_ms=1.0,
+            predictions=predictions,
+        )
+
+
 class _Fallback:
     def route(self, candidate_set):
         return RoutingResult(
@@ -89,6 +114,20 @@ class _Fallback:
             selector="fallback",
             reason="fallback",
             difference=CandidateDifference(max_position_delta_m=1.0, rms_speed_delta_mps=0.6),
+        )
+
+
+class _NearDuplicateFallback(_Fallback):
+    def route(self, candidate_set):
+        return RoutingResult(
+            pass_candidate_ids=tuple(i.candidate.candidate_id for i in candidate_set.candidates),
+            rejected_candidate_ids=(),
+            selected_candidate_id=candidate_set.candidates[0].candidate.candidate_id,
+            selection_space=SelectionSpace.NO_SELECTION_SPACE,
+            world=WorldDisposition.DEFERRED_LOW_CONFIDENCE,
+            selector="fallback",
+            reason="near_duplicate_fallback",
+            difference=CandidateDifference(max_position_delta_m=0.1, rms_speed_delta_mps=0.1),
         )
 
 
@@ -200,6 +239,52 @@ class H5HysteresisTest(unittest.TestCase):
         self.assertEqual(r.selector, "fallback")
         self.assertEqual(r.world, WorldDisposition.DEFERRED_LOW_CONFIDENCE)
         self.assertEqual(router._last_selected_id, None)
+
+    def test_world_v3_trust_gate_makes_vla_primary_and_keeps_expert_ordered_fallback(self):
+        router = H5WorldRouter(_V3Scorer(), _Fallback(), min_hold_ticks=10)
+        ids = ("f:expert", "f:vla")
+        result = router.route(_CandidateSet(ids), self._features(ids))
+        self.assertEqual(result.selected_candidate_id, "f:vla")
+        self.assertEqual(result.reason, "world_v3_vla_trust")
+        self.assertEqual(result.preference_order, ("f:vla", "f:expert"))
+
+    def test_world_v3_scores_near_duplicates_instead_of_silently_deferring(self):
+        router = H5WorldRouter(_V3Scorer(), _NearDuplicateFallback(), min_hold_ticks=10)
+        ids = ("f:expert", "f:vla")
+        result = router.route(_CandidateSet(ids), self._features(ids))
+        self.assertEqual(result.selection_space, SelectionSpace.NO_SELECTION_SPACE)
+        self.assertEqual(result.world, WorldDisposition.RANKED)
+        self.assertEqual(result.selected_candidate_id, "f:vla")
+        self.assertEqual(router.metrics()["defer_count"], 0)
+
+    def test_world_v3_does_not_call_vla_primary_when_its_score_is_lower(self):
+        scorer = _V3Scorer()
+        original = scorer.score_pair
+
+        def expert_higher(first, second):
+            score = original(first, second)
+            for item in score.predictions:
+                item.utility = 2.0 if item.candidate_key.endswith(":expert") else 1.0
+            score.selected_candidate_key = next(
+                item.candidate_key
+                for item in score.predictions
+                if item.candidate_key.endswith(":expert")
+            )
+            return score
+
+        scorer.score_pair = expert_higher
+        router = H5WorldRouter(scorer, _Fallback(), min_hold_ticks=10)
+        ids = ("f:expert", "f:vla")
+        result = router.route(_CandidateSet(ids), self._features(ids))
+        self.assertEqual(result.selected_candidate_id, "f:expert")
+        self.assertEqual(result.reason, "h5_world_ranked")
+
+    def test_legacy_world_still_defers_near_duplicates(self):
+        router = H5WorldRouter(_Scorer("f:vla"), _NearDuplicateFallback(), min_hold_ticks=10)
+        ids = ("f:expert", "f:vla")
+        result = router.route(_CandidateSet(ids), self._features(ids))
+        self.assertEqual(result.world, WorldDisposition.DEFERRED_LOW_CONFIDENCE)
+        self.assertEqual(result.reason, "h5_defer:no_selection_space")
 
 
 if __name__ == "__main__":

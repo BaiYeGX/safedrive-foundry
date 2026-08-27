@@ -11,7 +11,10 @@ import math
 from dataclasses import asdict, dataclass
 from typing import Any, Mapping, Sequence
 
-import carla
+try:
+    import carla
+except ImportError:
+    carla = None
 
 from .contracts import ScenarioKey, stable_sha256
 from .live_contract import SCENARIO_ALGORITHM_VERSION, route_projection

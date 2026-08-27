@@ -138,6 +138,7 @@ def candidate_set_from_dict(payload: Mapping[str, Any]) -> PolicyCandidateSet:
         candidates=candidates,
         schema_version=str(schema),
         coordinate_frame=str(data.get("coordinate_frame", "map") or "map"),
+        preference_order=tuple(str(item) for item in data.get("preference_order", ())),
     )
 
 
@@ -174,7 +175,7 @@ def candidate_to_dict(candidate: PolicyCandidate) -> dict[str, Any]:
 
 
 def candidate_set_to_dict(candidate_set: PolicyCandidateSet) -> dict[str, Any]:
-    return {
+    payload = {
         "schema_version": candidate_set.schema_version,
         "run_id": candidate_set.run_id,
         "frame_id": candidate_set.frame_id,
@@ -186,6 +187,12 @@ def candidate_set_to_dict(candidate_set: PolicyCandidateSet) -> dict[str, Any]:
         "coordinate_frame": candidate_set.coordinate_frame,
         "candidates": [candidate_to_dict(c) for c in candidate_set.candidates],
     }
+    # Keep the v1 serialized contract byte-for-byte stable when no upstream
+    # preference was supplied; v2 Safety input carries the additive field only
+    # when World actually provided an order.
+    if candidate_set.preference_order:
+        payload["preference_order"] = list(candidate_set.preference_order)
+    return payload
 
 
 def decision_to_dict(decision: SafetyDecision) -> dict[str, Any]:

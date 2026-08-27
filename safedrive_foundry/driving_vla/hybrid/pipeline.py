@@ -18,6 +18,7 @@ class H1SafetyResult:
     routing: RoutingResult
     safety_input_ids: tuple[str, ...]
     safety: KernelTickResult
+    world_features: dict | None = None
 
     def to_dict(self) -> dict:
         decision = self.safety.decision
@@ -38,6 +39,7 @@ class H1SafetyResult:
                     else decision.fallback_request.to_dict()
                 ),
             },
+            "world_features_present": self.world_features is not None,
         }
 
 
@@ -59,10 +61,12 @@ class H1CandidatePipeline:
         guard: CandidateGuard | None = None,
         router: FrozenH1Router | None = None,
         safety: SafetyKernel | None = None,
+        record_world_features: bool = False,
     ) -> None:
         self.safety = safety or SafetyKernel()
         self.guard = guard or CandidateGuard(self.safety.config)
         self.router = router or FrozenH1Router(self.safety.config)
+        self.record_world_features = bool(record_world_features)
         # Online World features must use a real sliding ego-history window.
         # Offline H3 context expects up to 20 ticks; the first online tick is
         # naturally shorter, but never an all-zero history.
@@ -73,10 +77,19 @@ class H1CandidatePipeline:
         for entry in entries:
             self._ego_history.append(dict(entry))
 
-    def decide(self, candidate_set: HybridCandidateSet) -> H1SafetyResult:
+    def decide(
+        self,
+        candidate_set: HybridCandidateSet,
+        *,
+        event_break: bool = False,
+    ) -> H1SafetyResult:
         guarded = self.guard.evaluate(candidate_set)
         features = None
-        if getattr(self.router, "requires_features", False):
+        needs_features = bool(
+            getattr(self.router, "requires_features", False)
+            or self.record_world_features
+        )
+        if needs_features:
             from data_pipeline.h3.live_features import build_live_features
             snapshot = guarded.anchor.safety_snapshot
             self._ego_history.append(ego_history_entry(snapshot))
@@ -86,7 +99,14 @@ class H1CandidatePipeline:
                 guarded.candidates,
             )
         if getattr(self.router, "requires_features", False):
-            routing = self.router.route(guarded, features=features)
+            if bool(event_break) and bool(
+                getattr(self.router, "supports_event_break", False)
+            ):
+                routing = self.router.route(
+                    guarded, features=features, event_break=True
+                )
+            else:
+                routing = self.router.route(guarded, features=features)
         else:
             routing = self.router.route(guarded)
         safety_input = self.router.safety_input(guarded, routing)
@@ -112,6 +132,7 @@ class H1CandidatePipeline:
             routing=routing,
             safety_input_ids=tuple(candidate.candidate_id for candidate in safety_input.candidates),
             safety=result,
+            world_features=features,
         )
 
 
