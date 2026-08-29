@@ -22,6 +22,10 @@ from data_pipeline.h6.config import (
 from data_pipeline.h6.matrix import h6_vla75_matrix_sha256, load_h6_vla75_matrix
 
 
+RUN_LOCK_SCHEMA_V1 = "safedrive.h6.vla75.run_lock.v1"
+RUN_LOCK_SCHEMA_V2 = "safedrive.h6.vla75.run_lock.v2"
+
+
 def _file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -130,6 +134,10 @@ def worktree_identity(root: Path) -> dict[str, Any]:
     files = []
     for encoded in sorted(item for item in raw.split(b"\0") if item):
         relative = encoded.decode("utf-8", errors="surrogateescape")
+        # Local unittest discovery state is neither a runtime input nor
+        # reproducibility evidence and is explicitly excluded from C1 locks.
+        if relative == "test_registry.sqlite3":
+            continue
         path = root / relative
         if path.is_file():
             files.append(
@@ -168,10 +176,13 @@ def build_h6_vla75_run_lock(
     versions: Mapping[str, Any] | None = None,
     scoped_paths: Sequence[str | Path] | None = None,
     worktree: Mapping[str, Any] | None = None,
+    schema_version: str = RUN_LOCK_SCHEMA_V2,
 ) -> dict[str, Any]:
     """Create a lock payload; call :func:`write_run_lock` to persist it."""
 
     lineage = str(lineage_id).lower()
+    if schema_version not in {RUN_LOCK_SCHEMA_V1, RUN_LOCK_SCHEMA_V2}:
+        raise ValueError(f"unsupported_h6_vla75_run_lock_schema:{schema_version}")
     if lineage not in H6_VLA75_FORMAL_LINEAGES:
         raise ValueError(f"unknown_h6_vla75_formal_lineage:{lineage_id}")
     config = build_h6_vla75_config(lineage)
@@ -201,9 +212,11 @@ def build_h6_vla75_run_lock(
         "safedrive_foundry/data_pipeline/h6/acceptance.py",
         "safedrive_foundry/data_pipeline/h6/calibration.py",
         "safedrive_foundry/data_pipeline/h6/dataset.py",
+        "safedrive_foundry/data_pipeline/h6/evaluator.py",
         "safedrive_foundry/data_pipeline/h6/matrix.py",
         "safedrive_foundry/data_pipeline/h6/model.py",
         "safedrive_foundry/data_pipeline/h6/runtime.py",
+        "safedrive_foundry/data_pipeline/h6/temporal.py",
         "safedrive_foundry/data_pipeline/h6/run_lock.py",
         "safedrive_foundry/data_pipeline/h6/lineage.py",
         "safedrive_foundry/data_pipeline/h5/config.py",
@@ -259,7 +272,7 @@ def build_h6_vla75_run_lock(
         "safedrive_foundry/safety_kernel/contracts/serialize.py",
     )
     lock = {
-        "schema_version": "safedrive.h6.vla75.run_lock.v1",
+        "schema_version": schema_version,
         "contract": "vla75-v2",
         "lineage_id": lineage,
         "formal_seeds": list(H6_VLA75_FORMAL_LINEAGES[lineage]),
@@ -323,6 +336,32 @@ def verify_run_lock(lock: Mapping[str, Any], *, root: Path | None = None) -> dic
     failures: list[str] = []
     if lock.get("lock_sha256") != expected:
         failures.append("lock_hash")
+    schema_version = lock.get("schema_version")
+    if schema_version not in {RUN_LOCK_SCHEMA_V1, RUN_LOCK_SCHEMA_V2}:
+        failures.append("schema_version")
+    calibration = lock.get("calibration")
+    if not isinstance(calibration, Mapping):
+        failures.append("calibration")
+    elif schema_version == RUN_LOCK_SCHEMA_V2:
+        deployment = calibration.get("deployment")
+        bindings = deployment.get("c1_bindings") if isinstance(deployment, Mapping) else None
+        if not isinstance(bindings, Mapping):
+            failures.append("c1_calibration_bindings_missing")
+        else:
+            evaluator_hashes = bindings.get("evaluator_sha256")
+            if (
+                not isinstance(evaluator_hashes, list)
+                or len(evaluator_hashes) != 3
+                or any(
+                    not isinstance(value, str) or len(value) != 64
+                    for value in evaluator_hashes
+                )
+            ):
+                failures.append("c1_evaluator_bindings")
+            for name in ("validation_lineage_sha256", "training_input_sha256"):
+                value = bindings.get(name)
+                if not isinstance(value, str) or len(value) != 64:
+                    failures.append(f"c1_binding:{name}")
     lineage = str(lock.get("lineage_id") or "").lower()
     if lineage not in H6_VLA75_FORMAL_LINEAGES:
         failures.append("lineage")

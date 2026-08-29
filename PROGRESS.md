@@ -4,6 +4,143 @@
 [`archive/2026-08-27-cora-document-consolidation/`](archive/2026-08-27-cora-document-consolidation/README.md)
 的原始快照和阶段文档中，不能作为活动任务或阈值来源。
 
+## 2026-08-30 — H6-CORA C1 正确性加固完成并停止
+
+状态：
+
+```text
+H6-CORA C0 document consolidation and QA = COMPLETED
+H6-CORA C1 correctness hardening = IMPLEMENTED / COMPLETED / STOPPED
+H6-CORA algorithm Evidence = PLANNED / NOT_MEASURED / NOT_VERIFIED
+H6-CORA C2 counterfactual data = AWAITING SEPARATE AUTHORIZATION / NOT_STARTED
+```
+
+实施边界与 Git：
+
+- 开始时只发现已知 C0 文档改动和既有未跟踪 `test_registry.sqlite3`，没有新的来源不明重叠修改；
+- C0 文档经 staged diff/check 后提交为 `b8f3707 docs: consolidate H6-CORA active contracts`；
+- C1 在 `codex/h6-cora-c1` 分支实施，默认保持未提交、未 push；
+- `test_registry.sqlite3` 始终未跟踪、未删除、未暂存，并已从 C1 worktree/run-lock identity
+  中显式排除；
+- 没有采集 CORA 数据、训练项目/CUDA checkpoint、启动 CARLA、消费 formal seed、修改冻结
+  dataset/split/seed/threshold 或改写 `docs/runtime-evidence/`；
+- `scripts/h6_run_lock.py` 不在 C1 原允许路径表内，但用户本轮计划明确要求 C1 后 run-lock
+  绑定 evaluator、validation lineage 和训练输入哈希，因此只做该必要调用链修改，没有扩展重构。
+
+### C1.1 validation、evaluator、readiness
+
+- `safedrive_foundry/data_pipeline/h6/dataset.py` 对 validation row 的 feature、trajectory、target、
+  mask、split、seed、group 和样本身份生成稳定 lineage hash；
+- `safedrive_foundry/data_pipeline/h6/model.py` 的 checkpoint selection 只接收 evaluator 实际产生
+  的 loss、per-head count/loss、pair accuracy/regret、worst-group 和 candidate swap；缺字段、
+  非有限值、零有效样本或无 lineage 均 fail closed，source/VLA usage 只保留诊断意义；
+- 新增 `safedrive_foundry/data_pipeline/h6/evaluator.py`，定义
+  `safedrive.world.vla75.evaluator.v1`，绑定 checkpoint/seed、validation/config/code/worktree/input
+  hash、per-head/group/pair/probe、实测 latency、资源状态、Evidence 状态和自哈希；
+- `scripts/train_world_v3.py` 产生 `safedrive.world.vla75.training_summary.v2`，绑定 train/validation
+  lineage、三个 checkpoint 和三个 evaluator，并明确 artifact `VERIFIED` 不等于 CORA algorithm
+  `VERIFIED`；
+- `scripts/h6_readiness.py` 只接受完整 C1 v2 summary，识别但拒绝 v1，验证 summary/evaluator/
+  checkpoint/input/self hash、三 seed 顺序、有效计数、probe、latency 和 GPU 实测状态，并输出
+  `readiness_sha256`；
+- `run_lock.py` 与 `scripts/h6_run_lock.py` 将新建 C1 lock 升级为
+  `safedrive.h6.vla75.run_lock.v2`：calibration payload 必须带 evaluator、validation lineage
+  和训练输入绑定，并在落盘前验证；显式 v1 只保留历史只读兼容。
+
+失败行为：缺 evaluator/metric/lineage、`NOT_MEASURED`、零样本、零占位资源、未观察到
+action/context sensitivity、swap 不变量失败或任一 hash/顺序不一致时 readiness 失败；CPU evaluator
+的 incremental GPU peak 正确记录为 `NOT_MEASURED/value=null`，不能获得正式 readiness。
+
+### C1.2 per-sample multi-task 与 Group-DRO
+
+- `model.py` 新增逐样本 head report：objective、progress、completion、collision、red-light、
+  offroad、comfort、repair、trust、pair preference 和 executable 各有独立 unreduced loss/mask；
+- candidate head 先在样本内有效候选聚合，pair head 只在双 outcome 有效时启用，再按冻结权重
+  计算“有效 head 加权和/有效权重和”；无有效 head 的 row 排除，整 batch 无有效监督时直接失败；
+- `world_v3_loss`/`world_vla75_loss` 保持既有返回形状兼容，内部统一使用逐样本 reducer 并报告
+  每个 head 有效计数；
+- 持久 `GroupDROState` 预登记 map/family/weather/group，按 detached 真实多任务 group mean
+  指数更新并应用 floor；当前 batch 未出现的 group 保留历史，空 group 记录
+  `NOT_MEASURED/count=0/loss=null`；coverage/temporal penalty 不进入 Group-DRO 风险。
+
+失败行为：mask 外 target 变化不影响 loss，repair/executable 独立 mask；空监督 batch 不可优化，
+空 group 不会伪装成零风险或 gate pass。
+
+### C1.3 唯一 temporal selector
+
+- 新增 `safedrive_foundry/data_pipeline/h6/temporal.py` 的纯状态机，状态仅保存作用域内
+  `expert`/`vla` source 和 source EMA，不保存 candidate ID；HOLD 总是返回本 tick fresh ID；
+- scope 固定由 run/episode identity 与 route revision 组成，变化时重置 EMA/hold/history；
+- 顺序固定为 scope/eligibility、EMA、held unavailable/emergency risk、emergency margin、minimum
+  hold、hysteresis、普通 switch/choose；disposition/reason code 与 C1 合同一致；
+- VLA75 live `H5WorldRouter` 和 offline `select_vla75_router_config` 调用同一核心并输出同一 trace；
+  旧 H5 historical 路径保持原行为；single candidate、feature/deadline/low-confidence/forced defer
+  也进入统一 defer core，按 held→Expert→VLA→MRM，非 MRM 结果仍交给 Safety。
+
+失败行为：scope 不匹配会重置，held source 不可用或 unsafe 不会复活，Guard REJECT 不会重新
+进入候选；无 eligible source 返回 `DEFER_SINGLE_CANDIDATE`/MRM 稳定原因。
+
+### C1.4 single tick owner 与 cleanup
+
+- `scripts/h5_collect.py` 删除 runtime 外直接 `world.tick()` 和强制推进/强杀恢复；正常运行仍只
+  通过 `ScenarioRuntime.tick_controls()`；
+- infrastructure retry 前只读检查 scene/settings/tick owner：clean scene 允许既有的一次 bounded
+  retry；存在 vehicle/walker residue 或 ownership/settings 不可确认时，写
+  `NEEDS_USER_ACTION/CLEANUP_RESIDUE` artifact 后停止；
+- failure artifact 记录 residue IDs、tick owner、`tick_advanced=false`、cleanup/retry 状态和自哈希。
+
+失败行为：residue 永不调用 fake/world tick；clean scene 也不推进 world，只允许一次既有 retry。
+
+### C1.5 benchmark 与 Evidence 真实性
+
+- `scripts/h5_ultimate_benchmark.py` 现在只产生
+  `benchmark_scope=latency_only_smoke`、`model_state=random_untrained`、
+  `quality_gate_eligible=false` 的 self-hashed artifact；
+- 默认写入非冻结 `generated/h6/c1-smoke/ultimate-latency-smoke.json`；总状态只能是
+  `SMOKE_COMPLETED` 或 `SMOKE_FAILED`，CPU/GPU 使用各自 latency threshold，局部 PASS/FAIL
+  只描述 latency，不能解释为模型质量；
+- C1 工程 Evidence 更新为 `IMPLEMENTED`；没有新增 GPU/CARLA 数字，CORA algorithm 仍为
+  `PLANNED / NOT_MEASURED / NOT_VERIFIED`。
+
+### 实际验证
+
+第一次在未激活虚拟环境的 shell 直接运行 `python` 返回 `command not found`（exit 127）；随后按
+任务文件激活 `/home/sdf/.venvs/sdf` 并重跑。最终实际结果：
+
+```text
+python -m unittest tests.hybrid.test_world_v3 -v
+  24 tests / OK
+
+python -m unittest tests.hybrid.test_vla75_hardening -v
+  32 tests / OK
+
+python -m unittest discover -s tests -t . -v
+  456 tests / OK / skipped=1
+  skipped 项是既有 SDF_CONTRACT_LIVE_FORWARD GPU+checkpoint 条件测试
+
+python -m compileall -q safedrive_foundry scripts tests
+  passed
+
+git diff --check
+  passed
+
+git diff --stat / 完整 git diff 人工核对
+  passed；17 个 tracked 文件有 C1 改动，另有 evaluator.py、temporal.py 两个新实现文件
+  test_registry.sqlite3 仍是唯一与 C1 无关的未跟踪文件
+```
+
+补充审计期间曾两次把单个测试指定到不存在的类名，unittest loader 各返回 2 个加载错误；改用
+文件内真实类名后对应 Group-DRO/selection/readiness 定向测试均通过。这是测试命令定位错误，
+未触发产品代码修复或删除测试。最终专项和全量结果以上述完整模块/发现命令为准。
+
+专项 evaluator 测试只在临时目录以微型 CPU 模型生成测试 checkpoint/evaluator，用于验证真实
+计算与 hash/fail-closed 消费；它不是项目/CORA 训练结果，不升级 algorithm Evidence。GPU peak
+在该测试中为 `NOT_MEASURED`，没有 CUDA/CARLA 实测数字。
+
+剩余接管条件：C2 必须由用户单独授权、更新 `START_TASK.md`，并按
+`docs/COUNTERFACTUAL_DATA.md` 冻结 development collection contract；C1 完成后不得自动采集、
+训练、运行 pilot/formal 或进入 C2。
+
 ## 2026-08-29 — 活动文档收敛与第二轮全量 QA 完成
 
 状态：

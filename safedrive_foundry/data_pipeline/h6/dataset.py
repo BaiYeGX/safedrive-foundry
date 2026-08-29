@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -107,6 +107,27 @@ class H6PolicyCalibrationExample:
             arm="paired_policy",
             tick=0,
         )
+
+
+def outcome_examples_lineage_sha256(
+    examples: Sequence[OutcomePairExample],
+) -> str:
+    """Hash the complete evaluator/training input contract.
+
+    The dataclass payload includes sample identity, split/seed/group/source
+    audit labels, context features, trajectory tensors, every target and all
+    supervision masks.  Ordering is preserved because it is part of the
+    evaluator input identity.
+    """
+
+    if not examples:
+        raise ValueError("outcome_examples_lineage_requires_rows")
+    return stable_sha256(
+        {
+            "schema_version": "safedrive.world.outcome_input_lineage.v1",
+            "rows": [asdict(example) for example in examples],
+        }
+    )
 
 
 def objective_target(branch: Mapping[str, Any]) -> float:
@@ -738,6 +759,7 @@ __all__ = [
     "OutcomeCandidateExample",
     "OutcomePairExample",
     "H6PolicyCalibrationExample",
+    "outcome_examples_lineage_sha256",
     "load_outcome_examples",
     "load_h6_closed_loop_examples",
     "load_h6_policy_calibration_examples",

@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import math
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -27,70 +26,32 @@ from data_pipeline.h6.contracts import (
     WorldVLA75ScoreResult,
 )
 from data_pipeline.h6.model import load_world_v3, load_world_vla75
-
-
-@dataclass(frozen=True)
-class TemporalStabilizerConfig:
-    """Frozen development-selected temporal routing parameters."""
-
-    ema_alpha: float = 0.50
-    hold_ticks: int = 10
-    hysteresis: float = 0.10
-    emergency_switch_margin: float = 1.5
-    ping_pong_window_ticks: int = 10
-
-    def __post_init__(self) -> None:
-        if not 0.0 < float(self.ema_alpha) <= 1.0:
-            raise ValueError("ema_alpha_must_be_in_(0,1]")
-        if int(self.hold_ticks) < 0:
-            raise ValueError("hold_ticks_must_be_nonnegative")
-        if float(self.hysteresis) < 0.0:
-            raise ValueError("hysteresis_must_be_nonnegative")
-        if float(self.emergency_switch_margin) < float(self.hysteresis):
-            raise ValueError("emergency_margin_must_be_ge_hysteresis")
+from data_pipeline.h6.temporal import (
+    TemporalSelectorConfig as TemporalStabilizerConfig,
+    TemporalSelectorCore,
+    normalize_source,
+)
 
 
 class TemporalPreferenceStabilizer:
-    """EMA/hold/hysteresis over raw pair preference, with event breaks.
-
-    This helper is deliberately independent of Safety.  It can only preserve
-    a source that the caller has already marked eligible; it cannot create a
-    candidate or bypass a Safety fallback.
-    """
+    """Compatibility facade over the shared source-scoped selector."""
 
     def __init__(self, config: TemporalStabilizerConfig | None = None) -> None:
         self.config = config or TemporalStabilizerConfig()
-        self.reset()
+        self._core = TemporalSelectorCore(self.config)
 
     def reset(self) -> None:
-        self._ema: dict[str, float] = {}
-        self._source: str | None = None
-        self._candidate: str | None = None
-        self._hold = 0
-        self._history: list[str] = []
-        self._switches = 0
+        self._core.reset()
 
     def metrics(self) -> dict[str, object]:
+        metrics = self._core.metrics()
         return {
-            "switches": self._switches,
-            "hold_ticks": self._hold,
-            "history": list(self._history),
-            "ping_pong": self._ping_pong(),
+            "switches": metrics["switches"],
+            "hold_ticks": metrics["hold_age"],
+            "history": metrics["history"],
+            "ping_pong": metrics["ping_pong"],
+            "trace": metrics["trace"],
         }
-
-    def _ping_pong(self) -> bool:
-        history = self._history
-        window = int(self.config.ping_pong_window_ticks)
-        for start, source in enumerate(history):
-            if source not in {"vla", "expert"}:
-                continue
-            opposite = False
-            for value in history[start + 1 : start + window + 1]:
-                if value in {"vla", "expert"} and value != source:
-                    opposite = True
-                if opposite and value == source:
-                    return True
-        return False
 
     def update(
         self,
@@ -103,88 +64,36 @@ class TemporalPreferenceStabilizer:
         risk_breach: bool = False,
         eligible_changed: bool = False,
     ) -> tuple[str, str, dict[str, object]]:
-        if not scores:
-            raise ValueError("temporal_scores_required")
-        values = {str(key): float(value) for key, value in scores.items()}
-        if not all(math.isfinite(value) for value in values.values()):
-            raise ValueError("temporal_scores_must_be_finite")
-        # Candidate ids are frame-scoped.  Retaining an old frame's id would
-        # let a stale candidate win the max() call and would turn temporal
-        # smoothing into an implicit trajectory generator.
-        previous_ema = self._ema
-        self._ema = {}
-        for key, value in values.items():
-            previous = previous_ema.get(key, value)
-            self._ema[key] = self.config.ema_alpha * value + (1.0 - self.config.ema_alpha) * previous
-        raw_id = str(raw_preferred_candidate_id)
-        if raw_id not in values:
-            raise ValueError("raw_preferred_candidate_missing")
-        raw_source = str(raw_preferred_source)
-        if raw_source not in {"vla", "expert", "mrm"}:
-            raise ValueError("raw_preferred_source_invalid")
-        proposed_id = max(self._ema, key=lambda key: (self._ema[key], key))
-        proposed_source = str(candidate_sources.get(proposed_id, raw_source)).lower()
-        if proposed_source in {"vla_fast", "vla_slow"}:
-            proposed_source = "vla"
-        elif proposed_source in {"classic", "classic_expert"}:
-            proposed_source = "expert"
-        if proposed_source not in {"vla", "expert", "mrm"}:
-            proposed_source = raw_source
-        margin = 0.0
-        if len(self._ema) >= 2:
-            ordered = sorted(self._ema.values(), reverse=True)
-            margin = float(ordered[0] - ordered[1])
-        break_now = bool(event_break or risk_breach or eligible_changed)
-        previous_source = self._source
-        keep = (
-            not break_now
-            and previous_source in {"vla", "expert"}
-            and proposed_source != previous_source
-            and self._hold < self.config.hold_ticks
-            and (
-                margin < self.config.hysteresis
-                or margin < self.config.emergency_switch_margin
-            )
-        )
-        if keep:
-            selected_source = previous_source
-            def _normalized_source(value: object) -> str:
-                text = str(value).lower()
-                if text in {"vla_fast", "vla_slow"}:
-                    return "vla"
-                if text in {"classic", "classic_expert"}:
-                    return "expert"
-                return text
-            selected_id = next(
-                (
-                    key
-                    for key, source in candidate_sources.items()
-                    if _normalized_source(source) == previous_source and key in values
-                ),
-                proposed_id,
-            )
-            self._hold += 1
-            reason = "hold_hysteresis"
-        else:
-            selected_source = proposed_source
-            selected_id = proposed_id
-            if previous_source is not None and selected_source != previous_source:
-                self._switches += 1
-            self._hold = 1
-            reason = "event_break" if break_now else "ema_rank"
-        self._source, self._candidate = selected_source, selected_id
-        self._history.append(selected_source)
-        return selected_id, selected_source, {
-            "raw_preferred_candidate_id": raw_id,
-            "raw_preferred_source": raw_source,
-            "stabilized_preferred_candidate_id": selected_id,
-            "stabilized_preferred_source": selected_source,
-            "reason": reason,
-            "margin": margin,
-            "hold_ticks": self._hold,
-            "switches": self._switches,
-            "ping_pong": self._ping_pong(),
+        source_ids = {
+            normalize_source(source): str(candidate_id)
+            for candidate_id, source in candidate_sources.items()
         }
+        source_scores = {
+            normalize_source(candidate_sources[candidate_id]): float(value)
+            for candidate_id, value in scores.items()
+            if candidate_id in candidate_sources
+        }
+        raw_source = normalize_source(raw_preferred_source)
+        decision = self._core.step(
+            scope_key="temporal-preference-stabilizer",
+            source_scores=source_scores,
+            fresh_candidate_ids=source_ids,
+            eligible_sources=set(source_ids),
+            raw_preferred_source=raw_source,
+            event_break=bool(event_break or eligible_changed),
+            unsafe_sources=({raw_source} if risk_breach else set()),
+        )
+        if decision.selected_candidate_id is None or decision.selected_source is None:
+            raise RuntimeError("temporal_stabilizer_selected_mrm")
+        trace = decision.to_dict()
+        trace.update(
+            raw_preferred_candidate_id=str(raw_preferred_candidate_id),
+            stabilized_preferred_candidate_id=decision.selected_candidate_id,
+            stabilized_preferred_source=decision.selected_source,
+            hold_ticks=decision.hold_age,
+            switches=decision.switch_count,
+        )
+        return decision.selected_candidate_id, decision.selected_source, trace
 
 
 class WorldV3Scorer:

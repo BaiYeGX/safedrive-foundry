@@ -33,9 +33,9 @@ cleanup and terminal status
 代码存在、单元测试、开发强制采样、单帧 calibration、随机模型 latency 或用户口头确认均
 不能升级为正式 CARLA/模型 Evidence。
 
-阶段执行状态与 Evidence 成熟度分开：`C1 CURRENT` 说明 program 正在做正确性任务，不能据此
-把 CORA algorithm 从 `PLANNED` 升级。Gate 也是独立维度；`VERIFIED / GATE_FAILED` 表示负
-结果可信，不是成功。
+阶段执行状态与 Evidence 成熟度分开：`C1 COMPLETED / STOPPED` 只说明 correctness 工程代码
+和测试已完成，不能据此把 CORA algorithm 从 `PLANNED` 升级。Gate 也是独立维度；
+`VERIFIED / GATE_FAILED` 表示负结果可信，不是成功。
 
 ## 2. 当前状态总表
 
@@ -49,7 +49,8 @@ cleanup and terminal status
 | H5 | VERIFIED | GATE_FAILED | 未证明 World closed-loop 可复现净收益 |
 | H6 v1 | MEASURED | GATE_FAILED | seed 101 pilot 未达 World/VLA-primary gate |
 | H6 v2 | IMPLEMENTED | NOT_RUN | 新代码存在，无新 checkpoint/CARLA formal |
-| H6-CORA algorithm | PLANNED | — | C0 文档/QA 已完成、C1 当前；尚无 CORA 数据/模型结果 |
+| H6-CORA C1 engineering | IMPLEMENTED | NOT_RUN | evaluator/loss/selector/tick-owner/benchmark 加固与离线测试完成 |
+| H6-CORA algorithm | PLANNED | — | C0/C1 已完成并停止；尚无 CORA 数据/模型结果 |
 
 ## 3. 指标口径
 
@@ -258,14 +259,28 @@ archive/2026-08-27-cora-document-consolidation/historical-stage-docs/H6_VLA75_HA
 
 ## 10. H6-CORA Evidence 合同
 
-当前 program：`C0 COMPLETED / C1 CURRENT`。当前 algorithm Evidence：`PLANNED`。尚无 CORA
-paired data、checkpoint、calibrated router 或闭环数字。
+当前 program：`C0 COMPLETED / C1 COMPLETED / STOPPED / C2 AWAITING SEPARATE AUTHORIZATION`。
+当前 algorithm Evidence：`PLANNED / NOT_MEASURED / NOT_VERIFIED`。尚无 CORA paired data、
+项目 checkpoint、calibrated router 或闭环数字。
 
 ### C1 正确性
 
-只产生代码/测试/evaluator schema Evidence；不测 GPU/CARLA 时不得写 measured latency、显存
-或闭环行为。必须证明硬编码 pass 消失、per-sample loss 正确、offline/live selector parity、
-single tick owner 和 artifact self-hash。
+C1 只产生代码、测试和 artifact schema Evidence，工程状态为 `IMPLEMENTED`：
+
+```text
+safedrive.world.vla75.evaluator.v1
+safedrive.world.vla75.training_summary.v2
+safedrive.h6.vla75.run_lock.v2（C1 bindings required）
+self-hashed C1 readiness
+self-hashed cleanup failure artifact
+self-hashed latency-only random-model smoke artifact
+```
+
+离线测试证明缺失/占位 evaluator fail closed、per-sample loss/mask/Group-DRO 合同、offline/live
+共享 selector、collector 不直接 tick、artifact hash/tamper 和随机 benchmark 不可获得质量 gate。
+微型 CPU evaluator 测试只产生临时测试 artifact，不是项目模型 Evidence；未测 GPU/CARLA 时
+latency/显存/闭环均不能升级为正式 `MEASURED`。因此 C1 engineering 是 `IMPLEMENTED`，CORA
+algorithm 保持 `PLANNED / NOT_MEASURED / NOT_VERIFIED`。
 
 ### C2 数据
 

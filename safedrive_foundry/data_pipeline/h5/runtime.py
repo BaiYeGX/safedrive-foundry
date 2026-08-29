@@ -11,6 +11,7 @@ wraps the normalized H4 scorer with:
 
 from __future__ import annotations
 
+import math
 from dataclasses import replace
 from typing import Mapping, Sequence
 
@@ -22,6 +23,11 @@ from driving_vla.hybrid.contracts import (
 from driving_vla.hybrid.router import FrozenH1Router
 
 from data_pipeline.h4.runtime import NormalizedWorldScorer
+from data_pipeline.h6.temporal import (
+    TemporalSelectorConfig,
+    TemporalSelectorCore,
+    normalize_source,
+)
 
 
 class H5WorldRouter:
@@ -82,6 +88,14 @@ class H5WorldRouter:
         self._last_score = None
         self._ema_scores: dict[str, float] = {}
         self._last_eligible_ids: frozenset[str] | None = None
+        self._temporal = TemporalSelectorCore(
+            TemporalSelectorConfig(
+                ema_alpha=0.50 if self.ema_alpha is None else self.ema_alpha,
+                hold_ticks=self.min_hold_ticks,
+                hysteresis=self.hysteresis_margin,
+                emergency_switch_margin=self.emergency_switch_margin,
+            )
+        )
 
     @property
     def last_score(self):
@@ -97,6 +111,7 @@ class H5WorldRouter:
         self._single_pass_count = 0
         self._ema_scores.clear()
         self._last_eligible_ids = None
+        self._temporal.reset()
 
     def _clear_hold(self) -> None:
         # Keep cumulative metrics/history; only forget the current hold/source.
@@ -106,6 +121,19 @@ class H5WorldRouter:
         self._single_pass_count = 0
 
     def metrics(self) -> dict:
+        if self.vla75_mode:
+            temporal = self._temporal.metrics()
+            return {
+                "decisions": len(temporal["trace"]),
+                "switch_count": temporal["switches"],
+                "defer_count": sum(
+                    str(item.get("disposition", "")).startswith("DEFER")
+                    for item in temporal["trace"]
+                ),
+                "current_hold_ticks": temporal["hold_age"],
+                "history": temporal["trace"],
+                "ping_pong": temporal["ping_pong"],
+            }
         return {
             "decisions": len(self._history),
             "switch_count": self._switch_count,
@@ -136,6 +164,53 @@ class H5WorldRouter:
 
     def _defer(self, candidate_set: HybridCandidateSet, reason: str) -> RoutingResult:
         baseline = self.fallback.route(candidate_set)
+        if self.vla75_mode:
+            passed = [
+                item
+                for item in candidate_set.candidates
+                if item.guard is not None and item.guard.passed
+            ]
+            source_ids = {
+                normalize_source(item.provenance.source.value): item.candidate.candidate_id
+                for item in passed
+            }
+            decision = self._temporal.step(
+                scope_key=self._scope_key(candidate_set),
+                source_scores={},
+                fresh_candidate_ids=source_ids,
+                eligible_sources=set(source_ids),
+                raw_preferred_source=None,
+                learned_defer_reason=str(reason),
+            )
+            order = (
+                ()
+                if decision.selected_candidate_id is None
+                else (decision.selected_candidate_id,)
+                + tuple(
+                    sorted(
+                        item.candidate.candidate_id
+                        for item in passed
+                        if item.candidate.candidate_id != decision.selected_candidate_id
+                    )
+                )
+            )
+            self._last_selected_source = decision.selected_source
+            self._last_selected_id = decision.selected_candidate_id
+            self._hold_count = decision.hold_age
+            return replace(
+                baseline,
+                selected_candidate_id=decision.selected_candidate_id,
+                world=(
+                    WorldDisposition.DEFERRED_NOT_APPLICABLE
+                    if decision.disposition == "DEFER_SINGLE_CANDIDATE"
+                    else WorldDisposition.DEFERRED_LOW_CONFIDENCE
+                ),
+                selector=self.selector_name,
+                reason=decision.reason,
+                preference_order=order,
+                stabilized_preferred_candidate_id=decision.selected_candidate_id,
+                stabilized_preferred_source=decision.selected_source,
+            )
         # A defer means the non-learning selector is authoritative.  Reset the
         # World hold state so a later World decision starts clean.
         self._defer_count += 1
@@ -157,6 +232,17 @@ class H5WorldRouter:
             for item in candidate_set.candidates
         }
 
+    @staticmethod
+    def _scope_key(candidate_set: HybridCandidateSet) -> str:
+        anchor = candidate_set.anchor
+        return "|".join(
+            (
+                str(anchor.bundle.run_id),
+                str(anchor.bundle.scenario_id),
+                str(anchor.route_revision),
+            )
+        )
+
     def route(
         self,
         candidate_set: HybridCandidateSet,
@@ -177,6 +263,8 @@ class H5WorldRouter:
         )
         self._last_eligible_ids = eligible_ids
         if len(passed) < 2:
+            if self.vla75_mode:
+                return self._defer(candidate_set, "single_candidate")
             result = self.fallback.route(candidate_set)
             if eligible_changed:
                 # A Guard eligibility change is an explicit temporal event;
@@ -353,6 +441,82 @@ class H5WorldRouter:
                 proposed = vla_id
                 proposed_source = "vla"
                 vla_primary = True
+
+        if self.vla75_mode:
+            source_ids = {
+                normalize_source(source): candidate_id
+                for candidate_id, source in source_by_id.items()
+            }
+            source_scores = {
+                normalize_source(source_by_id[prediction.candidate_key]): float(
+                    getattr(prediction, "preference_utility", prediction.utility)
+                )
+                for prediction in score.predictions
+                if prediction.candidate_key in source_by_id
+            }
+            unsafe_sources = {
+                normalize_source(source_by_id[prediction.candidate_key])
+                for prediction in score.predictions
+                if prediction.candidate_key in source_by_id
+                and float(getattr(prediction, "unsafe_probability", 0.0))
+                > float(getattr(score, "risk_ceiling", math.inf)) + 1e-12
+            }
+            decision = self._temporal.step(
+                scope_key=self._scope_key(candidate_set),
+                source_scores=source_scores,
+                fresh_candidate_ids=source_ids,
+                eligible_sources=set(source_ids),
+                raw_preferred_source=normalize_source(raw_source),
+                event_break=bool(event_break or eligible_changed),
+                unsafe_sources=unsafe_sources,
+            )
+            selected = decision.selected_candidate_id
+            if selected is None:
+                return self._defer(candidate_set, "temporal_no_eligible")
+            self._last_selected_id = selected
+            self._last_selected_source = decision.selected_source
+            self._hold_count = decision.hold_age
+            self._switch_count = decision.switch_count
+            trace = decision.to_dict()
+            trace.update(
+                type="ranked",
+                selected=selected,
+                selected_source=decision.selected_source,
+                proposed=proposed,
+                proposed_source=proposed_source,
+                vla_primary=vla_primary,
+                event_break=bool(event_break or eligible_changed),
+                risk_breach=risk_breach,
+                eligible_changed=eligible_changed,
+            )
+            self._history.append(trace)
+            return RoutingResult(
+                pass_candidate_ids=baseline.pass_candidate_ids,
+                rejected_candidate_ids=baseline.rejected_candidate_ids,
+                selected_candidate_id=selected,
+                selection_space=baseline.selection_space,
+                world=WorldDisposition.RANKED,
+                selector=self.selector_name,
+                reason=decision.reason,
+                difference=baseline.difference,
+                scores={item.candidate_key: item.utility for item in score.predictions},
+                review_candidate_ids=tuple(
+                    item.candidate.candidate_id
+                    for item in passed
+                    if bool(getattr(item.guard, "needs_review", False))
+                ),
+                preference_order=(selected,)
+                + tuple(
+                    item.candidate.candidate_id
+                    for item in passed
+                    if item.candidate.candidate_id != selected
+                ),
+                raw_preferred_candidate_id=raw_preferred,
+                raw_preferred_source=normalize_source(raw_source),
+                raw_gate_reasons=raw_gate_reasons,
+                stabilized_preferred_candidate_id=selected,
+                stabilized_preferred_source=decision.selected_source,
+            )
 
         margin = abs(score.predictions[0].utility - score.predictions[1].utility)
         if self.ema_alpha is not None:

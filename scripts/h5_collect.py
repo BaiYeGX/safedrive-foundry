@@ -9,6 +9,7 @@ frozen H4 World checkpoints, and the H5 router.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import math
@@ -166,22 +167,96 @@ def _require_clean_scene(world: Any) -> None:
         raise RuntimeError(f"NEEDS_CLEAN_SCENE:{residue}")
 
 
-def _force_clean_scene(world: Any) -> None:
-    """Destroy all vehicle/walker actors before an infrastructure retry."""
-    for actor in world.get_actors():
-        type_id = str(getattr(actor, "type_id", ""))
-        if type_id.startswith(("vehicle.", "walker.")) and bool(getattr(actor, "is_alive", True)):
-            try:
-                actor.destroy()
-            except Exception:
-                pass
+class _CollectionNeedsUserAction(RuntimeError):
+    def __init__(self, payload: Mapping[str, Any]) -> None:
+        super().__init__(str(payload.get("failure_code", "NEEDS_USER_ACTION")))
+        self.payload = dict(payload)
+
+
+def _cleanup_retry_status(
+    world: Any,
+    *,
+    lease_paths: Sequence[Path] = (),
+) -> dict[str, Any]:
+    """Inspect cleanup state without destroying actors or advancing CARLA."""
+
+    residue_ids: list[int] = []
+    errors: list[str] = []
     try:
-        if bool(world.get_settings().synchronous_mode):
-            world.tick()
-    except Exception:
-        pass
-    time.sleep(1.0)
-    _require_clean_scene(world)
+        residue_ids = sorted(
+            int(actor.id)
+            for actor in world.get_actors()
+            if str(getattr(actor, "type_id", "")).startswith(("vehicle.", "walker."))
+            and bool(getattr(actor, "is_alive", True))
+        )
+    except Exception as exc:
+        errors.append(f"actors_unavailable:{type(exc).__name__}")
+    try:
+        settings = world.get_settings()
+        synchronous_mode = getattr(settings, "synchronous_mode", None)
+        settings_confirmed = synchronous_mode is False
+        if not settings_confirmed:
+            errors.append(f"settings_not_restored:synchronous_mode={synchronous_mode!r}")
+    except Exception as exc:
+        synchronous_mode = None
+        settings_confirmed = False
+        errors.append(f"settings_unavailable:{type(exc).__name__}")
+
+    active_owners: list[str] = []
+    observed_owners: list[str] = []
+    observed_paths: list[str] = []
+    for lease_path in sorted({Path(item) for item in lease_paths}, key=str):
+        if not lease_path.exists():
+            continue
+        observed_paths.append(str(lease_path))
+        try:
+            with lease_path.open("r", encoding="utf-8") as handle:
+                try:
+                    lease_payload = json.load(handle)
+                    owner = str(lease_payload.get("owner") or "unknown")
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    owner = "unknown"
+                observed_owners.append(owner)
+                try:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    active_owners.append(owner)
+                else:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        except Exception as exc:
+            errors.append(f"tick_lease_unavailable:{lease_path.name}:{type(exc).__name__}")
+    lease_confirmed = not active_owners and not any(
+        item.startswith("tick_lease_unavailable:") for item in errors
+    )
+    if active_owners:
+        errors.append(f"tick_lease_active:{','.join(sorted(set(active_owners)))}")
+    tick_owner = (
+        f"active:{','.join(sorted(set(active_owners)))}"
+        if active_owners
+        else (
+            f"free:last={','.join(sorted(set(observed_owners)))}"
+            if observed_owners
+            else "free:no_lease_files"
+        )
+    )
+    clean = not residue_ids and settings_confirmed and lease_confirmed and not errors
+    payload: dict[str, Any] = {
+        "schema_version": "safedrive.h6.collection_cleanup_status.v1",
+        "status": "CLEAN_RETRY_ALLOWED" if clean else "NEEDS_USER_ACTION",
+        "failure_code": None if clean else "CLEANUP_RESIDUE",
+        "residue_ids": residue_ids,
+        "tick_owner": tick_owner,
+        "tick_owner_confirmed": lease_confirmed,
+        "tick_lease_paths": observed_paths,
+        "settings_synchronous_mode": synchronous_mode,
+        "settings_confirmed": settings_confirmed,
+        "tick_advanced": False,
+        "cleanup_status": "CLEAN" if clean else "RESIDUE_OR_OWNER_UNCONFIRMED",
+        "retry_status": "ALLOWED_ONCE" if clean else "STOPPED",
+        "errors": errors,
+    }
+    payload["cleanup_sha256"] = stable_sha256(payload)
+    return payload
 
 
 def _connection(map_name: str) -> tuple[Any, Any, Any]:
@@ -1361,9 +1436,26 @@ def _collect_map_impl(
                     except Exception as exc:
                         if attempt >= 1:
                             raise
-                        # Infrastructure-only retry: runtime failed to start (e.g. spawn_failed).
-                        _force_clean_scene(world)
-                        time.sleep(2.0)
+                        # Infrastructure-only retry is permitted once and
+                        # only after Runtime has already left a clean scene.
+                        # The collector never repairs cleanup by owning a tick
+                        # or destroying actors outside ScenarioRuntime.
+                        cleanup = _cleanup_retry_status(
+                            world,
+                            lease_paths=(
+                                ROOT / ".runtime/tick-lease.lock",
+                                *ROOT.glob(".runtime/tick-lease-h5-*.lock"),
+                            ),
+                        )
+                        if cleanup["status"] != "CLEAN_RETRY_ALLOWED":
+                            raise _CollectionNeedsUserAction(
+                                {
+                                    **cleanup,
+                                    "status": "NEEDS_USER_ACTION",
+                                    "failure_code": "CLEANUP_RESIDUE",
+                                    "initial_error": f"{type(exc).__name__}:{exc}",
+                                }
+                            ) from exc
                 assert run is not None
                 run["dataset_id"] = dataset_id
                 run["manifest_kind"] = scenario.manifest_kind
@@ -1441,16 +1533,34 @@ def collect_map(
     except BaseException as exc:
         gpu = sampler.stop()
         evidence_dir.mkdir(parents=True, exist_ok=True)
+        cleanup_payload = (
+            dict(exc.payload)
+            if isinstance(exc, _CollectionNeedsUserAction)
+            else {
+                "status": "FAILED",
+                "failure_code": "COLLECTION_EXCEPTION",
+                "residue_ids": [],
+                "tick_owner": "ScenarioRuntime",
+                "tick_owner_confirmed": False,
+                "tick_advanced": False,
+                "cleanup_status": "NOT_MEASURED",
+                "retry_status": "STOPPED",
+            }
+        )
+        failure_payload = {
+            "schema_version": "safedrive.h6.collection_failure.v1",
+            "dataset_id": dataset_id,
+            "map_name": map_name,
+            "scope": scope,
+            "error": f"{type(exc).__name__}:{exc}",
+            "gpu": gpu,
+            **cleanup_payload,
+        }
+        failure_payload.pop("cleanup_sha256", None)
+        failure_payload["failure_sha256"] = stable_sha256(failure_payload)
         _atomic_json(
             evidence_dir / f"collect-{scope}-{map_name}-failure.json",
-            {
-                "schema_version": "safedrive.h5.collect_failure.v1",
-                "dataset_id": dataset_id,
-                "map_name": map_name,
-                "scope": scope,
-                "error": f"{type(exc).__name__}:{exc}",
-                "gpu": gpu,
-            },
+            failure_payload,
         )
         raise
     sampler.stop()

@@ -26,6 +26,12 @@ from data_pipeline.h6.dataset import (  # noqa: E402
     load_h6_closed_loop_examples,
     load_h6_policy_calibration_examples,
     load_outcome_examples,
+    outcome_examples_lineage_sha256,
+)
+from data_pipeline.h6.evaluator import (  # noqa: E402
+    build_vla75_evaluator,
+    file_sha256,
+    finalize_training_summary_v2,
 )
 from data_pipeline.h6.matrix import H6_TRAIN_SEEDS  # noqa: E402
 from data_pipeline.h6.config import H6_VLA75_FORMAL_LINEAGES  # noqa: E402
@@ -36,6 +42,7 @@ from data_pipeline.h6.model import (  # noqa: E402
     train_world_vla75,
 )
 from data_pipeline.h6.runtime import WorldV3Scorer, WorldVLA75Scorer  # noqa: E402
+from data_pipeline.h6.run_lock import scoped_file_hashes, worktree_identity  # noqa: E402
 
 
 def _percentile(values, percentile):
@@ -165,7 +172,19 @@ def main() -> int:
         max_epochs=args.max_epochs,
         patience=args.patience,
     )
+    train_lineage_sha256 = outcome_examples_lineage_sha256(train)
+    validation_lineage_sha256 = outcome_examples_lineage_sha256(val)
+    c1_code_paths = (
+        "safedrive_foundry/data_pipeline/h6/dataset.py",
+        "safedrive_foundry/data_pipeline/h6/evaluator.py",
+        "safedrive_foundry/data_pipeline/h6/model.py",
+        "scripts/train_world_v3.py",
+    )
+    code_sha256 = stable_sha256(scoped_file_hashes(ROOT, c1_code_paths))
+    worktree_sha256 = worktree_identity(ROOT)["full_worktree_hash"]
+    training_config_sha256 = stable_sha256(asdict(cfg))
     results = []
+    evaluator_rows = []
     checkpoint_paths = []
     for seed in requested_seeds:
         path = args.output_dir / "checkpoints" / f"seed-{seed}.pt"
@@ -184,6 +203,34 @@ def main() -> int:
         result_payload = asdict(result)
         if args.contract == "vla75-v2":
             result_payload["schema_version"] = "safedrive.world.vla75.pair_exec.v1"
+            evaluator = build_vla75_evaluator(
+                path,
+                val,
+                device=args.device,
+                training_input_sha256=train_lineage_sha256,
+                config_sha256=training_config_sha256,
+                code_sha256=code_sha256,
+                worktree_sha256=worktree_sha256,
+            )
+            evaluator_path = args.output_dir / "evaluators" / f"seed-{seed}.json"
+            evaluator_path.parent.mkdir(parents=True, exist_ok=True)
+            evaluator_path.write_text(
+                json.dumps(evaluator, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            evaluator_row = {
+                "seed": seed,
+                "path": str(evaluator_path),
+                "sha256": evaluator["evaluator_sha256"],
+                "file_sha256": file_sha256(evaluator_path),
+            }
+            evaluator_rows.append(evaluator_row)
+            result_payload.update(
+                evaluator_path=str(evaluator_path),
+                evaluator_sha256=evaluator["evaluator_sha256"],
+                train_lineage_sha256=train_lineage_sha256,
+                validation_lineage_sha256=validation_lineage_sha256,
+            )
         results.append(result_payload)
         checkpoint_paths.append(path)
 
@@ -405,7 +452,7 @@ def main() -> int:
     ) / max(1, 2 * len(train))
     payload = {
         "schema_version": (
-            "safedrive.world.vla75.training_summary.v1"
+            "safedrive.world.vla75.training_summary.v2"
             if args.contract == "vla75-v2"
             else "safedrive.world.v3.training_summary.v1"
         ),
@@ -447,6 +494,11 @@ def main() -> int:
             None if args.split_manifest is None else stable_sha256(manifest)
         ),
         "source_identity_is_model_input": False,
+        "train_lineage_sha256": train_lineage_sha256,
+        "validation_lineage_sha256": validation_lineage_sha256,
+        "training_config_sha256": training_config_sha256,
+        "code_sha256": code_sha256,
+        "worktree_sha256": worktree_sha256,
         "models": results,
         "calibration": calibration_payload,
         "validation": {
@@ -472,7 +524,15 @@ def main() -> int:
         payload["router_calibration"] = (
             None if router_calibration is None else router_calibration.to_dict()
         )
-    payload["evidence_sha256"] = stable_sha256(payload)
+        payload["evaluators"] = evaluator_rows
+        payload["calibration"]["c1_bindings"] = {
+            "evaluator_sha256": [item["sha256"] for item in evaluator_rows],
+            "validation_lineage_sha256": validation_lineage_sha256,
+            "training_input_sha256": train_lineage_sha256,
+        }
+        payload = finalize_training_summary_v2(payload)
+    else:
+        payload["evidence_sha256"] = stable_sha256(payload)
     summary = args.output_dir / "training-summary.json"
     summary.write_text(
         json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
@@ -481,16 +541,17 @@ def main() -> int:
     print(
         json.dumps(
             {
-                "ok": calibration.passed,
+                "ok": True if args.contract == "vla75-v2" else calibration.passed,
                 "summary": str(summary),
                 "train_pairs": len(train),
                 "val_pairs": len(val),
                 "calibration": calibration.to_dict(),
+                "calibration_is_diagnostic": args.contract == "vla75-v2",
             },
             sort_keys=True,
         )
     )
-    return 0 if calibration.passed else 2
+    return 0 if args.contract == "vla75-v2" or calibration.passed else 2
 
 
 if __name__ == "__main__":

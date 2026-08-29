@@ -41,7 +41,13 @@ from data_pipeline.h6.dataset import (  # noqa: E402
 )
 from data_pipeline.h3.dataset import H3DatasetError  # noqa: E402
 from data_pipeline.h2.live_contract import route_follow_steer  # noqa: E402
-from data_pipeline.h6.model import WorldV3Model, _batch, world_v3_loss  # noqa: E402
+from data_pipeline.h6.model import (  # noqa: E402
+    WORLD_V3_HEAD_WEIGHTS,
+    WorldV3Model,
+    _batch,
+    world_v3_loss,
+    world_v3_per_sample_loss_report,
+)
 from data_pipeline.h6.matrix import (  # noqa: E402
     H6_SEEDS,
     H6_TRAIN_SEEDS,
@@ -479,10 +485,43 @@ class WorldV3ModelTest(unittest.TestCase):
         )
         loss, pieces = world_v3_loss(outputs, targets)
         self.assertTrue(torch.isfinite(loss))
-        self.assertEqual(
-            set(pieces),
-            {"objective_reg", "pair", "progress", "completion", "collision", "red", "offroad", "comfort", "repair", "trust"},
+        self.assertEqual(int(pieces["valid_samples"]), 1)
+        for head in WORLD_V3_HEAD_WEIGHTS:
+            self.assertIn(head, pieces)
+            self.assertIn(f"{head}_valid_count", pieces)
+
+    def test_per_sample_loss_is_effective_head_weighted_mean(self):
+        outputs = torch.zeros((2, 2, WORLD_V3_OUTPUT_DIM), dtype=torch.float32)
+        pair = OutcomePairExample(
+            "manual",
+            "Town01",
+            "free_flow",
+            0,
+            "ClearNoon",
+            "dev_fold_1",
+            (
+                replace(_candidate("e", "expert"), repair_success=True),
+                replace(_candidate("v", "vla"), repair_success=False),
+            ),
         )
+        _, _, targets = _batch([pair, pair], torch.device("cpu"), swap=False)
+        # The second row has only the independent repair head available.
+        targets["outcome_mask"][1].zero_()
+        targets["safety_mask"][1].zero_()
+        report = world_v3_per_sample_loss_report(outputs, targets)
+        expected = report.head_losses["repair"][1]
+        self.assertAlmostEqual(float(report.per_sample[1]), float(expected), places=7)
+        numerator = sum(
+            float(report.head_weights[name]) * float(report.head_losses[name][0])
+            for name in report.head_losses
+            if bool(report.head_masks[name][0])
+        )
+        denominator = sum(
+            float(report.head_weights[name])
+            for name in report.head_losses
+            if bool(report.head_masks[name][0])
+        )
+        self.assertAlmostEqual(float(report.per_sample[0]), numerator / denominator, places=6)
 
     def test_unobserved_counterfactual_targets_do_not_change_loss(self):
         expert = _candidate("expert", "expert")
@@ -512,6 +551,32 @@ class WorldV3ModelTest(unittest.TestCase):
             changed[key][0, 1] += 1000.0
         modified, _ = world_v3_loss(outputs, changed)
         self.assertAlmostEqual(float(original), float(modified), places=7)
+
+    def test_batch_without_any_valid_supervision_fails_closed(self):
+        first = replace(
+            _candidate("expert", "expert"),
+            outcome_observed=False,
+            safety_observed=False,
+            repair_success=None,
+        )
+        second = replace(
+            _candidate("vla", "vla"),
+            outcome_observed=False,
+            safety_observed=False,
+            repair_success=None,
+        )
+        pair = OutcomePairExample(
+            "invalid",
+            "Town01",
+            "free_flow",
+            0,
+            "ClearNoon",
+            "h6_train",
+            (first, second),
+        )
+        _, _, targets = _batch([pair], torch.device("cpu"), swap=False)
+        with self.assertRaisesRegex(ValueError, "no_valid_supervision"):
+            world_v3_loss(torch.zeros((1, 2, WORLD_V3_OUTPUT_DIM)), targets)
 
     def test_objective_penalizes_each_hard_hazard(self):
         safe = {"route_progress_m": 3.0}

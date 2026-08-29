@@ -1,4 +1,4 @@
-"""Comprehensive microbenchmark and performance audit for the ultimate solution.
+"""Latency-only smoke for randomly initialized H5/H6 components.
 
 Evaluates:
 1. VLA convex QP smoother: latency, acceleration/curvature bounds, jerk RMS reduction.
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+import argparse
 import sys
 import time
 from pathlib import Path
@@ -25,7 +26,7 @@ import torch
 from classic_stack.control.config import load_control_config
 from classic_stack.control.controller import ControlLoop, EgoState
 from classic_stack.planning.frenet.planner import Trajectory, TrajectoryPoint
-from data_pipeline.h3.contracts import WorldPrediction, WorldScoreResult
+from data_pipeline.h3.contracts import WorldPrediction, WorldScoreResult, stable_sha256
 from data_pipeline.h3.model import WorldScorerModel
 from data_pipeline.h5.distilled_scorer import DistilledWorldScorer
 from data_pipeline.h5.runtime import H5WorldRouter
@@ -150,14 +151,18 @@ def benchmark_distilled_scorer(iterations: int = 200) -> dict:
         if lat > 50.0:
             deadline_misses += 1
 
+    threshold_ms = 4.0 if device == "cuda" else 15.0
     return {
         "device": device,
+        "model_state": "random_untrained",
         "iterations": iterations,
         "p50_latency_ms": float(np.percentile(latencies, 50)),
         "p95_latency_ms": float(np.percentile(latencies, 95)),
         "p99_latency_ms": float(np.percentile(latencies, 99)),
         "deadline_misses": deadline_misses,
-        "target_met_sub_10ms": bool(np.percentile(latencies, 99) < 15.0),
+        "device_latency_threshold_p99_ms": threshold_ms,
+        "latency_p99_pass": bool(np.percentile(latencies, 99) < threshold_ms),
+        "latency_deadline_pass": deadline_misses == 0,
     }
 
 
@@ -200,45 +205,89 @@ def benchmark_mpc_control(iterations: int = 200) -> dict:
     }
 
 
-def main():
-    print("=" * 60)
-    print("  SAFE-DRIVE ULTIMATE SOLUTION PERFORMANCE BENCHMARK")
-    print("=" * 60)
-
-    print("\n[1/3] Benchmarking VLA Convex Kinematic QP Smoother...")
-    vla_res = benchmark_vla_smoother(500)
-    print(f"  P50 Latency : {vla_res['p50_latency_ms']:.4f} ms")
-    print(f"  P99 Latency : {vla_res['p99_latency_ms']:.4f} ms (<1ms target: OK)")
-    print(f"  Jerk RMS    : {vla_res['raw_jerk_rms']:.2f} m/s^3 -> {vla_res['smooth_jerk_rms']:.2f} m/s^3 (-{vla_res['jerk_reduction_ratio']*100:.1f}%)")
-
-    print("\n[2/3] Benchmarking Distilled Single-Model World Scorer...")
-    scorer_res = benchmark_distilled_scorer(200)
-    print(f"  Device      : {scorer_res['device']}")
-    print(f"  P50 Latency : {scorer_res['p50_latency_ms']:.2f} ms")
-    print(f"  P99 Latency : {scorer_res['p99_latency_ms']:.2f} ms (<15ms on CPU / <4ms on GPU)")
-    print(f"  Misses (50ms): {scorer_res['deadline_misses']} (Zero Miss Target: OK)")
-
-    print("\n[3/3] Benchmarking MPC Tracking Controller...")
-    mpc_res = benchmark_mpc_control(200)
-    print(f"  P50 Latency : {mpc_res['p50_latency_ms']:.4f} ms")
-    print(f"  P99 Latency : {mpc_res['p99_latency_ms']:.4f} ms")
-    print(f"  Max Steer Δ : {mpc_res['max_steer_delta']:.4f} rad/step (Smooth Transition: OK)")
-    print(f"  Misses (20ms): {mpc_res['deadline_misses']}")
-
+def build_latency_smoke_summary(
+    vla_smoother: dict,
+    distilled_scorer: dict,
+    mpc_controller: dict,
+    *,
+    completed: bool = True,
+    error: str | None = None,
+    timestamp: float | None = None,
+) -> dict:
     summary = {
-        "timestamp": time.time(),
-        "vla_smoother": vla_res,
-        "distilled_scorer": scorer_res,
-        "mpc_controller": mpc_res,
-        "status": "ALL_TARGETS_ACHIEVED",
+        "schema_version": "safedrive.h6.c1.latency_smoke.v1",
+        "timestamp": time.time() if timestamp is None else float(timestamp),
+        "benchmark_scope": "latency_only_smoke",
+        "model_state": "random_untrained",
+        "quality_gate_eligible": False,
+        "status": "SMOKE_COMPLETED" if completed else "SMOKE_FAILED",
+        "error": error,
+        "vla_smoother": dict(vla_smoother),
+        "distilled_scorer": dict(distilled_scorer),
+        "mpc_controller": dict(mpc_controller),
     }
+    summary["artifact_sha256"] = stable_sha256(summary)
+    return summary
 
-    out_file = ROOT / "docs/runtime-evidence/h5/ultimate_benchmark.json"
+
+def verify_latency_smoke_artifact(payload: dict) -> bool:
+    expected = stable_sha256(
+        {key: value for key, value in payload.items() if key != "artifact_sha256"}
+    )
+    return (
+        payload.get("artifact_sha256") == expected
+        and payload.get("benchmark_scope") == "latency_only_smoke"
+        and payload.get("model_state") == "random_untrained"
+        and payload.get("quality_gate_eligible") is False
+        and payload.get("status") in {"SMOKE_COMPLETED", "SMOKE_FAILED"}
+    )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT / "generated/h6/c1-smoke/ultimate-latency-smoke.json",
+    )
+    args = parser.parse_args()
+    print("=" * 60)
+    print("  SAFE-DRIVE C1 LATENCY-ONLY SMOKE (RANDOM MODEL)")
+    print("=" * 60)
+    try:
+        print("\n[1/3] Benchmarking VLA smoother latency...")
+        vla_res = benchmark_vla_smoother(500)
+        print(f"  P99 Latency : {vla_res['p99_latency_ms']:.4f} ms")
+
+        print("\n[2/3] Benchmarking random untrained scorer latency...")
+        scorer_res = benchmark_distilled_scorer(200)
+        latency_label = "PASS" if scorer_res["latency_p99_pass"] else "FAIL"
+        print(f"  Device      : {scorer_res['device']}")
+        print(
+            f"  P99 Latency : {scorer_res['p99_latency_ms']:.2f} ms "
+            f"(device threshold {scorer_res['device_latency_threshold_p99_ms']:.2f} ms: {latency_label})"
+        )
+
+        print("\n[3/3] Benchmarking MPC controller latency...")
+        mpc_res = benchmark_mpc_control(200)
+        print(f"  P99 Latency : {mpc_res['p99_latency_ms']:.4f} ms")
+        summary = build_latency_smoke_summary(vla_res, scorer_res, mpc_res)
+    except Exception as exc:
+        summary = build_latency_smoke_summary(
+            {},
+            {"model_state": "random_untrained"},
+            {},
+            completed=False,
+            error=f"{type(exc).__name__}:{exc}",
+        )
+
+    out_file = args.output
     out_file.parent.mkdir(parents=True, exist_ok=True)
-    out_file.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    out_file.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"\nBenchmark summary written to: {out_file}")
     print("=" * 60)
+    return 0 if summary["status"] == "SMOKE_COMPLETED" else 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

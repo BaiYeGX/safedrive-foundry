@@ -8,6 +8,7 @@ from itertools import product
 from typing import Any, Mapping, Sequence
 
 from data_pipeline.h6.contracts import WorldV3Prediction
+from data_pipeline.h6.temporal import TemporalSelectorConfig, TemporalSelectorCore
 
 
 @dataclass(frozen=True)
@@ -294,6 +295,7 @@ class VLA75RouterCalibration:
     rows: int = 0
     sequences: int = 0
     observed_vla_coverage: float = 0.0
+    trace: tuple[dict[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -470,28 +472,27 @@ def select_vla75_router_config(
         total_switches = 0
         max_sequence_switches = 0
         any_ping_pong = False
-        for sequence in grouped.values():
-            ema: dict[str, float] = {}
-            previous_source: str | None = None
-            hold_count = 0
-            history: list[str] = []
-            switches = 0
+        all_trace: list[dict[str, Any]] = []
+        for sequence_name, sequence in grouped.items():
+            selector = TemporalSelectorCore(
+                TemporalSelectorConfig(
+                    ema_alpha=float(alpha),
+                    hold_ticks=int(hold_ticks),
+                    hysteresis=float(hysteresis),
+                    emergency_switch_margin=1.5,
+                    ping_pong_window_ticks=int(ping_pong_window_ticks),
+                )
+            )
             previous_row = None
             for index, row, metrics in sequence:
                 values = {
                     "vla": float(metrics["vla_pref"]),
                     "expert": float(metrics["expert_pref"]),
                 }
-                ema = {
-                    key: float(alpha) * value + (1.0 - float(alpha)) * ema.get(key, value)
-                    for key, value in values.items()
-                }
                 proposed = str(metrics["raw_source"])
                 event_break = bool(
                     get(row, "event_break", False)
                     or get(row, "eligible_changed", False)
-                    or get(row, "risk_breach", False)
-                    or bool(metrics["risk_breach"])
                 )
                 if previous_row is not None:
                     previous_tick = get(previous_row, "tick")
@@ -525,42 +526,42 @@ def select_vla75_router_config(
                     current_trust = bool(float(metrics["vla_trust"]) >= 0.50)
                     if previous_trust != current_trust:
                         event_break = True
-                ordered = sorted(ema.values(), reverse=True)
-                margin = float(ordered[0] - ordered[1]) if len(ordered) >= 2 else 0.0
-                keep = (
-                    not event_break
-                    and previous_source in {"vla", "expert"}
-                    and proposed != previous_source
-                    and hold_count < int(hold_ticks)
-                    and (
-                        margin < float(hysteresis)
-                        or margin < 1.5
-                    )
+                candidate_ids = {
+                    "expert": f"{sequence_name}:{index}:expert",
+                    "vla": f"{sequence_name}:{index}:vla",
+                }
+                decision = selector.step(
+                    scope_key=sequence_name,
+                    source_scores=values,
+                    fresh_candidate_ids=candidate_ids,
+                    eligible_sources={"expert", "vla"},
+                    raw_preferred_source=proposed,
+                    event_break=event_break,
+                    unsafe_sources=(
+                        {"vla"}
+                        if bool(get(row, "risk_breach", False))
+                        or bool(metrics["risk_breach"])
+                        else set()
+                    ),
                 )
-                selected = previous_source if keep else proposed
-                if previous_source is not None and selected != previous_source:
-                    switches += 1
-                hold_count = hold_count + 1 if keep else 1
-                previous_source = selected
-                history.append(selected)
+                selected = decision.selected_source or "mrm"
                 selected_by_index[index] = selected
                 all_selected.append(selected)
+                all_trace.append(decision.to_dict())
                 previous_row = row
+            metrics_report = selector.metrics()
+            switches = int(metrics_report["switches"])
             total_switches += switches
             max_sequence_switches = max(max_sequence_switches, switches)
-            for start, first_source in enumerate(history):
-                if first_source not in {"vla", "expert"}:
-                    continue
-                opposite = False
-                for value in history[start + 1 : start + int(ping_pong_window_ticks) + 1]:
-                    if value in {"vla", "expert"} and value != first_source:
-                        opposite = True
-                    if opposite and value == first_source:
-                        any_ping_pong = True
-                        break
-                if any_ping_pong:
-                    break
-        return selected_by_index, all_selected, total_switches, max_sequence_switches, any_ping_pong
+            any_ping_pong = any_ping_pong or bool(metrics_report["ping_pong"])
+        return (
+            selected_by_index,
+            all_selected,
+            total_switches,
+            max_sequence_switches,
+            any_ping_pong,
+            tuple(all_trace),
+        )
 
     observed_sources = [source(get(row, "applied_source") or get(row, "source")) for row in rows]
     observed_vla_coverage = observed_sources.count("vla") / len(observed_sources)
@@ -575,7 +576,7 @@ def select_vla75_router_config(
             continue
         if not 0.0 < alpha_value <= 1.0 or hold_value < 0 or hysteresis_value < 0.0:
             continue
-        selected, selected_sources, switches, max_sequence_switches, ping_pong = replay(
+        selected, selected_sources, switches, max_sequence_switches, ping_pong, trace = replay(
             alpha_value, hold_value, hysteresis_value
         )
         selected_unsafe = sum(
@@ -605,6 +606,7 @@ def select_vla75_router_config(
             rows=len(rows),
             sequences=len(grouped),
             observed_vla_coverage=float(observed_vla_coverage),
+            trace=trace,
         )
         # Gates are lexicographic: safety and coverage first, then temporal
         # stability/minimal switching, followed by deterministic parameters.

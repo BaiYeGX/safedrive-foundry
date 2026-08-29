@@ -17,6 +17,7 @@ from data_pipeline.h3.contracts import (
     H3_CANDIDATE_DIM,
     H3_CANDIDATE_STEPS,
     H3_CONTEXT_DIM,
+    stable_sha256,
 )
 from data_pipeline.h6.contracts import (
     WORLD_V3_OUTPUT_DIM,
@@ -24,7 +25,7 @@ from data_pipeline.h6.contracts import (
     WORLD_VLA75_OUTPUT_DIM,
     WORLD_VLA75_SCHEMA_VERSION,
 )
-from data_pipeline.h6.dataset import OutcomePairExample
+from data_pipeline.h6.dataset import OutcomePairExample, outcome_examples_lineage_sha256
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,7 @@ def _batch(examples: Sequence[OutcomePairExample], device: torch.device, *, swap
         "accel": values(lambda item: item.acceleration_rms_mps2),
         "lat_accel": values(lambda item: item.lateral_acceleration_rms_mps2),
         "repair": values(lambda item: -1.0 if item.repair_success is None else float(item.repair_success)),
+        "repair_mask": values(lambda item: float(item.repair_success is not None)),
         "trust": values(lambda item: float(item.trust)),
         "outcome_mask": values(lambda item: float(item.outcome_observed)),
         "safety_mask": values(lambda item: float(item.safety_observed)),
@@ -178,8 +180,251 @@ def _batch(examples: Sequence[OutcomePairExample], device: torch.device, *, swap
             if getattr(item, "executable", None) is None
             else float(bool(getattr(item, "executable")))
         ),
+        "executable_mask": values(
+            lambda item: float(getattr(item, "executable", None) is not None)
+        ),
     }
+    pair_mask = (targets["outcome_mask"][:, 0] > 0.0) & (
+        targets["outcome_mask"][:, 1] > 0.0
+    )
+    targets["pair_mask"] = pair_mask.to(dtype=torch.float32)
+    targets["pair_preference"] = (
+        targets["objective"][:, 0] >= targets["objective"][:, 1]
+    ).to(dtype=torch.float32)
+    vla_index = targets["source_is_vla"].argmax(dim=1)
+    expert_index = 1 - vla_index
+    targets["vla_preference"] = (
+        targets["objective"].gather(1, vla_index[:, None]).squeeze(1)
+        >= targets["objective"].gather(1, expert_index[:, None]).squeeze(1)
+    ).to(dtype=torch.float32)
     return context, candidate, targets
+
+
+def _outcome_group(example: OutcomePairExample) -> str:
+    declared = next(
+        (
+            str(candidate.group_key)
+            for candidate in example.candidates
+            if str(candidate.group_key or "").strip()
+            and str(candidate.group_key).lower() != "unknown"
+        ),
+        "",
+    )
+    return declared or "|".join(
+        (
+            str(example.map_name),
+            str(example.family),
+            str(example.weather),
+        )
+    )
+
+
+WORLD_V3_HEAD_WEIGHTS: dict[str, float] = {
+    "objective": 0.45,
+    "pair_preference": 1.00,
+    "progress": 0.20,
+    "completion": 0.35,
+    "collision": 0.80,
+    "red_light": 0.55,
+    "offroad": 0.55,
+    "comfort": 0.12,
+    "repair": 0.25,
+    "trust": 1.10,
+}
+WORLD_VLA75_EXTRA_HEAD_WEIGHTS: dict[str, float] = {
+    "executable": 0.75,
+}
+
+
+@dataclass(frozen=True)
+class PerSampleLossReport:
+    """Unreduced supervised losses used by training, DRO and evaluation.
+
+    ``head_losses`` and ``head_masks`` are one-dimensional tensors with one
+    entry per outcome pair.  Candidate heads are reduced *within* each pair
+    before they are stored here.  ``per_sample`` is therefore the frozen
+    effective-head weighted mean, not a broadcast scalar objective.
+    """
+
+    head_losses: Mapping[str, Tensor]
+    head_masks: Mapping[str, Tensor]
+    head_weights: Mapping[str, float]
+    per_sample: Tensor
+    valid_samples: Tensor
+
+    def detached_counts(self) -> dict[str, int]:
+        return {
+            name: int(mask.detach().to(dtype=torch.bool).sum().cpu())
+            for name, mask in self.head_masks.items()
+        }
+
+
+def _candidate_to_sample(values: Tensor, mask: Tensor) -> tuple[Tensor, Tensor]:
+    if values.ndim != 2 or mask.shape != values.shape:
+        raise ValueError("per_sample_candidate_head_shape")
+    finite = torch.isfinite(values)
+    valid = mask.to(dtype=torch.bool) & finite
+    count = valid.sum(dim=1)
+    collapsed = (torch.where(valid, values, torch.zeros_like(values))).sum(dim=1)
+    collapsed = collapsed / count.clamp_min(1).to(values)
+    return collapsed, count > 0
+
+
+def _build_per_sample_report(
+    head_values: Mapping[str, Tensor],
+    head_masks: Mapping[str, Tensor],
+    head_weights: Mapping[str, float],
+) -> PerSampleLossReport:
+    if set(head_values) != set(head_masks) or set(head_values) != set(head_weights):
+        raise ValueError("per_sample_head_contract_mismatch")
+    if not head_values:
+        raise ValueError("per_sample_heads_required")
+    batch = next(iter(head_values.values())).shape[0]
+    reference = next(iter(head_values.values()))
+    numerator = torch.zeros(batch, dtype=reference.dtype, device=reference.device)
+    denominator = torch.zeros_like(numerator)
+    normalized_losses: dict[str, Tensor] = {}
+    normalized_masks: dict[str, Tensor] = {}
+    for name, value in head_values.items():
+        mask = head_masks[name].to(dtype=torch.bool, device=value.device)
+        if value.ndim == 2:
+            value, mask = _candidate_to_sample(value, mask)
+        elif value.ndim != 1 or value.shape[0] != batch or mask.shape != value.shape:
+            raise ValueError(f"per_sample_head_shape:{name}")
+        finite = torch.isfinite(value)
+        mask = mask & finite
+        value = torch.where(mask, value, torch.zeros_like(value))
+        weight = float(head_weights[name])
+        if not math.isfinite(weight) or weight < 0.0:
+            raise ValueError(f"per_sample_head_weight:{name}")
+        normalized_losses[name] = value
+        normalized_masks[name] = mask
+        numerator = numerator + weight * value
+        denominator = denominator + weight * mask.to(value)
+    valid = denominator > 0.0
+    per_sample = numerator / denominator.clamp_min(torch.finfo(reference.dtype).eps)
+    per_sample = torch.where(valid, per_sample, torch.zeros_like(per_sample))
+    return PerSampleLossReport(
+        head_losses=normalized_losses,
+        head_masks=normalized_masks,
+        head_weights=dict(head_weights),
+        per_sample=per_sample,
+        valid_samples=valid,
+    )
+
+
+def world_v3_per_sample_loss_report(
+    outputs: Tensor,
+    targets: Mapping[str, Tensor],
+) -> PerSampleLossReport:
+    """Return the only supervised per-sample World-v3 loss definition."""
+
+    if outputs.ndim != 3 or outputs.shape[-1] != WORLD_V3_OUTPUT_DIM:
+        raise ValueError(f"world_v3_output_shape:{tuple(outputs.shape)}")
+    objective = outputs[:, :, 0]
+    progress_mean = outputs[:, :, 1]
+    progress_logvar = outputs[:, :, 2].clamp(-6.0, 5.0)
+    outcome_mask = targets.get("outcome_mask", torch.ones_like(targets["objective"])) > 0.0
+    safety_mask = targets.get("safety_mask", torch.ones_like(targets["collision"])) > 0.0
+    repair_mask = targets.get("repair_mask", targets["repair"] >= 0.0) > 0.0
+    actual_objective = targets["objective"]
+    pair_mask = targets.get(
+        "pair_mask", (outcome_mask[:, 0] & outcome_mask[:, 1]).to(outputs)
+    ) > 0.0
+    pair_target = targets.get(
+        "pair_preference",
+        (actual_objective[:, 0] >= actual_objective[:, 1]).to(outputs),
+    ).to(outputs)
+    head_values = {
+        "objective": nn.functional.smooth_l1_loss(
+            objective, actual_objective, reduction="none"
+        ),
+        "pair_preference": nn.functional.binary_cross_entropy_with_logits(
+            objective[:, 0] - objective[:, 1], pair_target, reduction="none"
+        ),
+        "progress": 0.5
+        * (
+            ((targets["progress"] - progress_mean) ** 2)
+            * torch.exp(-progress_logvar)
+            + progress_logvar
+        ),
+        "completion": nn.functional.binary_cross_entropy_with_logits(
+            outputs[:, :, 3], targets["completion"], reduction="none"
+        ),
+        "collision": nn.functional.binary_cross_entropy_with_logits(
+            outputs[:, :, 4], targets["collision"], reduction="none"
+        ),
+        "red_light": nn.functional.binary_cross_entropy_with_logits(
+            outputs[:, :, 5], targets["red"], reduction="none"
+        ),
+        "offroad": nn.functional.binary_cross_entropy_with_logits(
+            outputs[:, :, 6], targets["offroad"], reduction="none"
+        ),
+        "comfort": nn.functional.smooth_l1_loss(
+            outputs[:, :, 7], targets["jerk"], reduction="none"
+        )
+        + 0.5
+        * nn.functional.smooth_l1_loss(
+            outputs[:, :, 8], targets["accel"], reduction="none"
+        )
+        + 0.5
+        * nn.functional.smooth_l1_loss(
+            outputs[:, :, 9], targets["lat_accel"], reduction="none"
+        ),
+        "repair": nn.functional.binary_cross_entropy_with_logits(
+            outputs[:, :, 10], targets["repair"].clamp(0.0, 1.0), reduction="none"
+        ),
+        "trust": nn.functional.binary_cross_entropy_with_logits(
+            outputs[:, :, 11], targets["trust"], reduction="none"
+        ),
+    }
+    head_masks = {
+        "objective": outcome_mask,
+        "pair_preference": pair_mask,
+        "progress": outcome_mask,
+        "completion": outcome_mask,
+        "collision": safety_mask,
+        "red_light": safety_mask,
+        "offroad": safety_mask,
+        "comfort": outcome_mask,
+        "repair": repair_mask,
+        "trust": safety_mask,
+    }
+    return _build_per_sample_report(head_values, head_masks, WORLD_V3_HEAD_WEIGHTS)
+
+
+def _reduce_per_sample_report(
+    report: PerSampleLossReport,
+    sample_weights: Tensor | None = None,
+) -> tuple[Tensor, dict[str, float | int]]:
+    valid = report.valid_samples
+    if not bool(valid.any()):
+        raise ValueError("world_loss_batch_has_no_valid_supervision")
+    weights = torch.ones_like(report.per_sample)
+    if sample_weights is not None:
+        if sample_weights.ndim != 1 or sample_weights.shape != report.per_sample.shape:
+            raise ValueError("world_v3_sample_weight_shape")
+        weights = sample_weights.to(report.per_sample)
+        if not bool(torch.isfinite(weights).all()) or bool((weights < 0.0).any()):
+            raise ValueError("world_v3_sample_weights_must_be_finite_nonnegative")
+    weights = weights * valid.to(weights)
+    if not bool((weights > 0.0).any()):
+        raise ValueError("world_loss_valid_sample_weight_is_zero")
+    total = (report.per_sample * weights).sum() / weights.sum()
+    pieces: dict[str, float | int] = {
+        "valid_samples": int(valid.sum().detach().cpu()),
+        "invalid_samples": int((~valid).sum().detach().cpu()),
+    }
+    for name, values in report.head_losses.items():
+        mask = report.head_masks[name]
+        head_weights = weights * mask.to(weights)
+        if bool((head_weights > 0.0).any()):
+            head_loss = (values * head_weights).sum() / head_weights.sum()
+            pieces[name] = float(head_loss.detach().cpu())
+        else:
+            pieces[name] = float("nan")
+        pieces[f"{name}_valid_count"] = int(mask.sum().detach().cpu())
+    return total, pieces
 
 
 def world_v3_loss(
@@ -187,143 +432,9 @@ def world_v3_loss(
     targets: dict[str, Tensor],
     *,
     sample_weights: Tensor | None = None,
-) -> tuple[Tensor, dict[str, float]]:
-    objective = outputs[:, :, 0]
-    progress_mean = outputs[:, :, 1]
-    progress_logvar = outputs[:, :, 2].clamp(-6.0, 5.0)
-    completion_logit = outputs[:, :, 3]
-    collision_logit = outputs[:, :, 4]
-    red_logit = outputs[:, :, 5]
-    offroad_logit = outputs[:, :, 6]
-    jerk_mean = outputs[:, :, 7]
-    accel_mean = outputs[:, :, 8]
-    lat_accel_mean = outputs[:, :, 9]
-    repair_logit = outputs[:, :, 10]
-    trust_logit = outputs[:, :, 11]
-
-    if sample_weights is not None:
-        if sample_weights.ndim != 1 or sample_weights.shape[0] != outputs.shape[0]:
-            raise ValueError("world_v3_sample_weight_shape")
-        sample_weights = sample_weights.to(device=outputs.device, dtype=outputs.dtype)
-        if not bool(torch.isfinite(sample_weights).all()):
-            raise ValueError("world_v3_sample_weights_must_be_finite")
-
-    def masked_mean(values: Tensor, mask: Tensor) -> Tensor:
-        mask = mask.to(dtype=values.dtype)
-        if sample_weights is not None:
-            weight = sample_weights
-            while weight.ndim < values.ndim:
-                weight = weight.unsqueeze(-1)
-            weight = weight.expand_as(values)
-            mask = mask * weight
-        return (values * mask).sum() / mask.sum().clamp_min(1.0)
-
-    outcome_mask = targets.get("outcome_mask", torch.ones_like(targets["objective"]))
-    safety_mask = targets.get("safety_mask", torch.ones_like(targets["collision"]))
-    actual_objective = targets["objective"]
-    objective_reg = masked_mean(
-        nn.functional.smooth_l1_loss(objective, actual_objective, reduction="none"),
-        outcome_mask,
-    )
-    pair_target = (actual_objective[:, 0] >= actual_objective[:, 1]).float()
-    pair_mask = outcome_mask[:, 0] * outcome_mask[:, 1]
-    pair_values = nn.functional.binary_cross_entropy_with_logits(
-        objective[:, 0] - objective[:, 1], pair_target, reduction="none"
-    )
-    pair_weights = pair_mask
-    if sample_weights is not None:
-        pair_weights = pair_weights * sample_weights
-    pair_loss = (pair_values * pair_weights).sum() / pair_weights.sum().clamp_min(1.0)
-    progress_nll = masked_mean(
-        0.5
-        * (
-            ((targets["progress"] - progress_mean) ** 2)
-            * torch.exp(-progress_logvar)
-            + progress_logvar
-        ),
-        outcome_mask,
-    )
-    completion_loss = masked_mean(
-        nn.functional.binary_cross_entropy_with_logits(
-            completion_logit, targets["completion"], reduction="none"
-        ),
-        outcome_mask,
-    )
-    collision_loss = masked_mean(
-        nn.functional.binary_cross_entropy_with_logits(
-            collision_logit, targets["collision"], reduction="none"
-        ),
-        safety_mask,
-    )
-    red_loss = masked_mean(
-        nn.functional.binary_cross_entropy_with_logits(
-            red_logit, targets["red"], reduction="none"
-        ),
-        safety_mask,
-    )
-    offroad_loss = masked_mean(
-        nn.functional.binary_cross_entropy_with_logits(
-            offroad_logit, targets["offroad"], reduction="none"
-        ),
-        safety_mask,
-    )
-    comfort_loss = masked_mean(
-        nn.functional.smooth_l1_loss(
-            jerk_mean, targets["jerk"], reduction="none"
-        )
-        + 0.5
-        * nn.functional.smooth_l1_loss(
-            accel_mean, targets["accel"], reduction="none"
-        )
-        + 0.5
-        * nn.functional.smooth_l1_loss(
-            lat_accel_mean, targets["lat_accel"], reduction="none"
-        ),
-        outcome_mask,
-    )
-    repair_mask = targets["repair"] >= 0.0
-    if bool(repair_mask.any()):
-        repair_values = nn.functional.binary_cross_entropy_with_logits(
-            repair_logit[repair_mask], targets["repair"][repair_mask], reduction="none"
-        )
-        if sample_weights is not None:
-            repair_weights = sample_weights[:, None].expand_as(repair_logit)[repair_mask]
-            repair_loss = (repair_values * repair_weights).sum() / repair_weights.sum().clamp_min(1.0)
-        else:
-            repair_loss = repair_values.mean()
-    else:
-        repair_loss = repair_logit.sum() * 0.0
-    trust_loss = masked_mean(
-        nn.functional.binary_cross_entropy_with_logits(
-            trust_logit, targets["trust"], reduction="none"
-        ),
-        safety_mask,
-    )
-    losses = {
-        "objective_reg": objective_reg,
-        "pair": pair_loss,
-        "progress": progress_nll,
-        "completion": completion_loss,
-        "collision": collision_loss,
-        "red": red_loss,
-        "offroad": offroad_loss,
-        "comfort": comfort_loss,
-        "repair": repair_loss,
-        "trust": trust_loss,
-    }
-    total = (
-        0.45 * objective_reg
-        + 1.00 * pair_loss
-        + 0.20 * progress_nll
-        + 0.35 * completion_loss
-        + 0.80 * collision_loss
-        + 0.55 * red_loss
-        + 0.55 * offroad_loss
-        + 0.12 * comfort_loss
-        + 0.25 * repair_loss
-        + 1.10 * trust_loss
-    )
-    return total, {name: float(value.detach().cpu()) for name, value in losses.items()}
+) -> tuple[Tensor, dict[str, float | int]]:
+    report = world_v3_per_sample_loss_report(outputs, targets)
+    return _reduce_per_sample_report(report, sample_weights)
 
 
 def _pair_indices(targets: dict[str, Tensor]) -> tuple[Tensor, Tensor, Tensor]:
@@ -343,6 +454,121 @@ def _pair_indices(targets: dict[str, Tensor]) -> tuple[Tensor, Tensor, Tensor]:
     return vla, expert, valid
 
 
+@dataclass(frozen=True)
+class GroupDROBatchReport:
+    sample_weights: Tensor
+    groups: Mapping[str, Mapping[str, float | int | str | None]]
+
+
+class GroupDROState:
+    """Persistent exponentiated-gradient Group-DRO state.
+
+    All train groups are registered before optimization.  Missing groups keep
+    their previous probability mass and are reported as ``NOT_MEASURED``;
+    invalid supervised rows receive zero sample weight.
+    """
+
+    def __init__(
+        self,
+        groups: Sequence[str],
+        *,
+        eta: float = 0.05,
+        floor: float = 0.05,
+    ) -> None:
+        labels = sorted({str(item) for item in groups})
+        if not labels:
+            raise ValueError("group_dro_registered_groups_required")
+        if not math.isfinite(float(eta)) or float(eta) < 0.0:
+            raise ValueError("group_dro_eta_must_be_nonnegative")
+        if not math.isfinite(float(floor)) or float(floor) < 0.0:
+            raise ValueError("group_dro_floor_must_be_nonnegative")
+        self.groups = tuple(labels)
+        self.eta = float(eta)
+        self.floor = min(float(floor), 1.0 / len(labels))
+        self._weights = {label: 1.0 / len(labels) for label in labels}
+
+    @property
+    def weights(self) -> dict[str, float]:
+        return dict(self._weights)
+
+    def evaluate_batch(
+        self,
+        losses: Tensor,
+        valid_samples: Tensor,
+        groups: Sequence[str] | Tensor,
+        *,
+        update: bool,
+    ) -> GroupDROBatchReport:
+        if losses.ndim != 1 or valid_samples.shape != losses.shape:
+            raise ValueError("group_dro_losses_must_be_vector")
+        labels = [str(item) for item in groups]
+        if len(labels) != losses.shape[0]:
+            raise ValueError("group_dro_group_length")
+        unknown = sorted(set(labels) - set(self.groups))
+        if unknown:
+            raise ValueError(f"group_dro_unregistered_groups:{','.join(unknown)}")
+        valid = valid_samples.to(device=losses.device, dtype=torch.bool) & torch.isfinite(losses)
+        group_means: dict[str, float | None] = {}
+        group_counts: dict[str, int] = {}
+        for label in self.groups:
+            selected = valid & torch.as_tensor(
+                [item == label for item in labels], dtype=torch.bool, device=losses.device
+            )
+            count = int(selected.sum().detach().cpu())
+            group_counts[label] = count
+            group_means[label] = (
+                float(losses[selected].detach().mean().cpu()) if count else None
+            )
+        if update:
+            observed = [
+                label for label in self.groups if group_means[label] is not None
+            ]
+            if observed:
+                # Preserve every absent group's historical probability exactly.
+                # Reweight only within the probability mass already owned by
+                # groups measured in this batch.
+                observed_mass = sum(self._weights[label] for label in observed)
+                scores: dict[str, float] = {}
+                for label in observed:
+                    exponent = max(
+                        -80.0,
+                        min(80.0, self.eta * float(group_means[label])),
+                    )
+                    scores[label] = self._weights[label] * math.exp(exponent)
+                score_total = sum(scores.values())
+                if not math.isfinite(score_total) or score_total <= 0.0:
+                    raise ValueError("group_dro_observed_weight_normalization")
+                floor_mass = self.floor * len(observed)
+                if observed_mass + 1e-12 < floor_mass:
+                    raise ValueError("group_dro_observed_mass_below_floor")
+                residual = max(0.0, observed_mass - floor_mass)
+                for label in observed:
+                    self._weights[label] = (
+                        self.floor + residual * scores[label] / score_total
+                    )
+        sample_weights = torch.zeros_like(losses)
+        for index, label in enumerate(labels):
+            count = group_counts[label]
+            if bool(valid[index]) and count > 0:
+                # Dividing by the current batch count makes the reduced loss
+                # a weighted mean of group means rather than a row-frequency
+                # weighted objective.
+                sample_weights[index] = self._weights[label] / count
+        observed_mass = sample_weights.sum()
+        if bool(valid.any()) and not bool(observed_mass > 0.0):
+            raise ValueError("group_dro_no_weight_for_valid_samples")
+        report = {
+            label: {
+                "status": "MEASURED" if group_counts[label] else "NOT_MEASURED",
+                "loss": group_means[label],
+                "count": group_counts[label],
+                "weight": self._weights[label],
+            }
+            for label in self.groups
+        }
+        return GroupDROBatchReport(sample_weights=sample_weights, groups=report)
+
+
 def group_dro_weights(
     losses: Tensor,
     groups: Sequence[str] | Tensor,
@@ -350,41 +576,24 @@ def group_dro_weights(
     eta: float = 0.05,
     floor: float = 0.05,
 ) -> Tensor:
-    """Compute normalized worst-group weights for a minibatch.
+    """Compatibility wrapper for one-batch callers.
 
-    Groups are used only for optimization/evaluation.  The implementation is
-    deterministic, keeps every represented group alive via ``floor``, and
-    accepts either string labels or integer group ids for small CPU tests.
+    The trainer uses :class:`GroupDROState` directly so its group weights are
+    persistent.  This wrapper still uses the real supplied per-sample loss.
     """
 
-    if losses.ndim != 1:
-        raise ValueError("group_dro_losses_must_be_vector")
-    if len(groups) != losses.shape[0]:
-        raise ValueError("group_dro_group_length")
-    labels = [str(item) for item in groups]
-    unique = sorted(set(labels))
-    if not unique:
-        return torch.ones_like(losses)
-    if not 0.0 <= float(eta):
-        raise ValueError("group_dro_eta_must_be_nonnegative")
-    # A fixed floor must remain a probability mass.  When many map/family/
-    # phase groups occur in one minibatch, cap it below the simplex limit
-    # rather than producing negative group weights.
-    effective_floor = min(float(floor), 1.0 / len(unique))
-    if effective_floor < 0.0:
-        raise ValueError("group_dro_floor_must_be_nonnegative")
-    group_means = {
-        label: losses[torch.tensor([item == label for item in labels], device=losses.device)].mean()
-        for label in unique
-    }
-    worst = torch.stack(list(group_means.values()))
-    logits = eta * (worst - worst.detach().mean())
-    group_weight = torch.softmax(logits, dim=0)
-    group_weight = (1.0 - effective_floor * len(unique)) * group_weight + effective_floor
-    weights = torch.stack(
-        [group_weight[unique.index(label)] for label in labels]
+    state = GroupDROState([str(item) for item in groups], eta=eta, floor=floor)
+    report = state.evaluate_batch(
+        losses,
+        torch.isfinite(losses),
+        groups,
+        update=True,
     )
-    return weights / weights.mean().clamp_min(1e-8)
+    weights = report.sample_weights
+    positive = weights > 0.0
+    if bool(positive.any()):
+        weights = weights / weights[positive].mean()
+    return weights
 
 
 def event_aware_preference_consistency_loss(
@@ -490,6 +699,56 @@ def temporal_preference_consistency_from_outputs(
     return torch.stack(losses).mean()
 
 
+def world_vla75_per_sample_loss_report(
+    outputs: Tensor,
+    targets: Mapping[str, Tensor],
+    *,
+    preference_weight: float = 1.0,
+    executable_weight: float = 0.75,
+) -> PerSampleLossReport:
+    """Extend the v3 report with the VLA75 pair/executability heads."""
+
+    if outputs.ndim != 3 or outputs.shape[-1] != WORLD_VLA75_OUTPUT_DIM:
+        raise ValueError(f"world_vla75_output_shape:{tuple(outputs.shape)}")
+    base = world_v3_per_sample_loss_report(
+        outputs[..., :WORLD_V3_OUTPUT_DIM], targets
+    )
+    vla_idx, expert_idx, pair_mask = _pair_indices(dict(targets))
+    preference = outputs[:, :, 12]
+    vla_pref = preference.gather(1, vla_idx[:, None]).squeeze(1)
+    expert_pref = preference.gather(1, expert_idx[:, None]).squeeze(1)
+    objective = targets["objective"]
+    vla_objective = objective.gather(1, vla_idx[:, None]).squeeze(1)
+    expert_objective = objective.gather(1, expert_idx[:, None]).squeeze(1)
+    preference_target = targets.get(
+        "vla_preference", (vla_objective >= expert_objective).to(outputs)
+    ).to(outputs)
+    explicit_pair_mask = targets.get("pair_mask")
+    if explicit_pair_mask is not None:
+        pair_mask = pair_mask * (explicit_pair_mask > 0.0).to(pair_mask)
+    executable_target = targets.get("executable")
+    if executable_target is None:
+        executable_target = torch.full_like(outputs[:, :, 13], -1.0)
+    head_values = dict(base.head_losses)
+    head_masks = dict(base.head_masks)
+    head_weights = dict(base.head_weights)
+    # VLA75's explicit preference output replaces the legacy objective-logit
+    # pair term under the same semantic head; it is not double-counted.
+    head_values["pair_preference"] = nn.functional.binary_cross_entropy_with_logits(
+        vla_pref - expert_pref, preference_target, reduction="none"
+    )
+    head_masks["pair_preference"] = pair_mask > 0.0
+    head_weights["pair_preference"] = float(preference_weight)
+    head_values["executable"] = nn.functional.binary_cross_entropy_with_logits(
+        outputs[:, :, 13], executable_target.clamp(0.0, 1.0), reduction="none"
+    )
+    head_masks["executable"] = (
+        targets.get("executable_mask", executable_target >= 0.0) > 0.0
+    )
+    head_weights["executable"] = float(executable_weight)
+    return _build_per_sample_report(head_values, head_masks, head_weights)
+
+
 def world_vla75_loss(
     outputs: Tensor,
     targets: dict[str, Tensor],
@@ -514,9 +773,13 @@ def world_vla75_loss(
 
     if outputs.ndim != 3 or outputs.shape[-1] != WORLD_VLA75_OUTPUT_DIM:
         raise ValueError(f"world_vla75_output_shape:{tuple(outputs.shape)}")
-    base, pieces = world_v3_loss(
-        outputs[..., :WORLD_V3_OUTPUT_DIM], targets, sample_weights=group_weights
+    supervised = world_vla75_per_sample_loss_report(
+        outputs,
+        targets,
+        preference_weight=preference_weight,
+        executable_weight=executable_weight,
     )
+    base, pieces = _reduce_per_sample_report(supervised, group_weights)
     vla_idx, expert_idx, pair_mask = _pair_indices(targets)
     preference = outputs[:, :, 12]
     executable = outputs[:, :, 13]
@@ -527,33 +790,6 @@ def world_vla75_loss(
     vla_objective = objective.gather(1, vla_idx[:, None]).squeeze(1)
     expert_objective = objective.gather(1, expert_idx[:, None]).squeeze(1)
     preference_target = (vla_objective >= expert_objective).float()
-    preference_values = nn.functional.binary_cross_entropy_with_logits(
-        margin, preference_target, reduction="none"
-    )
-    preference_weights = pair_mask
-    if group_weights is not None:
-        if group_weights.ndim != 1 or group_weights.shape[0] != outputs.shape[0]:
-            raise ValueError("group_dro_weight_shape")
-        preference_weights = preference_weights * group_weights.to(outputs)
-    preference_loss = (preference_values * preference_weights).sum() / preference_weights.sum().clamp_min(1.0)
-
-    executable_target = targets.get("executable")
-    if executable_target is None:
-        executable_loss = executable.sum() * 0.0
-    else:
-        mask = executable_target >= 0.0
-        if bool(mask.any()):
-            executable_values = nn.functional.binary_cross_entropy_with_logits(
-                executable[mask], executable_target[mask], reduction="none"
-            )
-            if group_weights is not None:
-                executable_weights = group_weights[:, None].expand_as(executable)[mask].to(outputs)
-                executable_loss = (executable_values * executable_weights).sum() / executable_weights.sum().clamp_min(1.0)
-            else:
-                executable_loss = executable_values.mean()
-        else:
-            executable_loss = executable.sum() * 0.0
-
     raw_probability = torch.sigmoid(margin)
     coverage_weights = pair_mask
     if group_weights is not None:
@@ -609,16 +845,12 @@ def world_vla75_loss(
         )
     weighted = (
         base
-        + float(preference_weight) * preference_loss
-        + float(executable_weight) * executable_loss
         + float(raw_coverage_weight) * raw_penalty
         + float(actual_coverage_weight) * actual_penalty
         + float(consistency_weight) * consistency
     )
     pieces.update(
         {
-            "preference": float(preference_loss.detach().cpu()),
-            "executable": float(executable_loss.detach().cpu()),
             "raw_coverage_penalty": float(raw_penalty.detach().cpu()),
             "actual_coverage_penalty": float(actual_penalty.detach().cpu()),
             "raw_coverage_proxy": float(raw_coverage.detach().cpu()),
@@ -673,115 +905,152 @@ def _evaluate_loss(model, examples, device):
     return float(loss.detach().cpu())
 
 
+def _evaluate_vla75_group_supervision(
+    model: WorldVLA75Model,
+    examples: Sequence[OutcomePairExample],
+    device: torch.device,
+    config: WorldVLA75TrainConfig,
+    group_weights: Mapping[str, float],
+) -> dict[str, dict[str, float | int | str | None]]:
+    sums = {str(group): 0.0 for group in group_weights}
+    counts = {str(group): 0 for group in group_weights}
+    model.eval()
+    with torch.no_grad():
+        for start in range(0, len(examples), config.batch_size):
+            batch = examples[start : start + config.batch_size]
+            context, candidate, targets = _batch(batch, device, swap=False)
+            outputs = torch.stack(
+                [model(context[:, index], candidate[:, index]) for index in range(2)],
+                dim=1,
+            )
+            report = world_vla75_per_sample_loss_report(
+                outputs,
+                targets,
+                preference_weight=config.preference_weight,
+                executable_weight=config.executable_weight,
+            )
+            for index, example in enumerate(batch):
+                group = _outcome_group(example)
+                sums.setdefault(group, 0.0)
+                counts.setdefault(group, 0)
+                if bool(report.valid_samples[index]):
+                    sums[group] += float(report.per_sample[index].detach().cpu())
+                    counts[group] += 1
+    return {
+        group: {
+            "status": "MEASURED" if counts[group] else "NOT_MEASURED",
+            "loss": sums[group] / counts[group] if counts[group] else None,
+            "count": counts[group],
+            "weight": float(group_weights.get(group, 0.0)),
+        }
+        for group in sorted(sums)
+    }
+
+
 def _vla75_validation_metrics(
     outputs: Tensor,
+    swapped_outputs: Tensor,
     targets: dict[str, Tensor],
     examples: Sequence[OutcomePairExample],
     *,
     validation_loss: float,
+    validation_lineage_sha256: str,
     config: WorldVLA75TrainConfig,
-) -> dict[str, float | bool | str]:
-    """Build the development-only lexicographic checkpoint metrics.
-
-    These are deliberately prediction-side metrics, not a replacement for
-    the formal acceptance gate.  The selector must nevertheless make the
-    same ordering decisions as the v2 contract: raw pair preference first,
-    applied-coverage proxy and paired safety/progress next, then worst-group
-    and masking checks, and only then validation loss/resource tie-breakers.
-    """
+    group_weights: Mapping[str, float] | None = None,
+) -> dict[str, Any]:
+    """Build source-neutral selection metrics from actual evaluator work."""
 
     if outputs.ndim != 3 or outputs.shape[-1] != WORLD_VLA75_OUTPUT_DIM:
         raise ValueError("vla75_validation_output_shape")
-    vla_idx, expert_idx, pair_mask = _pair_indices(targets)
-    objective = outputs[..., 0]
-    trust = torch.sigmoid(outputs[..., 11])
-    hazards = torch.sigmoid(outputs[..., 4:7])
-    unsafe = 1.0 - torch.prod(1.0 - hazards, dim=-1)
-    completion = torch.sigmoid(outputs[..., 3])
-    repair = torch.sigmoid(outputs[..., 10])
-    deployment = objective + 2.5 * trust - 8.0 * unsafe + completion + 4.0 * unsafe * repair
-    preference = outputs[..., 12]
-    executable = torch.sigmoid(outputs[..., 13])
-    vla_score = deployment.gather(1, vla_idx[:, None]).squeeze(1)
-    expert_score = deployment.gather(1, expert_idx[:, None]).squeeze(1)
-    vla_preference = preference.gather(1, vla_idx[:, None]).squeeze(1)
-    expert_preference = preference.gather(1, expert_idx[:, None]).squeeze(1)
-    vla_trust = trust.gather(1, vla_idx[:, None]).squeeze(1)
-    vla_unsafe = unsafe.gather(1, vla_idx[:, None]).squeeze(1)
-    raw_pass = (
-        (vla_score + 1e-12 >= expert_score)
-        & (vla_preference + 1e-12 >= expert_preference)
-        & (vla_trust + 1e-12 >= 0.50)
-        & (vla_unsafe <= 0.20 + 1e-12)
+    if swapped_outputs.shape != outputs.shape:
+        raise ValueError("vla75_validation_swap_output_shape")
+    if len(examples) != outputs.shape[0]:
+        raise ValueError("vla75_validation_example_count")
+    if not validation_lineage_sha256:
+        raise ValueError("vla75_validation_lineage_required")
+    report = world_vla75_per_sample_loss_report(
+        outputs,
+        targets,
+        preference_weight=config.preference_weight,
+        executable_weight=config.executable_weight,
     )
-    margin = vla_preference - expert_preference
-    actual_proxy = torch.sigmoid(margin) * executable.gather(1, vla_idx[:, None]).squeeze(1)
-
-    def mean(values: Tensor, mask: Tensor | None = None, default: float = 0.0) -> float:
-        selected = values if mask is None else values[mask]
-        return float(selected.mean().detach().cpu()) if selected.numel() else float(default)
-
-    raw_coverage = mean(raw_pass.to(outputs.dtype))
-    actual_coverage = mean(actual_proxy)
-
-    outcome_mask = targets.get("outcome_mask", torch.ones_like(targets["objective"]))
-    valid = pair_mask > 0.0
-    vla_unsafe_label = (
-        targets["collision"].gather(1, vla_idx[:, None]).squeeze(1)
-        + targets["red"].gather(1, vla_idx[:, None]).squeeze(1)
-        + targets["offroad"].gather(1, vla_idx[:, None]).squeeze(1)
-    ) > 0.0
-    expert_unsafe_label = (
-        targets["collision"].gather(1, expert_idx[:, None]).squeeze(1)
-        + targets["red"].gather(1, expert_idx[:, None]).squeeze(1)
-        + targets["offroad"].gather(1, expert_idx[:, None]).squeeze(1)
-    ) > 0.0
-    selected_unsafe = torch.where(raw_pass, vla_unsafe_label, expert_unsafe_label)
-    if bool(valid.any()):
-        unsafe_delta = mean(
-            selected_unsafe.to(outputs.dtype) - expert_unsafe_label.to(outputs.dtype),
-            valid,
+    heads: dict[str, dict[str, float | int]] = {}
+    for name, values in report.head_losses.items():
+        mask = report.head_masks[name]
+        count = int(mask.sum().detach().cpu())
+        loss = (
+            float(values[mask].mean().detach().cpu())
+            if count
+            else float("nan")
         )
-        progress_delta = (
-            targets["progress"].gather(1, vla_idx[:, None]).squeeze(1)
-            - targets["progress"].gather(1, expert_idx[:, None]).squeeze(1)
-        )[valid]
-        progress_mean = float(progress_delta.mean().detach().cpu())
-        if progress_delta.numel() > 1:
-            progress_lower_95 = float(
-                (progress_delta.mean() - 1.96 * progress_delta.std(unbiased=False) / math.sqrt(progress_delta.numel()))
-                .detach()
-                .cpu()
+        heads[name] = {"loss": loss, "count": count}
+
+    pair_mask = report.head_masks["pair_preference"]
+    vla_idx, expert_idx, _ = _pair_indices(targets)
+    preference = outputs[:, :, 12]
+    predicted_margin = (
+        preference.gather(1, vla_idx[:, None]).squeeze(1)
+        - preference.gather(1, expert_idx[:, None]).squeeze(1)
+    )
+    objective = targets["objective"]
+    actual_margin = (
+        objective.gather(1, vla_idx[:, None]).squeeze(1)
+        - objective.gather(1, expert_idx[:, None]).squeeze(1)
+    )
+    pair_count = int(pair_mask.sum().detach().cpu())
+    pair_accuracy = (
+        float(
+            ((predicted_margin[pair_mask] >= 0.0) == (actual_margin[pair_mask] >= 0.0))
+            .to(outputs)
+            .mean()
+            .detach()
+            .cpu()
+        )
+        if pair_count
+        else float("nan")
+    )
+    # Regret is the objective lost by following the predicted pair ordering.
+    pair_regret = (
+        float(
+            torch.where(
+                predicted_margin[pair_mask] >= 0.0,
+                torch.relu(-actual_margin[pair_mask]),
+                torch.relu(actual_margin[pair_mask]),
             )
-        else:
-            progress_lower_95 = progress_mean
-    else:
-        unsafe_delta = 1.0
-        progress_mean = -float("inf")
-        progress_lower_95 = -float("inf")
-
-    labels = [
-        str(
-            (example.candidates[0].group_key if example.candidates else "")
-            or f"{example.map_name}|{example.family}|{example.candidates[0].phase if example.candidates else 'unknown'}"
+            .mean()
+            .detach()
+            .cpu()
         )
-        for example in examples
-    ]
-    group_indices: dict[str, list[int]] = {}
-    for index, label in enumerate(labels):
-        group_indices.setdefault(label, []).append(index)
-    ranking_groups: list[float] = []
-    risk_groups: list[float] = []
-    executable_groups: list[float] = []
-    vla_exec = executable.gather(1, vla_idx[:, None]).squeeze(1)
-    for indices in group_indices.values():
-        index_tensor = torch.as_tensor(indices, dtype=torch.long, device=outputs.device)
-        ranking_groups.append(float(raw_pass[index_tensor].to(outputs.dtype).mean().detach().cpu()))
-        risk_groups.append(float((1.0 - vla_unsafe[index_tensor]).mean().detach().cpu()))
-        executable_groups.append(float(vla_exec[index_tensor].mean().detach().cpu()))
-    worst_ranking = min(ranking_groups, default=0.0)
-    worst_risk = min(risk_groups, default=0.0)
-    worst_executable = min(executable_groups, default=0.0)
+        if pair_count
+        else float("nan")
+    )
+
+    labels = [_outcome_group(example) for example in examples]
+    group_rows: dict[str, dict[str, float | int | str]] = {}
+    for label in sorted(set(labels)):
+        mask = torch.as_tensor(
+            [item == label for item in labels], dtype=torch.bool, device=outputs.device
+        ) & report.valid_samples
+        count = int(mask.sum().detach().cpu())
+        group_rows[label] = {
+            "status": "MEASURED" if count else "NOT_MEASURED",
+            "loss": (
+                float(report.per_sample[mask].mean().detach().cpu())
+                if count
+                else float("nan")
+            ),
+            "count": count,
+            "weight": (
+                float(group_weights[label])
+                if group_weights is not None and label in group_weights
+                else 0.0
+            ),
+        }
+    measured_groups = [item for item in group_rows.values() if item["count"]]
+    worst_group = max(measured_groups, key=lambda item: float(item["loss"])) if measured_groups else None
+
+    aligned_swapped = swapped_outputs.flip(1)
+    swap_delta = (outputs - aligned_swapped).abs()
     config_tuple = "|".join(
         str(value)
         for value in (
@@ -795,25 +1064,27 @@ def _vla75_validation_metrics(
         )
     )
     return {
-        "raw_world_vla_preference": raw_coverage,
-        "actual_vla_coverage": actual_coverage,
-        "unsafe_delta": unsafe_delta,
-        "progress_lower_95": progress_lower_95,
-        "worst_group_ranking": worst_ranking,
-        "worst_group_risk": worst_risk,
-        "worst_group_executable": worst_executable,
-        "raw_world_90_pass": raw_coverage + 1e-12 >= 0.90,
-        "actual_applied_75_pass": actual_coverage + 1e-12 >= config.actual_coverage_target,
-        "unsafe_delta_pass": unsafe_delta <= 0.01 + 1e-12,
-        "target_only_unsafe_pass": True,
-        "progress_lower_95_pass": progress_lower_95 >= 0.0,
-        "swap_source_masking_pass": True,
-        "action_masking_pass": True,
-        "history_masking_pass": True,
-        "swap_error": 0.0,
+        "schema_version": "safedrive.world.vla75.selection_metrics.v1",
+        "evaluator_lineage_sha256": validation_lineage_sha256,
         "validation_loss": float(validation_loss),
-        "p99_ms": 0.0,
-        "gpu_gib": 0.0,
+        "valid_samples": int(report.valid_samples.sum().detach().cpu()),
+        "heads": heads,
+        "pair_accuracy": pair_accuracy,
+        "pair_regret": pair_regret,
+        "pair_count": pair_count,
+        "groups": group_rows,
+        "worst_group_loss": (
+            float(worst_group["loss"]) if worst_group is not None else float("nan")
+        ),
+        "worst_group_count": (
+            int(worst_group["count"]) if worst_group is not None else 0
+        ),
+        "candidate_swap_error": float(swap_delta.max().detach().cpu()),
+        "candidate_swap_count": int(swap_delta.numel()),
+        # Diagnostic only.  Deliberately absent from the selection key.
+        "source_usage": {
+            "vla_rows": int(targets.get("source_is_vla", torch.zeros(())).sum().detach().cpu())
+        },
         "config_tuple": config_tuple,
     }
 
@@ -942,12 +1213,20 @@ def train_world_vla75(
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay
     )
+    train_lineage_sha256 = outcome_examples_lineage_sha256(train_examples)
+    validation_lineage_sha256 = outcome_examples_lineage_sha256(val_examples)
+    dro_state = GroupDROState(
+        [_outcome_group(example) for example in train_examples],
+        eta=cfg.group_dro_eta,
+        floor=cfg.group_dro_floor,
+    )
     order = list(range(len(train_examples)))
     best_loss = float("inf")
     best_epoch = 0
     best_state = None
     best_selection_key = None
-    best_selection_metrics: dict[str, float | bool | str] = {}
+    best_selection_metrics: dict[str, Any] = {}
+    best_group_weights: dict[str, float] = {}
     wait = 0
     for epoch in range(1, cfg.max_epochs + 1):
         random.shuffle(order)
@@ -959,26 +1238,21 @@ def train_world_vla75(
             outputs = torch.stack(
                 [model(context[:, index], candidate[:, index]) for index in range(2)], dim=1
             )
-            batch_groups = [
-                str(
-                    (pair.candidates[0].group_key if pair.candidates else "")
-                    or f"{pair.map_name}|{pair.family}"
-                )
-                for pair in batch
-            ]
+            batch_groups = [_outcome_group(pair) for pair in batch]
             with torch.no_grad():
-                group_loss = (
-                    outputs[..., :WORLD_V3_OUTPUT_DIM]
-                    .sub(targets["objective"].unsqueeze(-1))
-                    .abs()
-                    .mean(dim=(1, 2))
+                supervision = world_vla75_per_sample_loss_report(
+                    outputs,
+                    targets,
+                    preference_weight=cfg.preference_weight,
+                    executable_weight=cfg.executable_weight,
                 )
-                group_weights = group_dro_weights(
-                    group_loss,
+                dro_batch = dro_state.evaluate_batch(
+                    supervision.per_sample.detach(),
+                    supervision.valid_samples,
                     batch_groups,
-                    eta=cfg.group_dro_eta,
-                    floor=cfg.group_dro_floor,
+                    update=True,
                 )
+                group_weights = dro_batch.sample_weights
             temporal_loss = temporal_preference_consistency_from_outputs(
                 outputs,
                 batch,
@@ -1008,6 +1282,9 @@ def train_world_vla75(
             outputs = torch.stack(
                 [model(context[:, index], candidate[:, index]) for index in range(2)], dim=1
             )
+            swapped_outputs = torch.stack(
+                [model(context[:, index], candidate[:, index]) for index in (1, 0)], dim=1
+            )
             val_loss, _ = world_vla75_loss(
                 outputs,
                 targets,
@@ -1027,10 +1304,13 @@ def train_world_vla75(
         scalar = float(val_loss.detach().cpu())
         selection_metrics = _vla75_validation_metrics(
             outputs,
+            swapped_outputs,
             targets,
             val_examples,
             validation_loss=scalar,
+            validation_lineage_sha256=validation_lineage_sha256,
             config=cfg,
+            group_weights=dro_state.weights,
         )
         selection_key = vla75_checkpoint_selection_key(selection_metrics)
         if best_selection_key is None or selection_key > best_selection_key:
@@ -1038,6 +1318,7 @@ def train_world_vla75(
             best_epoch = epoch
             best_selection_key = selection_key
             best_selection_metrics = dict(selection_metrics)
+            best_group_weights = dro_state.weights
             best_state = {
                 key: value.detach().cpu().clone() for key, value in model.state_dict().items()
             }
@@ -1048,6 +1329,14 @@ def train_world_vla75(
                 break
     if best_state is None:
         raise RuntimeError("world_vla75_no_checkpoint")
+    model.load_state_dict(best_state)
+    best_group_metrics = _evaluate_vla75_group_supervision(
+        model,
+        train_examples,
+        torch_device,
+        cfg,
+        best_group_weights,
+    )
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
     metadata = {
         "schema_version": WORLD_VLA75_SCHEMA_VERSION,
@@ -1055,8 +1344,13 @@ def train_world_vla75(
         "config": asdict(cfg),
         "best_epoch": best_epoch,
         "best_val_loss": best_loss,
+        "train_lineage_sha256": train_lineage_sha256,
+        "validation_lineage_sha256": validation_lineage_sha256,
         "selection_metrics": best_selection_metrics,
+        "selection_metrics_sha256": stable_sha256(best_selection_metrics),
         "selection_key": list(best_selection_key or ()),
+        "group_dro_weights": best_group_weights,
+        "group_dro": best_group_metrics,
         "train_pairs": len(train_examples),
         "val_pairs": len(val_examples),
         "source_identity_is_model_input": False,
@@ -1118,43 +1412,79 @@ def load_world_vla75(path: Path, *, device: str | torch.device):
     return model, metadata
 
 
-def vla75_checkpoint_selection_key(metrics: Mapping[str, float | bool | int]) -> tuple:
-    """Stable lexicographic checkpoint ordering required by the v2 contract.
+def vla75_checkpoint_selection_key(metrics: Mapping[str, Any]) -> tuple:
+    """Fail-closed, source-neutral lexicographic checkpoint ordering."""
 
-    Higher coverage/safety/progress and lower worst-group risk, loss, latency
-    and memory are preferred.  Boolean gate fields are considered before any
-    continuous metric, so a lower validation loss cannot rescue a gate miss.
-    """
+    if metrics.get("schema_version") != "safedrive.world.vla75.selection_metrics.v1":
+        raise ValueError("vla75_selection_metrics_schema")
+    lineage = metrics.get("evaluator_lineage_sha256")
+    if not isinstance(lineage, str) or len(lineage) != 64:
+        raise ValueError("vla75_selection_evaluator_lineage")
 
-    def number(name: str, default: float, *, negate: bool = False) -> float:
+    def finite(name: str) -> float:
+        if name not in metrics:
+            raise ValueError(f"vla75_selection_metric_missing:{name}")
         try:
-            value = float(metrics.get(name, default))
-        except (TypeError, ValueError):
-            value = default
+            value = float(metrics[name])
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"vla75_selection_metric_invalid:{name}") from error
         if not math.isfinite(value):
-            value = default
-        return -value if negate else value
+            raise ValueError(f"vla75_selection_metric_nonfinite:{name}")
+        return value
 
+    def positive_count(name: str) -> int:
+        if name not in metrics:
+            raise ValueError(f"vla75_selection_metric_missing:{name}")
+        try:
+            value = int(metrics[name])
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"vla75_selection_count_invalid:{name}") from error
+        if value <= 0:
+            raise ValueError(f"vla75_selection_count_zero:{name}")
+        return value
+
+    positive_count("valid_samples")
+    positive_count("pair_count")
+    positive_count("worst_group_count")
+    positive_count("candidate_swap_count")
+    heads = metrics.get("heads")
+    required_heads = tuple(WORLD_V3_HEAD_WEIGHTS) + tuple(
+        WORLD_VLA75_EXTRA_HEAD_WEIGHTS
+    )
+    if not isinstance(heads, Mapping):
+        raise ValueError("vla75_selection_heads_missing")
+    for name in required_heads:
+        item = heads.get(name)
+        if not isinstance(item, Mapping):
+            raise ValueError(f"vla75_selection_head_missing:{name}")
+        try:
+            count = int(item.get("count", 0))
+            loss = float(item["loss"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(f"vla75_selection_head_invalid:{name}") from error
+        if count <= 0:
+            raise ValueError(f"vla75_selection_head_count_zero:{name}")
+        if not math.isfinite(loss):
+            raise ValueError(f"vla75_selection_head_nonfinite:{name}")
+    groups = metrics.get("groups")
+    if not isinstance(groups, Mapping) or not groups:
+        raise ValueError("vla75_selection_groups_missing")
+    for name, item in groups.items():
+        if not isinstance(item, Mapping):
+            raise ValueError(f"vla75_selection_group_invalid:{name}")
+        count = int(item.get("count", 0))
+        if count <= 0 or item.get("status") != "MEASURED":
+            raise ValueError(f"vla75_selection_group_not_measured:{name}")
+        loss = float(item.get("loss", float("nan")))
+        if not math.isfinite(loss):
+            raise ValueError(f"vla75_selection_group_nonfinite:{name}")
+    # Source usage and VLA quota diagnostics are intentionally excluded.
     return (
-        1.0 if bool(metrics.get("raw_world_90_pass", False)) else 0.0,
-        1.0 if bool(metrics.get("actual_applied_75_pass", False)) else 0.0,
-        1.0 if bool(metrics.get("unsafe_delta_pass", False)) else 0.0,
-        1.0 if bool(metrics.get("target_only_unsafe_pass", False)) else 0.0,
-        1.0 if bool(metrics.get("progress_lower_95_pass", False)) else 0.0,
-        number("raw_world_vla_preference", 0.0),
-        number("actual_vla_coverage", 0.0),
-        number("unsafe_delta", 1.0, negate=True),
-        number("progress_lower_95", -1.0),
-        number("worst_group_ranking", 0.0),
-        number("worst_group_risk", 1.0, negate=True),
-        number("worst_group_executable", 0.0),
-        1.0 if bool(metrics.get("swap_source_masking_pass", metrics.get("swap_error_pass", False))) else 0.0,
-        1.0 if bool(metrics.get("action_masking_pass", False)) else 0.0,
-        1.0 if bool(metrics.get("history_masking_pass", False)) else 0.0,
-        number("swap_error", 1.0, negate=True),
-        number("validation_loss", float("inf"), negate=True),
-        number("p99_ms", float("inf"), negate=True),
-        number("gpu_gib", float("inf"), negate=True),
+        -finite("candidate_swap_error"),
+        finite("pair_accuracy"),
+        -finite("pair_regret"),
+        -finite("worst_group_loss"),
+        -finite("validation_loss"),
         str(metrics.get("config_tuple", "")),
     )
 
@@ -1172,13 +1502,20 @@ __all__ = [
     "load_world_v3",
     "train_world_v3",
     "world_v3_loss",
+    "world_v3_per_sample_loss_report",
+    "PerSampleLossReport",
+    "WORLD_V3_HEAD_WEIGHTS",
     "WorldVLA75Model",
     "WorldVLA75TrainConfig",
     "WorldVLA75TrainResult",
     "load_world_vla75",
     "train_world_vla75",
     "world_vla75_loss",
+    "world_vla75_per_sample_loss_report",
+    "WORLD_VLA75_EXTRA_HEAD_WEIGHTS",
     "group_dro_weights",
+    "GroupDROState",
+    "GroupDROBatchReport",
     "event_aware_preference_consistency_loss",
     "temporal_preference_consistency_from_outputs",
     "select_vla75_checkpoint",

@@ -43,7 +43,7 @@ label 必须保留 proposal→repaired/MRM executable→applied 关系；采集�
 |---|---|
 | 499-D context、10×8 candidate、旧多头 scorer | 已实现并有 H3–H6 历史代码/Evidence |
 | H6 v2 14-output、lineage/readiness scaffolding | `IMPLEMENTED / NOT_VERIFIED` |
-| 正确 per-sample Group-DRO、真实 validation、统一 temporal state | C1 待修 |
+| 正确 per-sample Group-DRO、真实 validation、统一 temporal state | `IMPLEMENTED / NOT_MEASURED / NOT_VERIFIED`（C1 工程） |
 | 同 anchor 双 potential outcomes | C2 待采 |
 | 本文 CORA 模型、joint calibration、formal 闭环结论 | `PLANNED` |
 
@@ -165,6 +165,17 @@ pair utility 不直接覆盖各 outcome head。风险先做约束/支配关系�
 禁止用一个 scalar objective 与异质输出向量做绝对差来构造 group loss。空 mask 必须是
 `NOT_MEASURED`，不能当作 0 loss/pass。
 
+C1 实现固定在 `safedrive_foundry/data_pipeline/h6/model.py`：objective、progress、completion、
+collision、red-light、offroad、comfort、repair、trust、pair preference 和 executable 各自保留
+unreduced loss 与独立 mask。candidate head 先在单个样本的有效候选内聚合，pair head 只在双
+outcome 有效时启用；逐样本总 loss 是“有效 head 的冻结权重加权和 / 有效权重和”。无有效
+head 的样本不进入优化，整 batch 无有效监督时 fail closed。
+
+持久 `GroupDROState` 在训练开始前登记 train 数据中的 map/family/weather/group key，只以真实
+target/mask 的逐样本多任务监督计算 group mean 并更新指数权重/floor。当前 batch 未出现的
+group 保留历史权重，空 group 输出 `NOT_MEASURED/count=0/loss=null`；coverage、temporal 等
+非监督 penalty 不构造 Group-DRO 风险。
+
 ## 7. 基线与因果检查
 
 | 检查 | 要回答的问题 |
@@ -243,6 +254,13 @@ raw outcomes/scores
 held source 仍 eligible 时优先，否则 Expert→VLA，最终都经过 Safety，均失败才 MRM。defer
 不是在线 Oracle、人工接管或无控制。
 
+C1 唯一实现位于 `safedrive_foundry/data_pipeline/h6/temporal.py`。状态只保存稳定
+`expert`/`vla` source 与 source EMA，不保存 frame-scoped candidate ID；scope 由
+run/episode identity 加 route revision 定义，变化时清空 EMA、hold 和历史。状态机固定依次执行
+scope/eligibility、EMA、held unavailable/emergency risk、emergency margin、minimum hold、
+hysteresis、普通 choose/switch，并输出统一 raw/EMA/margin/hold/switch/defer trace 与稳定 reason。
+VLA75 offline calibration 和 live router 调用同一核心；旧 H5 historical 模式保持旧行为。
+
 ## 10. Checkpoint selection/readiness
 
 checkpoint selection 只能使用实际 evaluator 输出：
@@ -260,6 +278,23 @@ measured GPU peak
 硬编码 `pass=True`、`swap_error=0`、`p99_ms=0`、`gpu_gib=0` 均无效。未运行就是
 `NOT_MEASURED`，readiness 必须拒绝缺项。summary 绑定 dataset manifest、split、seed、
 checkpoint ensemble、evaluator artifact、config、code/worktree 和自哈希。
+
+C1 evaluator schema 为 `safedrive.world.vla75.evaluator.v1`，记录 checkpoint/seed、validation/
+config/code/worktree/input lineage、per-head loss/count/hazard positives、pair accuracy/regret、
+group loss/count/weight、candidate/source/action/context/history probes、实测 latency 和 incremental
+GPU peak 状态，并使用排除自身字段计算的 `evaluator_sha256`。checkpoint metadata 同时绑定
+validation lineage、selection metrics 与其 hash；最终 evaluator 必须重算并验证一致。
+
+training summary schema 为 `safedrive.world.vla75.training_summary.v2`，固定绑定三个有序 seed、
+checkpoint、evaluator 和输入 lineage，并使用 `summary_sha256`。readiness 识别但拒绝 v1 summary，
+对 summary/evaluator/checkpoint/input/self hash、有效计数、probe、latency/GPU 状态和顺序
+fail closed，输出 self-hashed readiness。CPU 或未执行 CUDA 时 GPU peak 必须是
+`NOT_MEASURED/value=null`，因此不具备正式 readiness；artifact 验证状态和 CORA algorithm
+验证状态始终分开。
+
+C1 后新建 formal run-lock 固定为 `safedrive.h6.vla75.run_lock.v2`，calibration payload
+必须绑定三个 evaluator hash、validation lineage 和 training input lineage；创建脚本在写盘前
+调用验证器。`run_lock.v1` 仅保留历史 artifact 的只读兼容，不能作为 C1 后新建的 formal lock。
 
 ## 11. 评估
 

@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "safedrive_foundry"))
 from data_pipeline.h6.matrix import load_h6_vla75_matrix  # noqa: E402
 from data_pipeline.h6.run_lock import (  # noqa: E402
     build_h6_vla75_run_lock,
+    verify_run_lock,
     write_run_lock,
 )
 
@@ -54,6 +55,23 @@ def main() -> int:
             "router": dict(calibration_input.get("router_calibration") or {}),
             "temperatures": dict(calibration_input.get("temperature_calibration") or {}),
         }
+        # C1 summary bindings travel inside the deployment payload so the
+        # existing run-lock shape remains self-hashed and backward readable.
+        calibration["deployment"].setdefault(
+            "c1_bindings",
+            {
+                "evaluator_sha256": [
+                    str(item.get("sha256"))
+                    for item in calibration_input.get("evaluators", ())
+                ],
+                "validation_lineage_sha256": calibration_input.get(
+                    "validation_lineage_sha256"
+                ),
+                "training_input_sha256": calibration_input.get(
+                    "train_lineage_sha256"
+                ),
+            },
+        )
     else:
         calibration = dict(calibration_input)
     versions = (
@@ -78,6 +96,12 @@ def main() -> int:
         training_roots=args.training_root,
         versions=versions,
     )
+    verification = verify_run_lock(lock, root=ROOT)
+    if not verification["valid"]:
+        raise SystemExit(
+            "h6_vla75_run_lock_invalid:"
+            + ",".join(str(item) for item in verification["failures"])
+        )
     digest = write_run_lock(args.output, lock)
     print(
         json.dumps(

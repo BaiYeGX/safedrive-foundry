@@ -1,4 +1,4 @@
-# 当前唯一任务：H6-CORA C1 正确性加固
+# 已完成任务：H6-CORA C1 正确性加固
 
 ## 1. 状态
 
@@ -11,7 +11,8 @@ H4 = COMPLETED / VERIFIED / GATE_PASSED / STOPPED
 H5 = COMPLETED / VERIFIED / GATE_FAILED / STOPPED
 H6 v1/v2 = IMPLEMENTED / MEASURED / NOT_VERIFIED
 H6-CORA C0 document consolidation and QA = COMPLETED
-H6-CORA C1 correctness hardening = CURRENT
+H6-CORA C1 correctness hardening = COMPLETED / STOPPED
+H6-CORA C2 counterfactual data = AWAITING SEPARATE AUTHORIZATION / NOT_STARTED
 Online Oracle = PROHIBITED
 ```
 
@@ -19,19 +20,20 @@ H5/H6 的历史 gate 和 Evidence 已冻结，不能改写。H6-CORA 是 H6 的�
 不改变 `AGENTS.md` 规定的唯一 H0→H6 研究链。后续不再把“World 在 90% tick 偏好 VLA”
 或“VLA 使用率达到某个比例”作为主要优化目标；source usage 只做诊断。
 
-## 2. 当前任务目标
+## 2. 完成结果与边界
 
-在任何新数据采集、GPU 训练或 CARLA formal 之前，修复已经由代码审计确认的正确性问题，
-使下一阶段的反事实数据和 CORA World 不建立在虚假 validation、错误 loss、离线/在线语义
-漂移或 tick 所有权违规之上。
+在任何新数据采集、GPU 训练或 CARLA formal 之前，C1 已修复代码审计确认的 correctness
+问题，使下一阶段的反事实数据和 CORA World 不再建立在虚假 validation、错误 loss、
+离线/在线语义漂移或 tick 所有权违规之上。
 
-本任务只做 C1，不采集 CORA 数据、不训练新 checkpoint、不运行 formal seed、不改 Safety
-硬权限。完成后更新 `PROGRESS.md` 并停止，等待 C2 数据任务单独授权。
+本任务只完成 C1；没有采集 CORA 数据、训练项目 checkpoint、运行 formal seed 或修改 Safety
+硬权限。代码、测试和 schema Evidence 已达到 `IMPLEMENTED`，程序在此停止，等待 C2 数据任务
+单独授权。
 
-C1 只把旧实现变成可信的开发底座；即使所有单元测试通过，H6-CORA 的算法 Evidence 仍为
-`PLANNED`，直到 C2/C3 实际产生数据和模型 artifact。
+C1 只把旧实现变成可信的开发底座；虽然专项和全量单元测试已经通过，H6-CORA 的算法
+Evidence 仍为 `PLANNED`，直到 C2/C3 实际产生数据和模型 artifact。
 
-## 3. 必须解决的问题
+## 3. 已完成的 correctness 范围
 
 ### C1.1 真实 validation 指标
 
@@ -102,9 +104,9 @@ VLA、Classic、Safety、controller、H2/H3 frozen data 或 ROS 2。
 - 不删除失败测试、失败 Evidence 或用户无关工作区文件。
 - `test_registry.sqlite3` 是任务开始前已存在的未跟踪文件；本任务不得删除或纳入正式 run-lock。
 
-## 6. 新测试要求
+## 6. 已落实的测试要求
 
-至少新增或强化：
+已新增或强化：
 
 1. 缺真实 evaluator 指标时 checkpoint/readiness 失败；
 2. 不同 outcome head 的 per-sample loss 与 mask 独立正确；
@@ -134,9 +136,9 @@ git diff --check
 本任务是离线正确性加固，不强制启动 CARLA。任何声称 GPU latency/memory 或 CARLA 行为的
 新数字都必须来自实际运行；单元测试不能升级成 `MEASURED`。
 
-## 8. 停止点
+## 8. 已达到的停止点
 
-满足以下条件后立即停止：
+以下条件已经满足，C1 必须保持停止：
 
 - C1.1–C1.5 均有实现和直接测试；
 - 全量测试和 compileall 通过，或失败被完整记录；
@@ -144,11 +146,11 @@ git diff --check
 - `PROGRESS.md` 记录修改、实测命令、未解决问题和 C2 接管条件；
 - 没有采新数据、训练 CORA、运行 CARLA pilot/formal 或自动进入 C2。
 
-若同一问题初始实现加两次实质修复仍无进展、遇到重叠未知修改、需要改冻结 Evidence，或
-发现活动文档冲突，立即停止并报告。
+没有遇到需要两次修复仍无进展、未知重叠修改或冻结 Evidence 冲突。实际测试和剩余限制见
+`PROGRESS.md`。
 
 ## 9. C1 完成后的下一任务
 
 C2 将按 [COUNTERFACTUAL_DATA](docs/COUNTERFACTUAL_DATA.md) 复用 H2/H3 exact-reset 能力，
-构建双候选均有真实 short-horizon outcome 的 development 数据。C2 必须另行更新本文件后
-才能开始。
+构建双候选均有真实 short-horizon outcome 的 development 数据。C2 当前是
+`AWAITING SEPARATE AUTHORIZATION / NOT_STARTED`；必须由用户另行授权并更新本文件后才能开始。
