@@ -1,159 +1,299 @@
-# H World：候选条件化结果预测与排序
+# CORA Counterfactual Outcome World 与选择性路由合同
 
-## 1. 定位
+## 1. 准确定义
 
-H World 是 selector，不是 generator、Safety 或 controller。它只接收逐候选 Guard 判为
-`PASS` 或 `REVIEW` 的 Expert/VLA 轨迹，并对每条轨迹在当前 observable history 下的未来
-结果打分；`REJECT` 永远不可见。
+CORA World 是 candidate-conditioned trajectory outcome model，不是像素视频生成器、轨迹
+generator、Safety 或 controller。它学习：
 
-```text
-z_t = Encoder(observable_history, route)
-e_i = CandidateEncoder(trajectory_i)
-y_i = OutcomeHead(z_t, e_i)
-s_i = RankHead(y_i)
-```
+\[
+p_\theta(Y_i\mid O_t,\tau_i)
+\]
 
-同一组参数应用于所有候选，排序必须对 candidate slot 置换等变。
+其中 `O_t` 是当前可观测 history/route/actors/lights，`τ_i` 是 Guard eligible 候选，`Y_i`
+是执行该候选后的 short-horizon progress、risk、comfort 和 feasibility。
 
-## 2. 输入与禁止项
+World 只对候选预测、排序并提供 uncertainty；calibrated router 可 choose、hold 或 defer；
+Safety 保留最终批准、repair、fallback 和 MRM 权限。
+
+预测 estimand 固定为：
+
+\[
+p_\theta\!\left(Y_i\mid O_t,\tau_i;\pi_{Safety},\pi_{control}\right)
+\]
+
+即 Guard eligible proposal `τ_i` 被交给冻结 single-candidate Safety/controller 后的 outcome。
+label 必须保留 proposal→repaired/MRM executable→applied 关系；采集时禁止跨候选 fallback，
+否则 `Y_i` 会依赖 pair。CORA 不预测绕过下游安全栈的“裸轨迹世界”。
+
+## 2. 当前实现与结题目标
+
+现有 H3/H4/H6 代码已经具备的 scaffolding 与 CORA 目标必须分开：
+
+- 499-D vector observable context；
+- `10×8` candidate tensor；
+- shared candidate-conditioned Transformer/MLP scorer；
+- 多 outcome heads；
+- temperature/calibration、router、temporal state 和三 seed scaffolding；
+- locked evaluation、readiness、run-lock 和 closed-loop collector。
+
+但当前正式结论仍是 H5 gate failed、H6 not verified。CORA 在现有基础上重点修复标签、
+对称性、loss、uncertainty 和 selector，而不是从头训练大型视觉生成模型。
+
+| 能力 | 当前状态 |
+|---|---|
+| 499-D context、10×8 candidate、旧多头 scorer | 已实现并有 H3–H6 历史代码/Evidence |
+| H6 v2 14-output、lineage/readiness scaffolding | `IMPLEMENTED / NOT_VERIFIED` |
+| 正确 per-sample Group-DRO、真实 validation、统一 temporal state | C1 待修 |
+| 同 anchor 双 potential outcomes | C2 待采 |
+| 本文 CORA 模型、joint calibration、formal 闭环结论 | `PLANNED` |
+
+## 3. 输入与禁止项
 
 允许：
 
-- 当前/历史图像或其冻结特征；
-- ego history、route、导航命令；
-- 当前可观测 actor、traffic-light、lane/topology；
-- candidate trajectory 及由该 trajectory 本身可重算的动力学量。
+- ego history、当前 ego state；
+- route polyline、navigation command；
+- 当前可观测 actors/lights/lane/topology；
+- 当前/历史图像的冻结特征（若在阶段任务中预注册）；
+- candidate trajectory 及其可重算 kinematics。
 
 禁止：
 
-- rollout future、碰撞结果、Oracle winner；
-- 场景 family 答案、Regression 注入、测试标签；
-- Guard 结果、provenance、source、候选槽位或 branch order；
-- World 输出修改 Guard/Safety 权限。
+- source、slot、branch order、Guard verdict、provenance reason；
+- actor future、rollout event、真实 outcome、Oracle/winner；
+- Regression/故障答案、scenario family answer、formal label；
+- World 输出修改 Guard/Safety/repair/MRM/controller 权限。
 
-source id 只保留在 H2 审计和分层指标中，不能进入 H3 scorer feature view。source-only
-baseline 只能从隔离的审计表计算，不能成为训练特征或模型变体。
+feature object 应从允许字段新建，不从完整记录事后删除禁止字段。
 
-## 3. 预测目标
+source-blind 只承诺元数据不可见。轨迹几何可能暴露 planner 风格，所以要同时做两种不同
+检查：metadata-only/source-swap 用于验证 schema；trajectory-to-source probe 用于量化行为
+捷径风险。后者高于随机是诊断信号，不等价于数据泄漏，也不能被当作结果标签输入。
 
-H3/H4 的首版使用结构化 outcome，不做像素生成：
+## 4. 模型结构
 
-- collision/violation probability；
-- route progress 与 completion；
-- minimum clearance / TTC risk；
-- comfort（accel、jerk、lateral accel）；
-- infeasible/deadline risk；
-- uncertainty 与 defer probability。
+建议使用共享权重、候选交换等变结构：
 
-排序采用约束优先：硬风险不能被效率 reward 抵消。具体权重和阈值必须在 H3 开始前
-冻结，并与手写 reward baseline 共用相同定义。
+\[
+z_O=f_O(O_t),\qquad z_i=f_\tau(\tau_i)
+\]
 
-H5 正式闭环给出负结果后，H6 World v3 将“任务效果”和“这条候选是否值得信任”拆开，
-共享模型对每条候选输出 12 项：
+\[
+h_i=\operatorname{CrossAttention}(z_i,z_O)
+\]
 
-```text
-综合任务效果
-进度均值 + 方差
-完成概率
-碰撞 / 红灯 / 越界概率（分别预测）
-jerk / 加速度 / 横向加速度
-Safety 修复成功概率
-可信概率
-```
+\[
+\hat Y_i=g_Y(h_i)
+\]
 
-在线 `deployment_score` 综合任务效果、完成、可信和三类风险。VLA 只有在综合分不低于
-Expert、可信度达到开发集冻结门槛、风险不超过冻结上限时，才成为主候选；“高可信”本身
-不能给 VLA 人为加成到超过 Expert。
+每个 candidate 共享 `f_τ` 与 `g_Y`。pair difference 必须由结构保证反对称，例如：
 
-## 4. 训练样本
+\[
+\widehat{\Delta U}=u_\theta(h_A,z_O)-u_\theta(h_B,z_O)
+\]
 
-H2/H3 训练单位是同一 anchor 的 paired candidates：
+或对任意 pair 网络显式反对称化：
+
+\[
+\widehat{\Delta U}=\tfrac12\left[f_\theta(h_A,h_B,z_O)-f_\theta(h_B,h_A,z_O)\right]
+\]
+
+交换 A/B 后：
 
 ```text
-(observable_history, route, candidate_i, actual_outcome_i, pair_id)
+absolute outcome A/B 跟随 trajectory 交换
+pair utility difference 变号
+uncertainty 跟随对应 candidate
 ```
 
-split 按 root lineage/map/scenario family 分组，不能把同一 anchor 或近重复轨迹拆到
-train/test。对称增强可交换 candidate slot，但不能交换 trajectory 与其 outcome 的绑定。
+候选 identity 只用于把输出绑定回 trajectory，不作为 embedding。
 
-H6 重新训练使用真实闭环配对结果：同一物理场景的 `off` arm 只执行 Classic，开发态
-`on` arm 用于采 VLA-primary 结果。训练样本仍只取 source-blind 的 observable/candidate
-特征；source 只用于把实际 outcome 绑定回正确候选。训练 seed 固定为 `89/97`，正式验收
-seed 固定为 `101/103`，loader 和 readiness 都拒绝把正式 seed 用于训练。某一来源必须
-实际执行该 episode 至少 90% 才能贴该来源 outcome；readiness 还要求完整 108-pair 训练
-矩阵，12-pair pilot 只能检查采集链。
+仅把 `h_A-h_B` 输入普通 MLP、或只做 swap augmentation，都不能数学保证输出变号；它们只能
+作为额外训练/测试，不能替代结构约束。
 
-## 5. 必做基线与因果检查
+## 5. Outcome heads
 
-| 检查 | 失败含义 |
+最低输出：
+
+| head | 类型 | 说明 |
+|---|---|---|
+| progress | mean + scale | 2.5s route progress |
+| completion | Bernoulli | 预注册 local-goal/route completion；2.5s 内正例不足则只作审计 |
+| collision | Bernoulli / severity | 碰撞与严重度 |
+| red-light | Bernoulli | stop-line/red-light violation |
+| offroad | Bernoulli + duration | corridor/drivable-area |
+| comfort | mean + scale | acceleration/jerk/lateral acceleration |
+| feasibility | Bernoulli | controller/Safety executability |
+| repairability | Bernoulli | bounded repair 后通过 final validation |
+| epistemic | ensemble disagreement | 分布外/模型不确定性 |
+| pair difference | real/logit | 两候选 utility 差或 dominance |
+
+progress/comfort 等连续量使用合适的 NLL/Huber；hazard 使用 BCE/focal/asymmetric loss；每个
+head 的 mask、单位和有效计数独立。
+
+## 6. Loss 合同
+
+\[
+\mathcal L=
+\mathcal L_{outcome}
++\lambda_{pair}\mathcal L_{pair}
++\lambda_{swap}\mathcal L_{equiv}
++\lambda_{cons}\mathcal L_{consistency}
++\lambda_{tail}\mathcal L_{tail}
+\]
+
+- `L_outcome`：各候选真实 potential outcome；
+- `L_pair`：同 anchor 两候选真实 utility/outcome difference；
+- `L_equiv`：candidate swap 一致性；
+- `L_consistency`：pair head 与 absolute outcome 组合方向一致；
+- `L_tail`：collision/red-light/offroad hard cases，不允许零正样本伪通过。
+
+pair utility 不直接覆盖各 outcome head。风险先做约束/支配关系，舒适和 progress 只在风险
+可比的候选之间组合；utility 权重、归一化、风险阈值和 tie/defer margin 必须在对应阶段冻结。
+这样不能用少量 progress 抵消碰撞或红灯风险。
+
+### Per-sample 与 Group-DRO
+
+正确顺序：
+
+1. 每个 head 按自身 mask 计算 per-sample loss；
+2. 只在有效 head 上按冻结权重合成 per-sample multi-task loss；
+3. 按 map/family/weather/route/risk-event 分组；
+4. Group-DRO 对真实 group loss 更新权重；
+5. 报告每组有效计数、原始 loss 和权重。
+
+禁止用一个 scalar objective 与异质输出向量做绝对差来构造 group loss。空 mask 必须是
+`NOT_MEASURED`，不能当作 0 loss/pass。
+
+## 7. 基线与因果检查
+
+| 检查 | 要回答的问题 |
 |---|---|
-| no-action scorer | history 本身已解释标签，candidate conditioning 未证明 |
-| candidate-only scorer | 模型可能忽略场景交互 |
-| CV/CTRV rollout | 复杂 World 没有超过简单动力学 |
-| frozen hand reward | 学习排序没有超过确定性规则 |
-| source-only classifier | 数据存在来源捷径 |
-| candidate swap / slot permutation | scorer 依赖槽位或绑定错误 |
-| action masking | score 不随动作改变 |
-| history masking | scorer 不使用场景状态 |
+| no-action | history 是否已解释标签，模型没有使用 trajectory？ |
+| candidate-only MLP | context 是否提供额外价值？ |
+| CV/CTRV / hand reward | 复杂模型是否超过简单动力学/规则？ |
+| frozen factual H6 World | 反事实监督是否修复旧标签问题？ |
+| metadata-only/source swap | schema 是否真的不含 source/slot/order？ |
+| trajectory-to-source probe | 合法轨迹风格能多大程度预测来源，模型是否只靠风格？ |
+| candidate swap | 是否依赖 slot/绑定？ |
+| source metadata swap | trajectory 不变时预测是否不变？ |
+| action intervention | risk/outcome 是否随轨迹物理变化？ |
+| context intervention | risk/outcome 是否随相关场景变化？ |
+| history masking | 模型是否使用时序状态？ |
 
-ACT-Bench 指出视觉质量不能替代 action fidelity，因此 candidate swap、masking 和
-permutation 是进入 locked evaluation 的硬门，而非可选消融。
+对 intervention 既报告分类准确率，也报告物理方向单调性，例如更晚制动不应降低 stop-line
+risk，轨迹更接近障碍物不应降低 collision risk。
 
-## 6. defer
+## 8. 不确定性与 calibration
 
-World 在以下情况必须 defer：
+区分：
 
-- 仅一条候选通过 Guard；
-- 输入/候选 provenance 不完整；
-- uncertainty 超阈值或 score margin 不足；
-- 推理超时或模型不可用。
+- aleatoric：outcome 本身噪声，由 distribution head 表示；
+- epistemic：训练覆盖不足，由独立 seed ensemble/模型分歧表示；
+- calibration：在独立 calibration split 上估计 residual/temperature/quantile；
+- selection：根据 outcome/utility bounds 选择或 defer。
 
-defer 回到冻结的非学习 selector。World 失败不能跳过 Safety，也不能将已拒绝候选复活。
+示意：
 
-“两候选近重复就 defer”只保留给冻结的 H1/H3/H5 v1 行为。H6 World v3 仍给近重复候选
-打分，因为用户目标包含“World 在 90% 决策时刻真正给 VLA 更高分”，不能用近重复门绕开
-评分。只有一条 eligible 时仍不构成 World 的双候选高分证据。
+\[
+LCB(U_i)=w_p(\hat p_i-q_{p,i})-w_r(\hat r_i+q_{r,i})-w_c(\hat c_i+q_{c,i})
+\]
 
-## 7. 评估
+只有：
 
-离线：outcome calibration、pairwise accuracy、AUROC、NLL/Brier、regret、defer-risk、
-两来源分层胜率、swap consistency、P50/P95/P99 延迟与显存。
+\[
+LCB(U_i)>UCB(U_j)+\delta
+\]
 
-在线：World on/off 使用相同 candidates、Guard、Safety、controller、seed 和场景；报告
-碰撞/违规、完成/进度、舒适、回退、deadline miss 和资源。World 只有在安全不退化且
-任务收益可复现时才算有效。
+才允许选择 `i`。否则 hold 或 defer。
 
-H6 的正式验收额外同时要求：
+风险比较先于软 utility：若某候选的 risk upper bound 超过冻结上限，它不能靠 progress LCB
+进入占优；两个候选都不满足 learned risk 条件时直接 defer 给非学习 fallback/Safety。
 
-- 所有决策 tick 中至少 90% 同时存在 Expert/VLA 原始评分，且 VLA 综合分不低于 Expert、
-  可信门和风险门都通过；只剩 VLA 一条候选不能计数；
-- VLA 最终实际执行占全部决策 tick 至少 75%，Classic + MRM 合计不超过 25%，不能只看
-  World 选择；
-- 对纯 Classic paired baseline 的不安全率增量不超过 1 个百分点；
-- paired route progress bootstrap 95% 下界不小于 0；
-- scorer 无 deadline miss，切换率受限且无短窗 Expert↔VLA ping-pong，完整 provenance 可审计。
+conformal/coverage 的有效范围必须说明 calibration distribution 和 exchangeability 假设；
+不能写成任意 OOD、任意闭环状态或实车环境的全域安全保证。
 
-H6 当前是 `IMPLEMENTED / MEASURED / NOT_VERIFIED`：已完成 24-pair 平衡开发训练 pilot、
-旧第一拍口径的 World v3 训练和一次 seed 101 正式 pilot。正式逐 tick World 高分只有
-21.83%、VLA 实际执行 47.50%，已经失败；新的 tick-wise 重训练、完整 108-pair 开发矩阵、
-新 held-out pilot/full 尚未完成。
+必须明确 coverage 单位。逐 outcome、逐 candidate 的 marginal coverage 不能直接宣传为“两
+候选所有风险头同时覆盖”；系统级 claim 需要对 candidate/head 的 joint residual 或预注册的
+multiple-comparison 校正，并按 root anchor 聚类评估。
 
-2026-08-27 的前向验收口径只下调“实际执行”硬门；World 原始双候选高分门仍为 90%。
-训练 episode 的 90% outcome 归因纯度门也保持不变，它用于保证标签可信，不能和 75%
-正式执行目标混为一谈。历史 `vla90` 运行继续按原合同解释。
+## 9. Temporal selector
 
-## 8. 单机预算
+唯一状态机：
 
-首版优先 object/vector 或冻结视觉特征，参数量与历史长度以 RTX 4080 16GB 在线并行
-CARLA+VLA 可运行为约束。先跑小样本过拟合与 action-sensitivity smoke，再扩大训练。
-资源不足时减少视觉分辨率、history 或 batch，不改变候选合同和验证门。
+```text
+raw outcomes/scores
+→ calibrated utility intervals
+→ dominance / ambiguity
+→ minimum hold / hysteresis
+→ choose / switch / defer
+→ Safety
+```
 
-## 9. 外部依据
+要求：
 
-- [World4Drive](https://openaccess.thecvf.com/content/ICCV2025/html/Zheng_World4Drive_End-to-End_Autonomous_Driving_via_Intention-aware_Physical_Latent_World_Model_ICCV_2025_paper.html)：
-  用 latent world representation 评价并选择 trajectory modality。
-- [ACT-Bench](https://arxiv.org/abs/2412.05337)：单独评估 action controllability/fidelity。
-- [PDM](https://arxiv.org/abs/2306.07962)：规则闭环 proposal 与学习模块分工，并强调
-  闭环评价。
+- temporal state 按 episode/route revision 作用域内的稳定 source key，而不是 frame candidate ID；
+- emergency override、hysteresis 和 minimum hold 独立；
+- raw、EMA、interval、selected source、defer/switch reason 每 tick 记录；
+- offline calibrator 与 live router 调同一实现；
+- replay trace 必须逐 tick 完全一致；
+- router 不能通过 EMA/hold 提高 raw model coverage 指标。
 
-这些是设计依据，不是本仓库的实测证据。
+`hold` 只延续 source 决策，当前 tick 仍使用 fresh candidate；`defer` 调用冻结非学习规则：
+held source 仍 eligible 时优先，否则 Expert→VLA，最终都经过 Safety，均失败才 MRM。defer
+不是在线 Oracle、人工接管或无控制。
+
+## 10. Checkpoint selection/readiness
+
+checkpoint selection 只能使用实际 evaluator 输出：
+
+```text
+outcome NLL/Brier/ECE
+unsafe recall/AUPRC
+pair accuracy/regret
+swap/source/action/context probes
+worst-group metrics
+measured P50/P95/P99
+measured GPU peak
+```
+
+硬编码 `pass=True`、`swap_error=0`、`p99_ms=0`、`gpu_gib=0` 均无效。未运行就是
+`NOT_MEASURED`，readiness 必须拒绝缺项。summary 绑定 dataset manifest、split、seed、
+checkpoint ensemble、evaluator artifact、config、code/worktree 和自哈希。
+
+## 11. 评估
+
+### 离线
+
+- per-head NLL/Brier/ECE/AUROC/AUPRC；
+- pairwise accuracy 和 regret；
+- selective regret / risk-coverage / defer-rate；
+- source/map/family/weather/risk-event worst group；
+- swap/intervention/consistency；
+- three-seed mean、spread 和方向；
+- P50/P95/P99、deadline miss、GPU peak。
+
+### 在线
+
+使用相同 candidates、Guard、Safety、controller、scenario/reset 比较：
+
+```text
+Classic selection baseline（dual-generator shadow load）
+factual World
+CORA without abstention
+full CORA
+```
+
+四臂都运行双 generator 以保持 selector 对照的 workload；Classic 臂将 VLA 置为 shadow 且
+始终请求 eligible Expert。真正关闭 VLA 的 profile 另做资源对照，不能与效果臂混算。
+
+主要 gate 见 [PROJECT](PROJECT.md) 与对应阶段 `START_TASK.md`。VLA/Classic/MRM usage、
+repair/fallback transition 只做诊断，不是 source quota。
+
+## 12. 资源边界
+
+首版继续使用 object/vector context 或冻结视觉特征，模型规模服从 RTX 4080 16GB 上
+CARLA + VLA + World 同时在线的预算。资源不足时优先减少 batch/history/feature 分辨率，
+不改变 candidate、label、Safety 或 formal gate。
+
+前沿方法定位与为什么不复制大型视频 World 见 [RELATED_WORK](RELATED_WORK.md)。

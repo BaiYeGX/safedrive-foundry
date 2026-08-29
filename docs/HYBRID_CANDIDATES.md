@@ -1,21 +1,37 @@
-# H1 Hybrid candidates 与逐候选 Guard
+# Hybrid VLA–Expert 候选与 Guard 合同
 
 ## 1. 目标
 
-H1 只做一件事：在同一 observable anchor 上得到两条独立、可执行、可追踪的候选。
+同一 observable anchor 上只允许两个在线规划来源：
 
-| source | 实现 | 输出 |
+| source | 实现 | 系统作用 |
 |---|---|---|
-| `expert` | Classic route/behavior planner | 一条确定性 expert trajectory |
-| `vla` | `NominalVLAPolicy` 的一次真实 SimLingo forward | 一条 nominal trajectory |
+| `vla` | 预训练 `NominalVLAPolicy` / SimLingo 一次真实 forward | 视觉语义与 language-action 先验的 nominal proposal |
+| `expert` | Classic route/behavior/Frenet-ST planner | 几何、规则、动力学和确定性 proposal |
 
-不训练多模态 head，不从某条轨迹做 learned perturbation，不把 teacher/Oracle 当在线候选。
+二者互补但平权：系统不预设 VLA 必须胜出，也不允许 Classic outcome 被当作 VLA 标签。
+在线学习模块不得从一条轨迹做 perturbation、复制或重命名来伪造第二候选。offline-only
+intervention 只用于反事实数据和 benchmark，必须有独立 provenance，不能进入 live set。
 
-## 2. 同步输入
+本文固定三种不同身份：`candidate` 是 generator 原始 proposal，`selected` 是被请求交给 Safety
+的候选，`executable` 是 Safety 接受或 repair 后批准的轨迹。三者不能用同一个 source 字段
+相互覆盖。
 
-两来源绑定同一个 `observation_id`：CARLA frame、simulation time、ego state、route revision、
-actor/light snapshot 与传感器时间戳必须一致。超过 freshness/deadline 的结果丢弃，不能
-与下一帧候选拼接。
+## 2. 同锚点输入
+
+两来源绑定同一个：
+
+```text
+observation_id
+CARLA frame / simulation time
+ego state and observable history
+route revision / navigation command
+actor and traffic-light snapshot
+sensor timestamps
+```
+
+候选不得跨帧拼接。超出 generation deadline、simulation freshness 或 observation binding
+失败的候选无资格进入 World。
 
 ## 3. 统一轨迹合同
 
@@ -27,84 +43,125 @@ horizon = 2.5 s
 point = [x, y, yaw, v, a, kappa]
 ```
 
-canonicalization 不能改变候选语义，只允许坐标变换、按弧长/时间重采样及有限差分补齐。
-每次变换记录 input hash、canonical hash、版本与误差。
+canonicalization 只允许坐标变换、重采样和由同一轨迹重算动力学量，不能改变候选语义或
+补造一条直线替代。每次变换记录：
 
-实现使用严格 `safedrive.trajectory_canonicalizer.v2`：原生路径退化、时域/弧长覆盖不足、
-非有限数、坐标未知或需要外推时直接失败，不再生成直线替代。Classic 输入原生 timed
-trajectory；VLA 保留真实 forward 的 20 点空间路径，再只 canonicalize 一次。
+```text
+raw trajectory hash
+canonical trajectory hash
+canonicalizer version
+model/config/checkpoint hash
+route revision hash
+generation latency
+```
 
-## 4. provenance
+VLA 保留真实 forward 的 raw route/path points 与 speed head，再经意图保持的运动学平滑；
+Classic 主规划失败时只允许生成自身规则定义的有 provenance 受限停车候选，不能复制 VLA。
 
-候选最少记录：source、candidate id、observation id、generator model/config hash、route
-revision、raw/canonical hash、generation latency、freshness、Guard verdict 与 reject reasons。
-World 选中后还要记录 selected id、executed id 和任何 Safety fallback id。
-
-H1 的公开 source 为 `expert | vla`，在兼容的 Safety v1 合同中分别映射为
-`CandidateSource.CLASSIC | CandidateSource.VLA_FAST`；完整 H1 provenance 同时保存在包装
-合同与 `dynamics_meta`。Classic generator hash 是冻结 Frenet 配置 hash；VLA generator
-hash 组合 model id、checkpoint SHA256 与 Hydra 配置 SHA256；route revision 是规范化
-route polyline SHA256。
-
-## 5. Guard 顺序与三态结果
+## 4. Guard 三态
 
 每条候选独立检查：
 
-1. schema、finite、时间与坐标；
-2. freshness 与 observation binding；
+1. schema、finite、时间和坐标；
+2. observation/freshness/provenance binding；
 3. route/lane corridor 与导航合法性；
-4. curvature、速度、加速度、jerk 与可跟踪性；
-5. 静态/当前可观测碰撞约束；
-6. controller feasibility 与最小执行时域。
+4. curvature、speed、acceleration、jerk、lateral acceleration；
+5. 当前可观测 collision envelope；
+6. traffic-light/stop-line；
+7. controller feasibility 与最小执行时域。
 
-H6 起 Guard 给三种结果：
+结果：
 
-- `PASS`：合同干净，正常进入 World；
-- `REVIEW`：候选基本可执行，但道路/规则/碰撞预测/动力学/控制检查处于边界，仍进入
-  World，由 World 结合场景、效果和可信度综合比较；
-- `REJECT`：坏数据或绑定、严重路线/道路偏离、非有限数/跳点、明显迫近碰撞或不可执行
-  控制合同，World 不得接收或复活。有限的速度/加速度/jerk/曲率越界改为 `REVIEW`，
-  交给 World 排序并在最终 Safety 中修复、重验。
+- `PASS`：合同和当前检查干净，可进入 World；
+- `REVIEW`：候选基本有效但处于冻结边界，可进入 World，最终仍必须由 Safety 重验；
+- `REJECT`：坏数据/绑定、严重道路偏离、明显迫近碰撞、非有限或不可执行，World 不可见且
+  不得复活。
 
-Guard 不使用 rollout future 或 Oracle。`REVIEW` 不是 Safety 通过证书：World 排序后最终
-候选仍必须经过 Safety 的完整硬检查。
+Guard 只使用当前可观测状态和候选本身，不读取 rollout future、Oracle、formal label 或
+Regression answer。`REVIEW` 不是 Safety 证书。
 
-候选生成 wall latency 的硬门为 `2.5 s`；它与 Safety 既有 `0.25 s` simulation freshness
-门独立。某阶段硬失败后不再运行后续可能不安全的检查，最后一阶段使用隔离的
-`ControlLoop` dry-run 验证最小执行时域与控制可行性。碰撞检查使用车辆有向矩形并把
-actor 状态预测到每个候选点的真实相对时间；红灯检查判断是否能在停止线前停车或是否
-真正越线，不再因为一条正在合理制动的轨迹前段速度较高就直接拒绝。
+后文统一把 `PASS/REVIEW` 称为 `eligible`；“通过 Guard”不得被误读为只有 `PASS`。
 
-## 6. set-level 规则
+## 5. 候选集合规则
 
-- 0 eligible（`PASS/REVIEW`）：Safety 回退；
-- 1 eligible：直接进入 Safety，World defer；
-- 2 eligible：计算逐点位置与速度差异；H1 中 World 始终 defer；
-- `max position delta <= 0.5 m` 且 `RMS speed delta <= 0.5 m/s` 时标记
-  `NO_SELECTION_SPACE`；
-- 两条 eligible 无论是否近重复，H1 都复用冻结 Safety soft score，并以 Classic、candidate id
-  稳定破平；
-- slot 顺序每次可置换，语义只由 candidate id/provenance 确定。
+| eligible 数 | World 行为 | 后续 |
+|---:|---|---|
+| 0 | 不运行 | Safety fallback / MRM |
+| 1 | `DEFER_SINGLE_CANDIDATE` | 唯一候选仍需 Safety 完整重验 |
+| 2 | 对两条候选共享参数预测 outcome | calibrated choose/hold/defer 后交 Safety |
 
-H6 的 World v3 即使两条轨迹近重复也实际打分，避免旧 `NO_SELECTION_SPACE` 直接绕过
-World；旧 World/H1 仍保留冻结行为。H6 router 把所有 eligible 候选按 World 顺序交给
-Safety：首选 VLA 若硬检查失败，先做一次有边界且最终重验的修复，仍失败则检查同一 tick
-Expert；两者都失败才进入 MRM。控制绑定必须能解析
-`selected id → final/repair id → executed id → applied id`，不存在无记录的 first-available
-回退。
+World 的 formal pairwise coverage 只计算两条候选都具有完整原始预测的 tick。仅 VLA 或仅
+Expert 幸存不能计作 World 成功选择，也不能由 router 补成 pair。
 
-H6 还在 generator 侧做两项不改变来源独立性的修复：VLA 使用意图保持运动学滤波，把
-`x/y/yaw/kappa/v/a` 一致重算并保持在 Safety 数值内；Classic 主规划失败或只返回短前缀时，
-生成带明确 `classic-bounded-stop` provenance 的完整时域受限停车候选。两者都不是从另一
-来源复制轨迹。
+候选 slot 可以置换，语义只由 candidate ID 和 canonical trajectory hash 决定。World 在线
+feature view 物理排除 source、slot、branch order、Guard verdict 和 provenance；这些字段只
+用于身份绑定与审计。
 
-## 7. H1 验收
+source 元数据被排除不代表 planner 风格从轨迹几何中不可推断。source metadata swap 必须
+保持预测不变；trajectory-to-source probe 则作为数据 shortcut 诊断单独报告，不能把真实
+曲率/速度差异也从候选中抹掉。
 
-- 离线 contract/unit tests 覆盖两个 source、坐标/时间、拒绝理由和 set-level 路由；
-- fake runtime 证明 nominal VLA 仍保留 20 点原生路径并 canonicalize 为固定合同；
-- CARLA smoke 证明同帧两来源、逐候选 Guard、selected/executed id 连贯；
-- 不产生训练数据、不启用 Oracle、不启动 World。
+### 两候选时的 router 结果
 
-实现入口位于 `driving_vla.hybrid`，live smoke 位于 `scripts/h1_hybrid_smoke.py`。H1 已在
-Town03 完成真实 smoke 并停止；该 Evidence 只验证候选与执行合同，不是 H2 训练数据。
-H2 已由后续任务单独授权，其 paired 执行合同见 [PAIRED_OUTCOMES](PAIRED_OUTCOMES.md)。
+| 结果 | 固定语义 |
+|---|---|
+| `CHOOSE` | 当前 tick 请求分数/区间占优候选进入 Safety |
+| `HOLD` | 保持上个 source，但使用该 source 当前 tick 的 fresh candidate，不重放旧轨迹 |
+| `SWITCH` | 满足 hysteresis/min-hold 后切换到另一 source 的 fresh candidate |
+| `DEFER_AMBIGUOUS` | learned World 放弃排序；当前 held source 仍 eligible 时先用它，否则按 Expert→VLA 冻结顺序 |
+| `DEFER_SINGLE_CANDIDATE` | World 不做 pair claim，唯一 eligible candidate 直接交 Safety |
+
+defer 不是在线 Oracle、人工接管、无控制或直接选择 MRM；每条路径仍经过完整 Safety。冻结
+fallback 也不能把 `REJECT` 复活。
+
+## 6. 选择与执行身份链
+
+每个 tick 必须记录：
+
+```text
+generated candidate ids/hashes
+guard-eligible ids
+world raw per-candidate outcomes
+router raw / stabilized / deferred selection
+safety selected / repaired / fallback id
+final executable id/hash
+controller applied id
+```
+
+有效链：
+
+```text
+generated → Guard eligible → World ranked/deferred
+          → Safety selected/repaired/fallback
+          → final executable → applied control
+```
+
+任何 orphan、跨 source 无记录替换、executed/applied hash 不一致或无法解析 final ID 都必须
+fail closed，并使该 Evidence 行无效。
+
+## 7. Safety 与 repair
+
+- World 只提供顺序或 defer，不能批准轨迹；
+- Safety 对原始或 repaired trajectory 重新执行全部硬检查；
+- repair 必须有输入/输出 hash、mode、理由和 final validation；
+- 首选候选失败后可按冻结 fallback 顺序检查另一候选；
+- 两者都失败才进入 MRM/emergency；
+- controller 不能在 Safety 输出之后增加 throttle、替换轨迹或修改 source。
+
+## 8. CORA 必做测试
+
+- VLA forward count 等于 1；
+- 两来源同 frame/time/route；
+- raw/canonical hash 和 provenance 完整；
+- source/slot/candidate order permutation；
+- Guard PASS/REVIEW/REJECT 边界；
+- 单候选不能计入 pairwise World coverage；
+- candidate swap 后 World outcome 跟随 trajectory；
+- repair final validation；
+- selected/final/executed/applied identity；
+- expired/orphan/deadline fail closed；
+- `HOLD` 不复用旧 candidate ID；
+- `DEFER_AMBIGUOUS` 回退顺序、reason code 与 offline/live trace parity。
+
+反事实执行与标签合同见 [COUNTERFACTUAL_DATA](COUNTERFACTUAL_DATA.md)，World 与 router
+合同见 [WORLD_MODEL](WORLD_MODEL.md)。

@@ -1,395 +1,362 @@
-# H Evidence 与归档索引
+# SafeDrive Foundry Evidence 与归档索引
 
-## 1. 活动 Evidence 规则
+## 1. 状态与引用规则
 
-H 路线只承认新建且 provenance 完整的 Evidence：
+Evidence 状态只允许：
 
 ```text
 PLANNED → IMPLEMENTED → MEASURED → VERIFIED
 ```
 
-每个正式 artifact 必须绑定 worktree/commit、config、split、seed、CARLA/模型版本、输入
-observation、candidate、Guard、selector、Safety、executed trajectory、outcome、延迟与资源。
-没有实际运行的数字不能进入 `MEASURED`，没有冻结复核不能进入 `VERIFIED`。
+- `PLANNED`：只有合同/计划，没有实现或测量；
+- `IMPLEMENTED`：代码/测试存在，不代表 GPU/CARLA 运行；
+- `MEASURED`：实际运行并保存 artifact，但尚未完成冻结复核；gate pass/fail 是独立维度；
+- `VERIFIED`：冻结配置、数据、哈希、评估和审计完成。
 
-H0 仅是仓库收敛，不产生驾驶性能数字。H1 Evidence 只验证独立候选、Guard、选择和
-一个控制 tick 的合同，不是驾驶性能评估或 H2 训练数据。H2 runtime Evidence 与数据按
-dataset id 分别位于 `docs/runtime-evidence/h2/` 和 `generated/h2/paired-outcomes/`；二者
-均为本机 Git-ignored artifact。H3 World Scorer 离线训练与评测 Evidence 位于
-`docs/runtime-evidence/h3/`，checkpoint 位于 `generated/h3/`。
+只有 `VERIFIED` 数字可在不附“开发/未验证”限定时引用。`GATE_FAILED` 的 VERIFIED Evidence
+表示负结果本身可信，不表示研究目标成功。失败、负收益、尾延迟、deadline miss、资源与
+reset/provenance 缺陷必须与正结果同等保留。
 
-### H3 最终验收（H3v2）
-
-状态：`H3 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。H4 locked evaluation 已在后续完成；H5 Closed-Loop 仍未授权。
-
-最终运行：`h3-v2-20260815d-final`，联合 `h2-gatepass-20260813-routefix` 与
-`h3-challenge-v2-20260815d-dev`（96 场真实 CARLA Challenge，见 Challenge audit）。
-
-本机 artifact（均 Git-ignored）：
+正式 artifact 至少绑定：
 
 ```text
-docs/runtime-evidence/h3/h3-v2-20260815d-final/
-docs/runtime-evidence/h3/h3-challenge-v2-20260815d-dev/
-generated/h3/h3-v2-20260815d-final/checkpoints/
-generated/h3/carla-challenge-v2/h3-challenge-v2-20260815d-dev/
+commit and full dirty-worktree identity
+config/schema/matrix/split/seed lineage
+CARLA/Python/PyTorch/CUDA/model/checkpoint versions
+observable/candidate/Guard/World/router/Safety/executable/applied chain
+raw outcomes and aggregate metrics
+P50/P95/P99, deadline miss, GPU peak
+dataset/evaluator/summary/run-lock self hashes
+cleanup and terminal status
 ```
 
-冻结 hash：
+代码存在、单元测试、开发强制采样、单帧 calibration、随机模型 latency 或用户口头确认均
+不能升级为正式 CARLA/模型 Evidence。
 
-```text
-evidence_sha256       f475309aca22148985e03ff1676eccdef2c0d56767c0aeb7ea714cdf47b9386e
-challenge manifest     a87871c9c858d440f7b4d6553663ca63e43469f510e950e19d84ee06d3aa35ef
-challenge physical     7b27cc140dda3bc1bcf1d1587f95616dcd3c120c9596b0642caf63bd98a029d9
-```
+阶段执行状态与 Evidence 成熟度分开：`C1 CURRENT` 说明 program 正在做正确性任务，不能据此
+把 CORA algorithm 从 `PLANNED` 升级。Gate 也是独立维度；`VERIFIED / GATE_FAILED` 表示负
+结果可信，不是成功。
 
-最终门指标：
+## 2. 当前状态总表
 
-| 检查项 | 要求 | 实测 | 状态 |
-|---|---:|---:|---|
-| leakage | 0 failures | passed | PASSED |
-| swap | max error <= 1e-6 | 0.0 | PASSED |
-| OOF accuracy | >= best baseline + 2pp | 1.0000 vs 0.9231 | PASSED |
-| bootstrap lower 95 | >= 0 | 0.0330 | PASSED |
-| action sensitivity | >= 5pp | 28.57pp | PASSED |
-| history sensitivity | >= 2pp | 28.57pp | PASSED |
-| ECE | <= 0.10 | 0.00113 | PASSED |
-| seed stability | >= 4/5 | 5/5 | PASSED |
-| P99 / VRAM / deadline | <= 50ms / <= 1.5GiB / 0 | 13.89ms / 0.0566GiB / 0 | PASSED |
+| 阶段 | Evidence 状态 | Gate | 可引用结论 |
+|---|---|---|---|
+| H0 | VERIFIED | — | 活动路线和归档边界完成 |
+| H1 | VERIFIED | contract passed | 真实 VLA/Expert 双候选与执行身份链成立 |
+| H2 | VERIFIED | GATE_PASSED | paired outcome 数据存在真实选择空间 |
+| H3 | VERIFIED | GATE_PASSED | 小型开发/OOF 上 candidate scorer 达到冻结门 |
+| H4 | VERIFIED | GATE_PASSED | 小型 locked set 上 World 超过 simple baseline |
+| H5 | VERIFIED | GATE_FAILED | 未证明 World closed-loop 可复现净收益 |
+| H6 v1 | MEASURED | GATE_FAILED | seed 101 pilot 未达 World/VLA-primary gate |
+| H6 v2 | IMPLEMENTED | NOT_RUN | 新代码存在，无新 checkpoint/CARLA formal |
+| H6-CORA algorithm | PLANNED | — | C0 文档/QA 已完成、C1 当前；尚无 CORA 数据/模型结果 |
 
-Challenge 数据质量门：96 terminal；78 valid；87 distinct；72 decisive；
-hard-unsafe branches 13；Expert/VLA wins 53/19；source-only baseline 0.7361；
-store manifest 与 label permutation 全通过。
+## 3. 指标口径
 
-World scorer 模型包含显式 scene gate：history masking 使 observable context 为 0 时，
-candidate 分支被合同性关闭并退化为 no-action，因此 history sensitivity 不是靠调参
-偶然得到的。
+| 名称 | 本项目固定解释 |
+|---|---|
+| decisive | 两候选按冻结 outcome/utility 规则存在可判定 winner 的 pair |
+| pairwise coverage | 两个 eligible candidate 都有原始 World 输出且 selector 可比较的比例 |
+| defer coverage | 旧阶段定义下非 defer 的可判定覆盖；引用时必须带对应阶段 schema |
+| unsafe | 按对应阶段冻结的 collision/red-light/offroad 聚合；跨阶段不能默认同定义 |
+| progress delta | 同 scenario/root 的处理臂减对照臂 route progress，单位 m |
+| lower-95 | 对应 artifact 冻结方法得到的 95% 下界；必须说明 bootstrap/cluster unit |
+| P99 | artifact 中指定测量边界的 99 分位；scorer microbenchmark 不等于全链 tick latency |
+| source usage | applied identity 的诊断分布，不是 World quality 或安全指标 |
 
-额外 learned 基线：candidate-only MLP OOF `1.0000`、full-feature MLP OOF `0.9560`；
-排序超越门按冻结口径只与最佳非学习简单规则 `candidate_only=0.9231` 比较，两个 MLP
-作为诊断对照报告，不替代简单规则门槛。
+后续 CORA 必须把统计单位冻结为 root anchor/scenario；branch、intervention 和 tick 不能当独立
+样本缩窄置信区间。
 
-### H4 Locked Evaluation（H4）
+## 4. H1 contract Evidence
 
-状态：`H4 COMPLETED / VERIFIED / GATE_PASSED / STOPPED`。H5 Closed-Loop 仍未授权。
-
-最终运行：`h4-locked-20260816-final`。
-
-本机 artifact（均 Git-ignored）：
-
-```text
-docs/runtime-evidence/h4/h4-locked-20260816-final/
-generated/h4/h4-locked-20260816-final/
-```
-
-冻结 hash：
-
-```text
-evidence_sha256       35e28958ddd98d9df7a980ffd707bf6049efb9685e22d335082f69916974e6e4
-h3_evidence_sha256    f475309aca22148985e03ff1676eccdef2c0d56767c0aeb7ea714cdf47b9386e
-split_manifest_sha256 17dedd305aaf2933266a15345926f035aa7ebcd3210b6c636cc92d99e676b08c
-```
-
-最终门指标：
-
-| 检查项 | 要求 | 实测 | 状态 |
-|---|---:|---:|---|
-| isolation | 0 failures | passed | PASSED |
-| sufficient test power | >= 20 decisive | 64 | PASSED |
-| ranking vs best simple baseline | World > best simple | 1.0000 > 0.890625 | PASSED |
-| resource | <=50ms / <=1.5GiB / 0 miss | 15.23ms / 0.03125GiB / 0 | PASSED |
-| defer coverage | report | 0.984375 | report |
-| end-to-end vs fallback | report | 0.984375 > 0.890625 | report |
-| h5_authorized | — | true | report |
-
-H4 同时修复了 H3 raw 5-seed ensemble uncertainty 全 defer 的问题：使用 dev-only
-per-model utility normalization（冻结）后再集成，dev 和 locked test 的 defer coverage
-均恢复至接近/等于 1.0。
-
-### H2 Evidence 边界
-
-H2 每个 dataset 必须包含三地图 restart smoke、物理 scenario manifest、逐地图 pilot/full
-collector Evidence、每 pair live shard、独立 offline label 和最终 audit。`manifest.json`
-覆盖 dataset 内全部 artifact；Evidence 同时绑定 HEAD、tracked diff SHA256、untracked
-manifest SHA256、CARLA/config/model/route/candidate hashes、执行链、延迟和显存。
-
-H2 状态只有在 120 个固定 anchor 全部 terminal 并完成 offline label/audit 后才可写为
-`VERIFIED`。Pilot 或环境阻塞不能借用 H1 smoke、archive 或合成数据升级为 H2 证据；门失败
-也必须冻结为负结果并关闭 H3。
-
-### H2 最终验收（GATE_PASSED）
-
-最终 dataset `h2-gatepass-20260813-routefix` 已完成 Town01、Town03、Town05 冷重启、
-restart smoke、15-anchor pilot 和完整 120-anchor 固定矩阵；pilot 与 full gate 均通过。
-H3 保持 `NOT_AUTHORIZED`，不进入 World、在线 Oracle 或训练。
-
-本机 artifact（均 Git-ignored）：
-
-```text
-generated/h2/paired-outcomes/h2-gatepass-20260813-routefix/
-docs/runtime-evidence/h2/h2-gatepass-20260813-routefix/
-```
-
-冻结 hash：
-
-```text
-physical_manifest_sha256 6e74a789647182d9333cd99a69305bc2700a95216ebc7f34d2af21024a6d48ed
-store_manifest_sha256    22d11961c74509843a1df6ea453794fad2519fcc42077540c33ce46e9f3c3524
-config_sha256            70996b2b2a0d88cd02c210e75206cc1be1f189fae249979d14c417c866092043
-offline_audit_file_sha256 3dc0573b5fe7a80fc3358f1e11d1c981d1fbe900f07357acc30a7b40d389b585
-final_delivery             docs/runtime-evidence/h2/h2-gatepass-20260813-routefix/final-delivery.json
-```
-
-完整门指标：120/120 terminal；108 eligible/distinct；108 valid；Town01/Town03/Town05
-为 36/34/38；family 为 21/21/21/24/21；weather 为 56/52；83 decisive；Expert/VLA
-wins 为 51/32；slot Expert=0 比例 0.5；swap/permutation、trajectory hash、执行绑定和
-manifest/artifact hash 全部通过；source-only baseline 0.6144578313；整卡 GPU peak
-8.3720703125 GiB；dataset 1,480,172,014 bytes。
-
-全量测试为 `329 tests: 328 passed, 1 skipped, 0 failed`；compileall、活动文档链接检查、
-旧路线/import/cache 扫描和 `git diff --check` 通过。
-
-### H2 之前的失败数据集（保留负结果）
-
-最终 dataset `h2-final-20260813-scenariov2-cleanup` 已完成 Town01、Town03、Town05 冷重启、
-restart smoke、15-anchor pilot 和完整 120-anchor 固定矩阵。pilot 通过后才扩大；完整数据门
-按冻结规则失败，因此状态为 `H2 COMPLETED / VERIFIED / GATE_FAILED / STOPPED`，H3 关闭。
-
-本机 artifact（均 Git-ignored）：
-
-```text
-generated/h2/paired-outcomes/h2-final-20260813-scenariov2-cleanup/
-docs/runtime-evidence/h2/h2-final-20260813-scenariov2-cleanup/
-```
-
-冻结 hash：
-
-```text
-physical_manifest_sha256 f89a2f8a039144b089ae27c2584aa112a3d35d061d6a22cc6d12359fabd11a9f
-store_manifest_sha256    b63f4f63de12aa0a84762c398fecc7bb78ffbcc4d59f22b3552da1ba2c82727e
-config_sha256            9ff604d7d3d64122af76b41df58533d722de3f27c8d0c9dbe7e89e6a7552ceaa
-offline_audit_sha256     e72db6ff4a185007008a8905855568554b384bad4ad8d1a49c4616dae3549338
-final_delivery_sha256    6ceb3c74aede8c3895cbefb302a10f9ec98f0b5425af616fe1e9da77ec163f23
-```
-
-门指标：120/120 terminal；58 valid/distinct；Town01/Town03/Town05 为 21/23/14；family
-为 14/12/4/13/15；weather 为 33/25；58 decisive；Expert/VLA wins 为 58/0；slot Expert=0
-比例 0.4827586；swap/source/branch permutation 通过；trajectory hash 100%；source-only
-baseline 100%；整卡 GPU peak 8.3945 GiB；dataset 1,443,906,253 bytes。manifest、artifact
-hash、执行绑定和 cleanup 全通过。失败门为 valid/distinct 数量、地图/family/weather 配额、
-VLA wins 和 source-only baseline，均按原阈值记录，没有补采或改门槛。
-
-正式 Evidence 包含每地图 pilot/full collector、冷重启/smoke、pair shard、label shard、
-store manifest、full offline audit 和历次失败/中断记录。Town01 一次残留 actor 清场失败被
-保留；随后一次安全冷重启、只读清场核验后在同一物理 manifest 上恢复，未伪造或重写成功记录。
-
-### H1 Town03 live smoke
-
-验证 Evidence（UTC run id `20260812T161321Z`）：
+成功 run：
 
 ```text
 docs/runtime-evidence/h1/h1-smoke-20260812T161321Z/h1_smoke.json
 sha256 2be0a5171856848bf52fb1ac48bbc88e714d65b8ff7c1811b89baae0bc857db7
 ```
 
-- CARLA 0.9.16 / Town03 / RTX 4080，anchor、front camera 与两候选共同绑定 frame
-  `112794`；
-- Classic 与真实 SimLingo 各生成一次，wall latency 分别为 `0.817646 s`、`1.111187 s`，
-  VLA forward count 为 `1`；
-- 两条候选均为 Guard `PASS`，差异为最大位置 `2.833430 m`、RMS 速度 `1.174353 m/s`，
-  因而是 `DISTINCT`；
-- H1 冻结 selector 选择 Expert，Safety 为 `ACCEPT`，selected/final/post-repair/executed/
-  applied id 连贯，实际控制为 `TRACK_APPROVED`；
-- VLA forward peak 为 `2218.178 MB`，运行结束 registry 为 `COMPLETED`；复查 CARLA 已恢复
-  asynchronous、tick owner free。
+已验证：
 
-失败 Evidence 同样保留：
+- CARLA 0.9.16 / Town03 / RTX 4080；
+- anchor、front camera、VLA/Expert 绑定同一 frame；
+- VLA forward count 为 1；
+- 两候选 Guard PASS 且 DISTINCT；
+- selected/final/executed/applied ID 连贯；
+- Safety ACCEPT，控制为 TRACK_APPROVED；
+- 运行完成后 settings/tick owner 恢复。
 
-```text
-h1-smoke-20260812T160549Z/h1_smoke.json
-sha256 6384affd3afbe47d1f81d076ea7b5df572c1d5a23085f4b2d32567ca839cd898
+两次 camera barrier timeout 失败 run 同样保留，不能删除。H1 只证明合同，不证明驾驶性能。
 
-h1-smoke-20260812T160859Z/h1_smoke.json
-sha256 9c281cd69a88880acc4a1f7ad3508477144f27e729ac2d542add7a56b5c2d803
-```
+## 5. H2 paired outcomes
 
-两次都因相机首帧 barrier timeout 中止，registry 为 `INTERRUPTED`。根因是相机额外
-`sensor_tick=0.05` 在同步 world 首帧未发回精确 frame；最终让相机随唯一 20 Hz world
-tick 每帧采样后通过。失败没有改名为成功或删除。
-
-### H6 VLA-primary Evidence
-
-状态：`H6 IMPLEMENTED / MEASURED / NOT_VERIFIED`。开发 Evidence 与正式负结果分开解释，
-不得把开发强制采样当作 held-out 正式验收：
-
-2026-08-27 用户把后续正式 VLA 实际执行硬门修订为 `>=75%`，Classic + MRM 合计
-`<=25%`；World 原始双候选高分门仍为 `>=90%`。这只适用于下一条新配置、新 schema、
-新 hash 和新 held-out seed lineage，不回写或重新解释下述 2026-08-20 原 90% 正式失败。
-迭代与交接合同见 [`H6_VLA75_HANDOFF.md`](H6_VLA75_HANDOFF.md)。
-
-2026-08-20 已完成一轮平衡开发训练和一次 seed 101 正式 pilot。平衡训练仍是开发
-Evidence；正式 pilot 是冻结负结果：
+最终 gate-pass dataset：
 
 ```text
-generated/h5/h6-vla90-train-pilot-20260820-v2/
-docs/runtime-evidence/h6/h6-vla90-train-pilot-20260820-v2/
-generated/h6/world-v3-vla90-pilot-20260820-v3/
-
-generated/h5/h6-vla90-formal-pilot-20260820-v1/
-docs/runtime-evidence/h6/h6-vla90-formal-pilot-20260820-v1/final-delivery.json
-formal evidence_sha256 8dae5c2e661abafc1dceab633d3338201a7fe1e6b50ecd5e334641aa68223194
+generated/h2/paired-outcomes/h2-gatepass-20260813-routefix/
+docs/runtime-evidence/h2/h2-gatepass-20260813-routefix/final-delivery.json
 ```
 
-24-pair 开发训练中，seed 89/97 的 VLA 实际执行分别为 `566/600 = 94.33%` 和
-`544/600 = 90.67%`。旧的场景第一拍校准给出 World VLA 高分 `11/12 = 91.67%` 并通过
-readiness，但正式 600-tick 结果只有 World VLA 高分 `131/600 = 21.83%`、VLA 实际
-`285/600 = 47.50%`，因此 gate 按原门槛失败。正式安全增量为 0、进度 bootstrap lower-95
-为 `+0.629m`、scorer P99 `9.12ms` 且 0 deadline miss；切换、ping-pong 和 provenance
-也失败。
-
-正式 Guard 对 VLA 为 `PASS 453 / REVIEW 147 / REJECT 0`，Safety 只产生 18 次 Classic
-fallback，并成功执行 RATO 42 / QP 26。该证据明确否定“正式占比低是 Guard/Safety 大量
-杀 VLA”：当前主因是 World 逐 tick 泛化和第一拍校准口径。校准代码已改为逐 on-arm tick
-检查覆盖率，paired whole-policy outcome 只检查安全/进度；GPU credits 用尽使修正后的
-重训练尚未执行。
-
-所有 72 条新 CARLA 运行都记录独立 20Hz 跟车视角：开发 48 条每条 `285–847` 次更新，
-正式 24 条每条 `390–1113` 次更新，错误数为 0。
-
-此前 H6 开发失败 Evidence 继续保留：
+冻结身份：
 
 ```text
-docs/runtime-evidence/h6/h6-vla90-explore-20260819/
-docs/runtime-evidence/h6/h6-vla90-explore2-20260819/
-docs/runtime-evidence/h6/h6-vla90-explore3-20260819/
-docs/runtime-evidence/h6/h6-vla90-train-pilot-20260819-v1/
-docs/runtime-evidence/h6/h6-vla90-train-pilot2-20260819-v1/
-docs/runtime-evidence/h6/h6-vla90-train-pilot3-20260819-v1/
-docs/runtime-evidence/h6/h6-camera-follow-smoke-20260819-v1/
-docs/runtime-evidence/h6/h6-vla90-train-pilot4-20260819-v1/
+physical_manifest_sha256  6e74a789647182d9333cd99a69305bc2700a95216ebc7f34d2af21024a6d48ed
+store_manifest_sha256     22d11961c74509843a1df6ea453794fad2519fcc42077540c33ce46e9f3c3524
+config_sha256             70996b2b2a0d88cd02c210e75206cc1be1f189fae249979d14c417c866092043
+offline_audit_sha256      3dc0573b5fe7a80fc3358f1e11d1c981d1fbe900f07357acc30a7b40d389b585
 ```
 
-第二组在 Town03 单场景 50 tick 开发强制采样中，World 选择 VLA 50/50，最终实际 VLA
-48/50（96%），且该短跑记录到的碰撞、红灯、越界均为 0。但 Classic 候选生成不完整，
-off baseline 被污染，配置 hash 明确为 development/nonformal；acceptance 还报告 provenance、
-switch/ping-pong 等失败。因此这个 96% 只证明执行链可以让 VLA 主驾，不能证明正式目标
-已达标。
-
-第三组随后暴露 Classic 短时域失败和 VLA 3.5m/s² 高于 Safety 3.0m/s²。代码已增加完整
-时域 Classic 受限停车候选，并把 VLA 滤波加速度与横向加速度收至 2.8m/s²；按同问题最多
-两次差异化修复规则未继续第四次 CARLA 开发重跑。
-
-12-pair 训练 pilot 的 VLA 实际执行率按两次实质修复从 `422/600 = 70.33%`
-升到 `486/600 = 81.00%`，再升到 `532/600 = 88.67%`。最后一轮 Guard 为
-`PASS 292 / REVIEW 302 / REJECT 6`，开发路由把 VLA 排第一 `588/600`，最终为
-VLA 532 / Expert 64 / MRM 4。因此当前主限制在最终 Safety/修复器，而不是 Guard
-大量硬杀或 World 不愿把 VLA 排在前面。
-
-`pilot3` 因用户观察到视角未持续跟车而主动中断，保留失败 Evidence。修复后的单场景
-camera smoke 在 off/on 分别记录 572/473 次跟车更新且零错误；最后 pilot4 的
-24 个回放均记录 `266–1138` 次更新，零错误。
-
-retrain 编排 Evidence SHA256：
+Verified 结果：
 
 ```text
-pilot1 a609462acec348906391b8d5199b45728d9060413dbf83e9808ce4f8941aecaa
-pilot2 089a2c2d69b8041e45ea6ad6d98c9913a9062ecd162faa40d1056470166c6852
-pilot3 38c4768edc0d981d17a36f82e1e81f43b3af9b1d59d9fe4233ff6f05d0310eb9
-pilot4 a2196fe97d614a27e081c1727ee9fa33fe6b0583a0f59ac0b07d599d0c41fc71
-camera b373c7a6434d65bc2030bf31dfe2de8fdedaec07c3542941384071950ee2263e
+120/120 terminal
+108 valid/distinct
+83 decisive
+Expert/VLA wins = 51/32
+source-only baseline = 0.6144578313
+whole-GPU peak = 8.3720703125 GiB
+dataset = 1,480,172,014 bytes
+status = GATE_PASSED / STOPPED
 ```
 
-pilot4 中 on/off 不安全运行数均为 `2/12`，VLA-on 总进度 `106.79m` vs
-Classic-off `50.14m`。训练 loader 在首个只有 42/50 VLA 执行的 episode 按 90%
-来源纯度门停止，没有输出 checkpoint。该失败及 Town03/Town05 红灯场景两个 arm
-的红灯违规均原样保留。
+旧 `h2-final-20260813-scenariov2-cleanup` 为 VERIFIED/GATE_FAILED，Expert 单边胜出、配额与
+source-only 门失败。它仍是有效负 Evidence，不参与 CORA 新标签或 formal。
 
-下一条 H6 Evidence 仍缺：通过质量门的 108-pair 新闭环开发训练矩阵、按 tick-wise
-口径重训练并通过 readiness 的 World、用户授权的新 held-out seed lineage 的 12-pair
-pilot 与 108-pair full。新正式 gate 直接从原始 World 双候选评分计算 VLA 高分比例
-`>=90%`，另算 VLA 实际执行比例 `>=75%` 和 Classic+MRM `<=25%`。只有 VLA 一条幸存或
-开发强制选择均不能计入 World 高分。seed 101 已消耗，不能复用；历史失败不改写。
+## 6. H3 development Evidence
 
-### H5 完整闭环（最终负结果）
+```text
+docs/runtime-evidence/h3/h3-v2-20260815d-final/final-delivery.json
+evidence_sha256 f475309aca22148985e03ff1676eccdef2c0d56767c0aeb7ea714cdf47b9386e
+```
 
-状态：`H5 COMPLETED / VERIFIED / GATE_FAILED / STOPPED`。
+Verified 结果：
 
-最终运行：`h5-pilot-all2`，222/222 runs 完成。
+```text
+OOF decisive = 91/91
+best frozen non-learning simple baseline = 84/91 = 0.9231
+bootstrap lower-95 = 0.0330
+ECE = 0.00113
+P99 = 13.89 ms
+deadline miss = 0
+status = GATE_PASSED / STOPPED
+```
+
+限制：learned candidate-only MLP 同样达到 91/91；full-feature MLP 87/91；hard scene gate
+结构性影响 history masking。H3 不能无保留证明上下文 World 优于所有 learned baseline。
+
+阶段详细报告归档在：
+
+```text
+archive/2026-08-27-cora-document-consolidation/historical-stage-docs/H3_DELIVERY_REPORT.md
+```
+
+## 7. H4 locked Evidence
+
+```text
+docs/runtime-evidence/h4/h4-locked-20260816-final/final-delivery.json
+evidence_sha256 35e28958ddd98d9df7a980ffd707bf6049efb9685e22d335082f69916974e6e4
+split_manifest_sha256 17dedd305aaf2933266a15345926f035aa7ebcd3210b6c636cc92d99e676b08c
+```
+
+Verified 结果：
+
+```text
+locked decisive = 64
+World = 64/64
+best simple = 57/64 = 0.890625
+defer coverage = 63/64
+P99 = 15.23 ms
+GPU peak = 0.03125 GiB
+deadline miss = 0
+status = GATE_PASSED / STOPPED
+```
+
+限制：test 小、simple baseline 已高、temperature 到 0.05 下边界、微基准不是完整闭环尾
+延迟、地图/family/weather 覆盖有限。
+
+详细报告归档在：
+
+```text
+archive/2026-08-27-cora-document-consolidation/historical-stage-docs/H4_DELIVERY_REPORT.md
+```
+
+## 8. H5 closed-loop 最终负结果
 
 ```text
 docs/runtime-evidence/h5/h5-pilot-all2/final-delivery.json
 evidence_sha256 846ef8a6f5ff6b3ca330a55ba53f69849f043346b74910f6a405eb95f5543517
 ```
 
-关键门：safety non-inferior 通过；progress 净收益、chattering、resource 未通过。
-World 闭环收益不可复现，负结果保留。
-
-## 2. 2026-08-12 路线收敛归档
-
-归档根：
+Verified 结果：
 
 ```text
+runs = 222/222
+paired scenario roots = 74
+World ON unsafe = 4
+World OFF unsafe = 6
+ON-only unsafe = 0
+paired progress mean = +0.2549 m
+bootstrap lower-95 = -0.0709 m
+World ON/OFF switches = 14/0
+scorer P99 = 47.2159 ms
+deadline miss = 1
+reset mismatch = 1
+status = GATE_FAILED / STOPPED
+```
+
+正式解释：样本内没有 ON-only unsafe，但未做出统计安全优越/非劣证明；route-progress 没有
+统计稳定正收益，切换、资源与完整性也未全部过门。不能用 H3/H4 离线结果改写。
+
+H5 进入/矩阵文档已经执行完毕并归档，不得复用其 seed 或根据结果修改后重跑。
+
+## 9. H6 VLA-primary Evidence
+
+旧正式 pilot：
+
+```text
+docs/runtime-evidence/h6/h6-vla90-formal-pilot-20260820-v1/final-delivery.json
+evidence_sha256 8dae5c2e661abafc1dceab633d3338201a7fe1e6b50ecd5e334641aa68223194
+```
+
+Measured 结果：
+
+```text
+ticks = 600
+World pair scored = 590/600
+strict World VLA preference = 131/600 = 21.83%
+VLA applied = 285/600 = 47.50%
+Expert applied = 315/600
+MRM = 0
+VLA Guard = PASS 453 / REVIEW 147 / REJECT 0
+Safety fallback to Expert = 18
+RATO/QP repair = 42/26
+unsafe delta = 0
+paired progress lower-95 = +0.629 m
+paired scenario roots = 12
+scorer P99 = 9.12 ms
+deadline miss = 0
+switches = 31
+ping-pong scenarios = 5
+provenance failure = 10 missing World pair-score ticks（同一 Town01 aggressive-cut-in run）
+status = GATE_FAILED / NOT_VERIFIED
+```
+
+冻结 gate failures：actual VLA coverage、World VLA preference、switch rate、ping-pong、
+provenance。progress lower-95 为正、deadline miss 为 0，不会覆盖其他 gate failure。
+
+seed 101 已消费。历史 90% preference/usage gate 和 2026-08-27 的 75% usage 修订只用于解释
+旧 H6，不是 CORA 当前优化目标，也不能回写历史结果。
+
+H6 VLA75 v2 的 14-output、A/B/C lineage、run-lock、acceptance 和 hardening 是
+`IMPLEMENTED`；没有新 GPU checkpoint、CORA 数据、held-out pilot/full，不能升级。
+
+旧 H6 handoff 已归档：
+
+```text
+archive/2026-08-27-cora-document-consolidation/historical-stage-docs/H6_VLA75_HANDOFF.md
+```
+
+## 10. H6-CORA Evidence 合同
+
+当前 program：`C0 COMPLETED / C1 CURRENT`。当前 algorithm Evidence：`PLANNED`。尚无 CORA
+paired data、checkpoint、calibrated router 或闭环数字。
+
+### C1 正确性
+
+只产生代码/测试/evaluator schema Evidence；不测 GPU/CARLA 时不得写 measured latency、显存
+或闭环行为。必须证明硬编码 pass 消失、per-sample loss 正确、offline/live selector parity、
+single tick owner 和 artifact self-hash。
+
+### C2 数据
+
+每个 dataset 至少保存：
+
+```text
+frozen matrix and split lineage
+anchor/reset/candidate manifests
+two branch outcomes per pair
+invalid-pair reasons
+pair label coverage by map/family/weather/risk
+source/slot/branch permutation audit
+feature leakage audit
+artifact/self hashes
+```
+
+双 outcome 不完整的 row 不进入 pairwise training。
+
+同时记录 proposal→Safety repair/executable→applied 的 intervention identity，以及按 source、
+Guard、risk、branch order 的 missingness。CORA outcome 只解释冻结 CARLA/Safety/controller 下
+的 proposal intervention，不升级为现实世界因果真值。
+
+### C3/C4 模型与 router
+
+保存：
+
+```text
+three-seed checkpoints
+per-head metrics and valid masks
+pairwise/selective regret
+NLL/Brier/ECE/AUPRC/unsafe recall
+source/candidate/action/context probes
+worst-group report
+calibration-only artifact and assumptions
+risk-coverage/defer curves
+offline/live trace parity
+measured latency/VRAM when actually run
+```
+
+source-blind claim 只指 metadata schema；trajectory-to-source predictability 必须单独报告。
+coverage 必须说明 per-head/per-candidate marginal 还是 joint，不能把 marginal 指标包装成系统级
+同时覆盖。
+
+checkpoint summary 中未测量字段为 `NOT_MEASURED`，不能用 0 或 `pass=true` 占位。
+
+### C5 closed loop
+
+pilot/full 每臂保存相同 candidate/Guard/Safety/controller/reset 条件下的 raw World、router、
+Safety、executed/applied chain。pilot 失败不运行 full；formal 无论正负都冻结并关闭。
+
+## 11. 环境诊断边界
+
+跟踪的历史诊断：
+
+```text
+docs/environment/evidence/g0-05/doctor.json
+docs/environment/evidence/g0-05/doctor.md
+```
+
+它只证明对应 run/进程当时的检查结果。2026-08-27 受限代理进程未访问到 GPU/CARLA，用户
+随后明确确认本机资产可用；两者不冲突。后续 live task 必须在实际执行上下文重新产生
+task-local CUDA/preflight Evidence。
+
+## 12. 归档索引
+
+2026-08-27 开始、2026-08-29 完成的文档收敛归档：
+
+```text
+archive/2026-08-27-cora-document-consolidation/README.md
+```
+
+该目录保存收敛前权威文档快照和被移出的阶段文档，记录原路径、原因与恢复方式。归档只读，
+不得自动恢复旧任务、seed、阈值或 handoff。
+
+更早的仓库/H-route 历史：
+
+```text
+archive/2026-07-23-repository-consolidation/
 archive/2026-08-12-h-route-consolidation/
+archive/legacy_project_2024_2025/
 ```
 
-| 内容 | 状态 | 恢复方式 |
-|---|---|---|
-| 旧设计文档 | Git 版本化的可恢复历史 | 按 archive README 的原相对路径复制 |
-| runtime Evidence/checkpoint | 本机只读，不进入普通 Git | 从本机 `legacy-active/docs/runtime-evidence/` 恢复 |
-| 旧候选生成/训练/World 源码 | Git 版本化，不参与活动 import | 从 `legacy-active/source/` 恢复 |
-| 旧脚本、配置与测试 | Git 版本化，不是活动入口 | 从对应 `legacy-active/` 子目录恢复 |
-| 本轮开始时 tracked dirty worktree | patch 快照 | `recovery/tracked-worktree.patch` |
-| 本轮开始时 untracked 文件 | tar 快照 | `recovery/untracked-worktree.tar.gz` |
-| 本地生成环境/runtime 输出 | 本机只读，可恢复或重建 | `generated/` |
+## 13. 引用检查
 
-恢复前必须先阅读
-[`archive/2026-08-12-h-route-consolidation/README.md`](../archive/2026-08-12-h-route-consolidation/README.md)，
-在临时目录验证，不得直接覆盖活动 H 文件。
+任何 README、简历、报告、视频字幕或面试 slide 在引用数字前必须回答：
 
-工作树快照校验：
+1. 是 development、pilot 还是 formal？
+2. 状态是 MEASURED 还是 VERIFIED？
+3. gate passed 还是 failed？
+4. 样本量、split 和主要限制是否同时展示？
+5. 是否来自实际 artifact 而不是单元测试/随机 benchmark？
+6. 是否把 CARLA SIL 错写成实车或量产安全？
 
-```text
-tracked-worktree.patch
-sha256 1cd44ae9f0f5bcea4589dcbf1f90087259e9d969817110b0521d9155436272aa
-
-untracked-worktree.tar.gz
-sha256 0d1fde09623dceb11527bae5cb33ed817630b1a417e5ba78a79011259c828fe7
-```
-
-完整归档冻结边界：25097 个常规 payload、3100957261 bytes，另有 868 个符号链接。
-`MANIFEST.sha256` 覆盖全部常规 payload；`SYMLINKS.tsv` 冻结符号链接路径与目标：
-
-```text
-MANIFEST.sha256
-sha256 a313ccaf5e2d37f14901b9830ed29125243d9710f3a7de6b4ceb905fd86dc251
-
-SYMLINKS.tsv
-sha256 bff2e26a9c7ff86a55ddb38fd4e2e09482468587e4dfc53c827ec9e4d00c53fb
-```
-
-可移植归档为 272 个 legacy 文件、8860549 bytes；
-20122 个 runtime Evidence 文件（2960996577 bytes）和 4572 个 generated 文件
-（126980647 bytes）只保存在本机。
-
-干净 clone 可以恢复可移植旧源码/文档/配置/测试和两个工作树快照，但不会包含 3GB
-历史 runtime Evidence。`evaluation/` 与 `evaluation-remaining/` 的合并恢复规则，以及
-迁移到 `tests/hybrid/` 的回归边界，以 archive README 为准。
-
-## 3. 历史材料的解释边界
-
-- archive 保存失败、负收益、冻结阈值和旧实现，内容不重写；
-- archive 不是活动任务、接口、数字或门槛来源；
-- 历史候选生成失败只支持“该旧方法停止”，不证明 H World 有效；
-- 历史 World 无收益只支持“旧数据/旧条件化不足”，不等同于 H3 的结果；
-- 若未来需要引用历史事实，必须同时引用原 artifact、状态和限制，不能改名为 H 指标。
-
-## 4. H 当前状态
-
-| 阶段 | Evidence 状态 |
-|---|---|
-| H0 route consolidation | `VERIFIED / STOPPED` |
-| H1 independent candidates | `VERIFIED / STOPPED` |
-| H2 paired outcomes | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
-| H3 World development | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
-| H4 locked evaluation | `COMPLETED / VERIFIED / GATE_PASSED / STOPPED` |
-| H5 World on/off | `COMPLETED / VERIFIED / GATE_FAILED / STOPPED` |
-| H6 VLA-primary redesign | `IMPLEMENTED / MEASURED / NOT_VERIFIED` |
+不满足任一项时，数字不得无保留公开。

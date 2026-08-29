@@ -12,11 +12,8 @@
 - 核心在线链为 `Observable → Classic Expert + nominal VLA → per-candidate Guard →
   World rank/defer → Safety → MPC/PID`。
 - Classic Expert 与 nominal VLA 各自独立提出一条轨迹；学习模块不得伪造第二候选。
-- `Guard eligible` 固定指 `PASS` 或 `REVIEW`；`REJECT` 候选不得进入 World。
 - World 只在通过 Guard 的候选之间排序或放弃判断，不能生成轨迹、覆盖硬安全约束、
   获得无约束底盘控制或 tick 权限。
-- World 的 `source-blind` 固定指在线 feature schema 不含 source/slot/order/provenance 元数据；
-  不伪称物理轨迹本身不可能暴露 planner 风格，后者必须用审计和反事实平衡诊断。
 - Oracle 只允许离线标注；Regression、特权未来和场景答案不得进入在线输入或训练特征。
 - `archive/` 是只读可恢复历史区，不是活动需求或实现来源。
 
@@ -42,10 +39,7 @@
 | `PROGRESS.md` | 已确认动态事实 |
 | `docs/PROJECT.md` | 系统边界、成功口径和证据合同 |
 | `docs/HYBRID_CANDIDATES.md` | Expert/VLA 候选与 Guard 合同 |
-| `docs/COUNTERFACTUAL_DATA.md` | CORA 同锚点双分支 potential-outcome 数据合同 |
 | `docs/WORLD_MODEL.md` | candidate-conditioned World 合同 |
-| `docs/RELATED_WORK.md` | VLA、World、反事实与选择性决策的活动技术定位 |
-| `docs/SHOWCASE.md` | 结题演示、简历和面试主干—枝干合同 |
 | `docs/RESOURCES.md` | 本机资产与资源预算 |
 | `docs/ENVIRONMENT.md` | 环境与运行入口 |
 | `docs/EVIDENCE.md` | 活动 Evidence 与归档索引 |
@@ -81,8 +75,6 @@
 
 - 不硬编码 CARLA host；使用 `python scripts/sdf.py sim ...`。
 - 不复制 gateway、不创建第二 tick master、不直接调用 `world.tick()`。
-- 正式 collector/实验使用 `ScenarioRuntime` 持有 tick；ROS `carla_sync_driver` 只允许作为互斥的
-  G0/bridge bring-up 模式。两者不得在同一 CARLA endpoint 同时运行，任务开始前必须解析唯一 owner。
 - Guard 必须逐候选执行，World 只能接收通过 Guard 的候选。
 - World 不是安全真值；它不能修改 slack、MRM、Emergency 或回退权限。
 - 候选生成、Guard、World、Safety、控制器的 provenance 必须可追踪。

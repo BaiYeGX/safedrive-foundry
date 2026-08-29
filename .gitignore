@@ -6,6 +6,12 @@ models/
 
 # Historical archives and bundled runtimes
 archive/
+# Keep the curated CORA documentation consolidation recoverable in Git while
+# leaving every other historical archive ignored by default.
+!archive/
+archive/*
+!archive/2026-08-27-cora-document-consolidation/
+!archive/2026-08-27-cora-document-consolidation/**
 tools/
 
 # Python environments and caches
