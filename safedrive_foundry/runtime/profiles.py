@@ -25,7 +25,7 @@ class RuntimeProfile:
 
     def validate(self) -> list[str]:
         errors: list[str] = []
-        if self.name not in {"throughput_20hz", "control_50hz"}:
+        if self.name not in {"throughput_20hz", "control_50hz", "cora_data"}:
             errors.append("unsupported runtime profile")
         if not self.synchronous_mode:
             errors.append("synchronous_mode must be true")
@@ -42,7 +42,11 @@ class RuntimeProfile:
         expected_period_ms = round(self.fixed_delta_seconds * 1000)
         if self.control_period_ms != expected_period_ms:
             errors.append("control_period_ms must equal fixed_delta_seconds")
-        expected_delta = {"throughput_20hz": 0.05, "control_50hz": 0.02}.get(self.name)
+        expected_delta = {
+            "throughput_20hz": 0.05,
+            "control_50hz": 0.02,
+            "cora_data": 0.05,
+        }.get(self.name)
         if expected_delta is not None and abs(self.fixed_delta_seconds - expected_delta) > 1e-12:
             errors.append(f"{self.name} requires fixed_delta_seconds={expected_delta}")
         return errors
@@ -72,6 +76,7 @@ def load_runtime_profiles(path: Path) -> dict[str, RuntimeProfile]:
     if not isinstance(profiles, dict):
         raise ProfileViolation("[profile] table is required")
     parsed = {name: RuntimeProfile.from_mapping(name, values) for name, values in profiles.items()}
-    if set(parsed) != {"throughput_20hz", "control_50hz"}:
-        raise ProfileViolation("profiles must define exactly throughput_20hz and control_50hz")
+    required = {"throughput_20hz", "control_50hz", "cora_data"}
+    if set(parsed) != required:
+        raise ProfileViolation(f"profiles must define exactly {sorted(required)}")
     return parsed

@@ -49,8 +49,10 @@ cleanup and terminal status
 | H5 | VERIFIED | GATE_FAILED | 未证明 World closed-loop 可复现净收益 |
 | H6 v1 | MEASURED | GATE_FAILED | seed 101 pilot 未达 World/VLA-primary gate |
 | H6 v2 | IMPLEMENTED | NOT_RUN | 新代码存在，无新 checkpoint/CARLA formal |
-| H6-CORA C1 engineering | IMPLEMENTED | NOT_RUN | evaluator/loss/selector/tick-owner/benchmark 加固与离线测试完成 |
-| H6-CORA algorithm | PLANNED | — | C0/C1 已完成并停止；尚无 CORA 数据/模型结果 |
+| H6-CORA C1 engineering | IMPLEMENTED | PASSED | evaluator/loss/selector/tick-owner/benchmark 加固与离线测试完成 |
+| H6-CORA C2 data | MEASURED | GATE_FAILED | 351 valid paired roots；真实覆盖不足，已冻结并停止 |
+| H6-CORA C2 repair v2 | MEASURED | GATE_FAILED | 351 base roots / 1295 branches 的 v3 更正与 root 去重完成；Town03 diagnostic 12 roots / 36 branches，repair-failure 0/2，未进入正式批次 |
+| H6-CORA C3+ algorithm | PLANNED | NOT_AUTHORIZED | 无 checkpoint、calibrated router、formal 或闭环结果 |
 
 ## 3. 指标口径
 
@@ -259,9 +261,9 @@ archive/2026-08-27-cora-document-consolidation/historical-stage-docs/H6_VLA75_HA
 
 ## 10. H6-CORA Evidence 合同
 
-当前 program：`C0 COMPLETED / C1 COMPLETED / STOPPED / C2 AWAITING SEPARATE AUTHORIZATION`。
-当前 algorithm Evidence：`PLANNED / NOT_MEASURED / NOT_VERIFIED`。尚无 CORA paired data、
-项目 checkpoint、calibrated router 或闭环数字。
+当前 program：`C0 COMPLETED / C1 COMPLETED / C2 COMPLETED / DATA MEASURED / GATE_FAILED /
+STOPPED`。C3 仍为 `NOT_AUTHORIZED / NOT_STARTED`。已有 CORA paired data，但没有项目
+checkpoint、calibrated router、formal 或闭环数字。
 
 ### C1 正确性
 
@@ -283,6 +285,29 @@ latency/显存/闭环均不能升级为正式 `MEASURED`。因此 C1 engineering
 algorithm 保持 `PLANNED / NOT_MEASURED / NOT_VERIFIED`。
 
 ### C2 数据
+
+最终数据与 Evidence：
+
+```text
+generated/h6/cora/h6-cora-c2-dev-20260830-v1/
+docs/runtime-evidence/h6/h6-cora-c2-dev-20260830-v1/final-delivery.json
+terminal roots = 351/351
+valid nominal pairs = 351/351（development 324/324）
+branch outcomes = 1295
+nominal VLA forwards = 351
+aggregate collector wall = 41184.8297303014 s
+whole-GPU peak = 9.9462890625 GiB
+minimum observed free disk = 124.15421295166016 GiB
+dataset = 292689739 bytes
+status = DATA MEASURED / GATE_FAILED / STOPPED
+```
+
+Pilot gate 通过。Development 的 manifest/run-lock、29-head public labels、feature reproduction、
+inventory、reset/identity/cleanup/cross-fallback 和资源审计均通过。冻结 gate 失败只来自真实覆盖：
+locked-development offroad 正例 1（门为 2）；repair success 负例四个 split 均为 0；executable
+负例 train/validation/calibration/locked-development 为 9/1/0/2（门为 12/3/3/3）。三次外部
+collector/server failure 已保存且失败耗时计入资源，immutable resume 后完成矩阵。Formal 未采集，
+C3 未授权。
 
 每个 dataset 至少保存：
 
@@ -330,6 +355,29 @@ checkpoint summary 中未测量字段为 `NOT_MEASURED`，不能用 0 或 `pass=
 
 pilot/full 每臂保存相同 candidate/Guard/Safety/controller/reset 条件下的 raw World、router、
 Safety、executed/applied chain。pilot 失败不运行 full；formal 无论正负都冻结并关闭。
+
+## 10A. C2 repair v2（2026-09-05）
+
+修复版 Evidence 位于：
+
+```text
+generated/h6/cora/h6-cora-c2-repair-20260905-v2/
+docs/runtime-evidence/h6/h6-cora-c2-repair-20260905-v2/
+```
+
+已实际生成并审计：351 个 base root、1295 个 base branch 的 v3 更正标签；648 行 train/Town03
+Guard+Safety 离线筛选；root-cluster 去重统计；`test-report.json`（491 passed、1 skipped）；
+12 个 Town03 diagnostic root、36 个 branch；`final-delivery.json`（`GATE_FAILED`, `DATA MEASURED`）。
+旧数据和旧 Hash 状态按 `REUSE_RECORDED_IDENTITIES_NO_OLD_FILE_HASH_SCAN` 复用，没有重扫旧文件
+或模型。
+
+CARLA admission Evidence 为 `admission.json`：显式 URL/`-ini` 参数在本机 Shipping 包中仍回落
+Town05，随后使用可恢复的 Windows-side `DefaultEngine.ini` 临时覆盖启动 Town03 并通过 READY；
+原配置已备份并在采集后恢复，不进入 Git。诊断采集 elapsed 256.77 s、RTX 4080 峰值约 8.35 GiB，
+加上此前启动/恢复 188.46 s，aggregate CARLA wall 为 445.23 s。诊断得到 3 个有效 offroad root，
+但 0 个实际尝试且全部修复失败的 root，未满足 2 个 repair-failure diagnostic gate，故不执行正式
+批次。最终报告保留 10 项 coverage 缺口和 diagnostic gate 缺口，CARLA 已关闭、tick owner free，
+不把工程修复或诊断采集写成数据门通过。
 
 ## 11. 环境诊断边界
 

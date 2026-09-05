@@ -4,6 +4,119 @@
 [`archive/2026-08-27-cora-document-consolidation/`](archive/2026-08-27-cora-document-consolidation/README.md)
 的原始快照和阶段文档中，不能作为活动任务或阈值来源。
 
+## 2026-09-05 — C2 repair v2 已实现，Town03 诊断完成，正式批次按诊断门停止
+
+状态：
+
+```text
+H6-CORA C2 repair v2 = COMPLETED / DATA MEASURED / GATE_FAILED / STOPPED
+added CARLA roots = 12 diagnostic roots / 36 branches; formal roots = 0
+diagnostic gate = FAILED (repair-failure roots 0/2, offroad roots 3/1)
+H6-CORA C3 = NOT_AUTHORIZED / NOT_STARTED
+calibration execution = NOT_RUN; reserved_formal = NOT_COLLECTED
+```
+
+- 新修复版本 `h6-cora-c2-repair-20260905-v2` 保留 v1 数据引用，已生成 351 个原始 root、1295
+  个原始 branch 的 `safedrive.cora.outcome_labels.v3` 更正标签；v1 sidecar、时间线和历史
+  Evidence 未覆盖。旧文件、旧数据、旧模型未做 Hash 重扫，只有新 delta/report 使用内容身份。
+- v3 统计以 `root_cluster_id` 去重，确认覆盖缺口为 10 项：train offroad 正类 7/8、四个 split
+  的 repair-success 负类 0/(12,3,3,3)，executable 负类 9/1/0/2（门为 12/3/3/3），以及
+  locked-development offroad 正类 1/2。报告明确撤回此前“仅缺样本”的结论；修复尝试可观测性、
+  root 统计和 route/light derivation 也需要修正。
+- train/Town03 真实 anchor/nominal 的离线筛选完成 648 个 1x/2x/3x Guard+Safety 组合，结果
+  固定写入 `screening.json`，不作为 CARLA outcome；目标 recipe 不读取 validation、calibration
+  或 locked-development 结果。
+- 通过可恢复的 Windows-side `DefaultEngine.ini` 临时覆盖解决了 Town03 admission；原文件已先保存，
+  不改旧数据/模型 Hash，也不把安装配置提交到仓库。单 CARLA、单 tick owner 下完成冻结的 12 个
+  Town03 诊断 root、36 个 branch，覆盖 ClearNoon/CloudyNoon；RTX 4080 峰值约 8.35 GiB，
+  诊断 elapsed 256.77 s，所有 branch cleanup 完成。
+- 诊断结果为 offroad 有效 root 3 个，但实际尝试且 `repair_success=false` 的不同 root 为 0 个，
+  未达到正式采集前要求的 2 个 repair-failure root。因此不执行两批正式 48-root 补采；诊断 root
+  排除核心 coverage 门，最终报告保留 10 项原覆盖缺口并新增 diagnostic gate 缺口。
+- 代码稳定后全量回归 `491 passed, 1 skipped`；repair final delivery 为 `GATE_FAILED`，added roots
+  12（均为 diagnostic）、independent roots 363、branches 1331，CARLA aggregate wall 445.23 s。
+  最终 Evidence 为
+  `docs/runtime-evidence/h6/h6-cora-c2-repair-20260905-v2/final-delivery.json`，admission 证据
+  为同目录 `admission.json`，质量报告为 `data-quality.json`。
+
+接管事项：当前诊断 root 上没有满足条件的 repair-failure root，按冻结合同不能凭结果进入正式批次。
+若要重新争取 coverage gate，必须创建新的修复版本/新诊断预算，不得在本版本中改 recipe、seed、
+阈值或删除失败样本。CARLA 已关闭、临时配置已恢复；当前仍不得把工程修复完成表述为数据门通过。
+
+## 2026-09-05 — H6-CORA C2 完成，development gate 失败并停止
+
+状态：
+
+```text
+H6-CORA C2 = COMPLETED / DATA MEASURED / GATE_FAILED / STOPPED
+H6-CORA C3 = NOT_AUTHORIZED / NOT_STARTED
+reserved_formal = NOT_COLLECTED
+```
+
+交付与数据：
+
+- 固定数据集 `h6-cora-c2-dev-20260830-v1` 已完成 351/351 terminal root attempts：pilot 27、
+  development 324；351/351 nominal pairs 有效，nominal VLA forward 精确 351 次；
+- 保存 1295 个真实 CARLA short-horizon branch outcomes，其中 development 1196；development
+  split 为 train 162、validation 54、calibration 54、locked development 54，三个 map 各 108、
+  九个 family 各 36、两种 weather 各 162；
+- 新增 exact 29-head `safedrive.cora.outcome_labels.v2` public label、逐 head value/unit/valid mask/
+  derivation version、公开训练 loader、observable feature 重建审计、完整 missingness 与资源审计；
+- Guard、Safety、repair/MRM、executed/applied identity 和 terminal/cleanup 全链保留；1295/1295
+  branch outcomes 有效，cross-candidate fallback、reset、identity、cleanup failure 均为 0；
+- 所有七种 intervention 均达到 terminal `>=12` 和 Guard-eligible core `>=6` 的 development 门；
+  reserved formal 108 roots 未采集，未训练 checkpoint、未 calibration、未启动 C3。
+
+质量门与负结果：
+
+- coverage pilot 全部通过；development 的 pair/split/map/family/weather/operator、manifest、
+  run-lock、public label、feature reproducibility、inventory 和 resource audit 均通过；
+- development gate 的真实失败为 locked development offroad positive `1 < 2`；
+  `repair_success=false` 在四个 split 均为 0（未尝试 repair 的样本按正确 mask 记为无效，不能伪造
+  repair 失败）；`executable=false` 为 train 9、validation 1、calibration 0、locked development 2，
+  分别低于冻结的 12/3/3/3；
+- 没有修改 matrix、seed、threshold、Guard 或 outcome，也没有复制 branch/intervention/tick 膨胀
+  root 样本量，因此终态诚实冻结为 `DATA MEASURED / GATE_FAILED`。
+
+资源、故障与恢复：
+
+- aggregate collector wall 为 41184.8297303014 s（11.44 h），whole-GPU peak 9.9462890625 GiB，
+  最低观测 free disk 124.15421295166016 GiB，dataset 292689739 bytes，均在冻结上限内；
+- 三次外部采集故障均保存为 Evidence：Town01 branch 内 CARLA server exit、Town05 collector 与
+  server 在 roots 间退出、Town05 collector 在 roots 间退出；immutable resume 后完成全部矩阵，
+  失败耗时也计入总 wall；
+- 完成后 preflight 显示 CARLA `NOT_RUNNING`、tick owner free、无 user action；既有未跟踪
+  `test_registry.sqlite3` 保持 12288 bytes、mtime 不变，未删除、未暂存。
+
+验收：
+
+- C2 专项 26/26、H2 15/15、H3 challenge 9/9、World v3 24/24、VLA75 hardening 32/32；
+- 全量 `unittest` 482 passed、1 skipped；`compileall` 与 `git diff --check` 通过；
+- 最终 Evidence：`docs/runtime-evidence/h6/h6-cora-c2-dev-20260830-v1/final-delivery.json`，同时保存
+  `collection-summary.json`、pilot/development `data-quality*.json`、`execution-history.json` 和
+  `runtime-release.json`。本任务在 C2 停止点结束。
+
+## 2026-08-30 — H6-CORA C2 已授权并开始实施
+
+状态：
+
+```text
+H6-CORA C0 = COMPLETED
+H6-CORA C1 = IMPLEMENTED / COMPLETED / STOPPED
+H6-CORA C2 = CURRENT / AUTHORIZED / IN_PROGRESS
+H6-CORA C3 = NOT_AUTHORIZED / NOT_STARTED
+```
+
+- 用户明确要求完整 C2 成品，包括实际 CARLA smoke、coverage pilot、development 数据和终态
+  Evidence，不接受只完成脚手架或单元测试；
+- 从 C1 完成提交 `7031786` 创建 `codex/h6-cora-c2`；开始时只有任务前既有未跟踪
+  `test_registry.sqlite3`，无来源不明 tracked 修改；
+- `START_TASK.md` 已冻结 dataset ID、351-root matrix、split/seed、intervention、reset、quality gate、
+  资源上限、验收和停止点；
+- `test_registry.sqlite3` 继续保持未跟踪、不得修改/删除/暂存，并从 C2 source identity 排除；
+- 本条只记录任务进入与冻结合同，尚未产生 CORA 数据或新测量，algorithm Evidence 仍为
+  `PLANNED / NOT_MEASURED / NOT_VERIFIED`。
+
 ## 2026-08-30 — H6-CORA C1 正确性加固完成并停止
 
 状态：

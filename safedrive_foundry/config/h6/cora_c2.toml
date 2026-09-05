@@ -1,0 +1,84 @@
+schema_version = "safedrive.cora.data_config.v1"
+dataset_id = "h6-cora-c2-dev-20260830-v1"
+matrix_algorithm = "cora-c2-root-matrix-v1"
+maps = ["Town01", "Town03", "Town05"]
+families = [
+  "free_flow",
+  "slow_lead",
+  "stopped_lead",
+  "cut_in",
+  "red_light_hold",
+  "emergency_lead_brake",
+  "aggressive_cut_in",
+  "red_light_dilemma",
+  "cross_traffic_conflict",
+]
+weather = ["ClearNoon", "CloudyNoon"]
+
+[splits]
+coverage_pilot = [137]
+train = [139, 149, 151]
+validation = [157]
+calibration = [163]
+locked_development = [167]
+reserved_formal = [173, 179]
+
+[timing]
+fixed_delta_seconds = 0.05
+history_ticks = 20
+branch_ticks = 50
+trajectory_stamp_refresh_ticks = 4
+mrm_standstill_speed_mps = 0.05
+mrm_standstill_ticks = 10
+
+[reset]
+position_delta_m = 0.05
+yaw_delta_deg = 0.5
+speed_delta_mps = 0.10
+
+[interventions]
+max_per_root = 2
+speed_scale = 1.20
+max_speed_mps = 15.0
+delayed_brake_s = 0.50
+shortened_stopping_margin_m = 1.0
+stop_line_crossing_m = 1.5
+lateral_offset_m = 0.60
+curvature_bump_m = 0.45
+obstacle_clearance_reduction_m = 0.30
+obstacle_min_time_s = 1.0
+
+[resources]
+root_attempt_limit = 351
+branch_attempt_limit = 1404
+dataset_limit_gib = 20.0
+whole_gpu_peak_limit_gib = 14.5
+aggregate_wall_limit_hours = 12.0
+free_disk_floor_gib = 60.0
+profile = "cora_data"
+
+[pilot_gate]
+terminal_roots = 27
+min_valid_nominal_pairs = 20
+min_valid_per_map = 6
+min_valid_per_family = 1
+expected_vla_forwards = 27
+min_finite_per_operator = 1
+min_guard_eligible_intervention_branches = 9
+
+[development_gate]
+terminal_roots = 324
+min_valid_nominal_pairs = 240
+min_train = 120
+min_validation = 40
+min_calibration = 40
+min_locked_development = 40
+min_per_map = 70
+min_per_family = 20
+min_per_weather = 110
+min_operator_terminal = 12
+min_operator_guard_eligible = 6
+min_hazard_train = 8
+min_hazard_other_split = 2
+min_binary_class_train = 12
+min_binary_class_other_split = 3

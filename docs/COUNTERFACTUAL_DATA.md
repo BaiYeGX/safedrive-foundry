@@ -36,6 +36,28 @@ Safety Evidence 单独记录，不写回 `Y_i`。
 该合同复用 H2/H3 已验证的 capture、exact reset、单 tick owner、forced-single-candidate
 Safety binding、50-tick control 和不可变存储；旧 H2 阶段文档已归档，不作为新矩阵来源。
 
+## 1A. C2 repair v2 更正合同（2026-09-05）
+
+修复版本 `h6-cora-c2-repair-20260905-v2` 采用 base 引用加 delta，不覆盖
+`h6-cora-c2-dev-20260830-v1`。旧 branch 没有可追溯 repair trace 时，只有完整执行绑定的 QP/RATO
+成功可以保留成功标签；无法判断是否尝试的 `repair_attempted`、`repair_success`、`repair_mode`
+必须为独立缺测 mask，禁止从决策名称猜测失败。新 branch 保存
+`safedrive.cora.safety_trace.v1`，逐次记录 proposal parent、QP/RATO mode、solver status、
+reason、post-repair 与最终 executable。
+
+标签使用独立 `safedrive.cora.outcome_labels.v3` sidecar，29 个 head 各自保存
+`value/unit/valid/derivation_version`。route completion 使用绝对 route projection 与剩余路线
+长度；red-light 只使用穿越停止线 tick 的灯态，穿越证据缺失时仅该 head 无效。统计按
+`root_cluster_id` 集合去重：branch、intervention、edge、tick 和重试不能膨胀 root；Guard
+REJECT、auxiliary-only、invalid branch 不进入核心 coverage。
+
+修复执行状态为 `DATA MEASURED / GATE_FAILED`：base 351 roots、1295 branches 已更正，离线
+train/Town03 screening 完成；通过可恢复的 Windows-side `DefaultEngine.ini` 临时覆盖后，
+Town03 诊断实际生成 12 roots、36 branches。诊断有 3 个 offroad root，但没有实际尝试且
+`repair_success=false` 的 repair-failure root（要求至少 2 个），因此不进入正式批次。该事实不
+改变原始数据或门槛，也不允许把修复完成或诊断采集宣称为 coverage gate 通过；临时配置已恢复且
+不进入仓库。
+
 ## 2. 已确认的旧数据缺口
 
 对 `h6-vla90-train-pilot-20260820-v2` 的 loader 审计：
@@ -240,6 +262,13 @@ docs/runtime-evidence/h6/<dataset-id>/
 dirty-worktree identity、config、matrix、model/checkpoint、CARLA、seed lineage 和资源。
 
 ## 11. C2 停止点
+
+实际 C2 已在 2026-09-05 到达停止点：固定数据集
+`h6-cora-c2-dev-20260830-v1` 完成 351/351 terminal roots、351/351 valid nominal pairs、1295 个
+真实 branch outcomes 和 351 次 nominal VLA forwards。Pilot gate 通过；development gate 因
+locked-development offroad 正例仅 1 个，以及 repair_success/executable 负类不足而失败。完整性、
+29-head public labels、feature reproduction、inventory 与资源审计通过；formal 未采集，C3 未授权。
+该结果冻结为 `DATA MEASURED / GATE_FAILED / STOPPED`。
 
 C2 只完成 development paired data 与质量审计：
 

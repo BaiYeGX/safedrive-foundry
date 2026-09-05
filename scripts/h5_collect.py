@@ -586,6 +586,8 @@ def _pre_roll_initial_progress(
 def _pre_roll(
     runtime: ScenarioRuntime,
     scenario: PhysicalScenario,
+    *,
+    kinematic_settle_ticks: int = 0,
 ) -> tuple[Any, list[dict[str, Any]], list[tuple[float, float, float, float]]]:
     history: list[dict[str, Any]] = []
     ego_history: list[tuple[float, float, float, float]] = []
@@ -596,6 +598,9 @@ def _pre_roll(
     total_limit = pre_roll_ticks + (max_extra_ticks if min_ready_speed is not None else 0)
     last_speed = 0.0
     kinematic = bool(scenario.script.get("pre_roll_kinematic", False))
+    settle_ticks = int(kinematic_settle_ticks)
+    if settle_ticks < 0:
+        raise ValueError("kinematic_settle_ticks_must_be_non_negative")
     ego_actor = runtime._actors["ego"]
     initial_state, _ = ego_state(ego_actor)
     initial_progress = _pre_roll_initial_progress(
@@ -681,6 +686,56 @@ def _pre_roll(
         ):
             break
     assert header is not None
+    # CARLA can expose the penultimate kinematic transform for one frame when
+    # physics is toggled around a freshly spawned vehicle.  C2 requests one
+    # opt-in settle tick that repeats the exact terminal pose, so capture and
+    # every branch observe the same authored anchor without advancing the
+    # world outside ScenarioRuntime.  Historical H5 callers keep the default
+    # of zero and therefore retain their frozen behaviour.
+    if kinematic and settle_ticks:
+        terminal_progress = initial_progress + len(history) * kinematic_speed * PROFILE.fixed_delta_seconds
+        terminal_x, terminal_y, terminal_yaw = _route_pose(scenario.route, terminal_progress)
+        for _ in range(settle_ticks):
+            current_transform = ego_actor.get_transform()
+            ego_actor.set_transform(
+                carla.Transform(
+                    carla.Location(
+                        x=terminal_x,
+                        y=terminal_y,
+                        z=float(current_transform.location.z),
+                    ),
+                    carla.Rotation(yaw=math.degrees(terminal_yaw)),
+                )
+            )
+            controls = {
+                "ego": carla.VehicleControl(throttle=0.0, brake=0.0, steer=0.0),
+                **_npc_controls(scenario, pre_roll=True),
+            }
+            header = runtime.tick_controls(controls)
+            _follow_ego_spectator(runtime, scenario)
+            state, _ = ego_state(ego_actor)
+            state = type(state)(
+                x=state.x,
+                y=state.y,
+                yaw=state.yaw,
+                v=kinematic_speed,
+                steer=state.steer,
+            )
+            last_speed = float(state.v)
+            ego_history.append((state.x, state.y, state.yaw, state.v))
+            history.append(
+                {
+                    "index": len(history),
+                    "carla_frame": int(header.carla_frame),
+                    "simulation_time_s": float(header.simulation_time),
+                    "ego_x": state.x,
+                    "ego_y": state.y,
+                    "ego_yaw": state.yaw,
+                    "ego_speed_mps": state.v,
+                    "ego_acceleration_mps2": 0.0,
+                    "ego_steer": 0.0,
+                }
+            )
     if kinematic:
         ego_actor.set_simulate_physics(True)
         ego_actor.set_target_velocity(

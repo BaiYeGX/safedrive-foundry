@@ -11,6 +11,8 @@ Collision checks use constant-velocity actors + circular envelope (documented li
 
 from __future__ import annotations
 
+import copy
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -71,6 +73,11 @@ class SafetyKernel:
     @property
     def mode(self) -> SafetyMode:
         return self.state_machine.mode
+
+    @property
+    def repair_traces(self) -> tuple[dict[str, Any], ...]:
+        """Read-only snapshot of actual solver attempts, including failures."""
+        return tuple(copy.deepcopy(self._repair_traces))
 
     def reset(self, mode: SafetyMode = SafetyMode.NORMAL, *, now_s: float = 0.0) -> None:
         self.state_machine.reset(mode, now_s=now_s)

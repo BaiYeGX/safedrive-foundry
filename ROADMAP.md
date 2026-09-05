@@ -14,9 +14,9 @@ flowchart TD
     H4 --> H5["H5 World on/off closed loop<br/>GATE FAILED"]
     H5 --> H6["H6 VLA-primary v1/v2<br/>NOT VERIFIED"]
     H6 --> C0["C0 Document consolidation<br/>COMPLETED"]
-    C0 --> C1["C1 Correctness hardening<br/>CURRENT"]
-    C1 --> C2["C2 Counterfactual data"]
-    C2 --> C3["C3 CORA World"]
+    C0 --> C1["C1 Correctness hardening<br/>COMPLETED"]
+    C1 --> C2["C2 Counterfactual data<br/>GATE FAILED / STOPPED"]
+    C2 -. "not authorized" .-> C3["C3 CORA World<br/>NOT STARTED"]
     C3 --> C4["C4 Calibrated router"]
     C4 --> C5["C5 Pilot and frozen formal"]
     C5 --> C6["C6 Showcase and close"]
@@ -31,8 +31,10 @@ flowchart TD
 | H4 | VERIFIED / GATE_PASSED / STOPPED | 64 decisive locked test；小样本离线门通过 |
 | H5 | VERIFIED / GATE_FAILED / STOPPED | 222 paired runs；未证明闭环净收益 |
 | H6 v1/v2 | IMPLEMENTED / MEASURED / NOT_VERIFIED | seed 101 pilot 未达 World/VLA-primary gate；v2 只有代码、无正式验证 |
-| H6-CORA program | IN_PROGRESS | C0 文档/QA 完成，C1 正确性加固为当前任务 |
-| H6-CORA algorithm Evidence | PLANNED | 尚无 CORA paired data、checkpoint 或闭环结果 |
+| H6-CORA C0/C1 | COMPLETED / STOPPED | 文档收敛与 correctness hardening 完成 |
+| H6-CORA C2 data | MEASURED / GATE_FAILED / STOPPED | 351 valid pairs；覆盖门不足，负结果冻结 |
+| H6-CORA C2 repair v2 | MEASURED / GATE_FAILED / STOPPED | 351 base roots + v3 correction；12 Town03 diagnostic roots / 36 branches；repair-failure diagnostic 0/2，10 个 coverage 缺口保留 |
+| H6-CORA C3+ | NOT_AUTHORIZED / NOT_STARTED | 无 checkpoint、calibration、formal 或闭环结果 |
 
 ## 2. 结题研究问题
 
@@ -83,7 +85,7 @@ VLA/Classic/MRM 使用率只报告，不作为训练 source preference 目标。
 
 ### C1 — 正确性加固
 
-状态：`CURRENT`，完整合同见 [START_TASK.md](START_TASK.md)。
+状态：`COMPLETED / STOPPED`。
 
 - 删除硬编码 validation pass；
 - 修复 per-sample multi-task / Group-DRO；
@@ -96,7 +98,12 @@ VLA/Classic/MRM 使用率只报告，不作为训练 source preference 目标。
 
 ### C2 — 反事实 potential-outcome 数据
 
-状态：`PENDING`。
+状态：`COMPLETED / DATA MEASURED / GATE_FAILED / STOPPED`。
+
+实际交付 351/351 valid nominal pairs、1295 branch outcomes；pilot 通过，development 因 locked
+offroad 正例和 repairability/executability 负类不足而失败。完整数字见
+`docs/runtime-evidence/h6/h6-cora-c2-dev-20260830-v1/final-delivery.json`。该负结果已冻结，不补样、
+不改门，并且不自动进入 C3。
 
 - 复用 H2/H3 capture、exact reset、双分支 50-tick rollout；
 - 同一 anchor 同时获得 `Y(VLA)` 和 `Y(Expert)`；
@@ -112,9 +119,16 @@ branch 或同 anchor interventions 当成独立样本扩充。具体矩阵、稀
 硬门：用于 pair loss 的样本两条候选 outcome 均有效；不满足则停止，不用 episode 第一拍
 或 source-majority 标签补齐。
 
+2026-09-05 repair v2 只完成工程与离线部分：351 base roots/1295 branches 已用 v3 sidecar
+重新标注并按 root cluster 去重，648 个 train/Town03 screening arm 已完成；通过可恢复的
+Windows-side `DefaultEngine.ini` 临时覆盖后，Town03 诊断完成 12 roots / 36 branches。诊断得到
+3 个 offroad root，但没有达到要求的 2 个 repair-failure root，因此不执行正式 48-root 批次。
+修复交付仍为 `DATA MEASURED / GATE_FAILED / STOPPED`，保留 10 项 coverage 缺口和 diagnostic
+gate 缺口，aggregate CARLA wall 为 445.23 s，不进入 C3。
+
 ### C3 — CORA Counterfactual Outcome World
 
-状态：`PENDING`。
+状态：`NOT_AUTHORIZED / NOT_STARTED`（C2 gate failed）。
 
 - observable encoder + shared candidate encoder + cross-attention；
 - per-candidate progress/completion/collision/red-light/offroad/comfort/feasibility distributions；
