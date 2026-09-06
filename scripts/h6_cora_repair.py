@@ -14,19 +14,21 @@ sys.path.insert(0, str(ROOT))
 
 from data_pipeline.h6.cora.config import CORA_C2_CONFIG  # noqa: E402
 from data_pipeline.h6.cora.repair import (  # noqa: E402
-    audit, finalize_repair, initialize,
+    audit, finalize_repair, initialize, record_budget_event,
 )
 from data_pipeline.h6.cora.repair import materialize  # noqa: E402
 from data_pipeline.h6.cora.screen import screen_train  # noqa: E402
 from data_pipeline.h6.cora.live_repair import REPAIR_EVIDENCE, collect_plan  # noqa: E402
 
-REPAIR_DATASET_ID = "h6-cora-c2-repair-20260905-v2"
+REPAIR_DATASET_ID = "h6-cora-c2-repair-20260906-v3"
+REPAIR_CONFIG = ROOT / "safedrive_foundry/config/h6/cora_c2_repair_v3.toml"
+REPAIR_EVIDENCE = ROOT / "docs" / "runtime-evidence" / "h6" / REPAIR_DATASET_ID
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("initialize", "screen", "materialize", "audit", "admission", "collect-diagnostic", "collect-batch", "finalize", "test"))
-    parser.add_argument("--config", default=str(ROOT / "safedrive_foundry/config/h6/cora_c2_repair.toml"))
+    parser.add_argument("--config", default=str(REPAIR_CONFIG))
     parser.add_argument("--batch", type=int, default=0)
     args = parser.parse_args()
     dataset = ROOT / "generated" / "h6" / "cora" / REPAIR_DATASET_ID
@@ -73,13 +75,15 @@ def main() -> int:
                 "actual_map": current_map or None,
                 "note": "Windows-side temporary config override; original DefaultEngine.ini is restorable",
             })
+            import time
+            admission_started = time.perf_counter()
             payload = {
                 "schema_version": "safedrive.cora.repair_admission.v1",
                 "dataset_id": dataset.name,
                 "requested_map": "Town03",
                 "requested_tick_owner": "sdf.h6.cora.collector",
                 "budget_started": True,
-                "carla_budget_consumed_s": float(previous.get("carla_budget_consumed_s", 188.46)),
+                "carla_budget_consumed_s": float(previous.get("carla_budget_consumed_s", 0.0)),
                 "preflight_current": current,
                 "attempts": attempts,
                 "blocked": not ready,
@@ -89,6 +93,16 @@ def main() -> int:
                     "CARLA Town03 admission is not READY; no diagnostic root may start"
                 ),
             }
+            record_budget_event(
+                dataset,
+                phase="admission",
+                elapsed_s=time.perf_counter() - admission_started,
+                limit_s=14400.0,
+                status="READY" if ready else "BLOCKED",
+            )
+            ledger_path = dataset / "budget-ledger.json"
+            if ledger_path.is_file():
+                payload["carla_budget_consumed_s"] = json.loads(ledger_path.read_text(encoding="utf-8")).get("consumed_s", 0.0)
             evidence.write_text(json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             result = {"ok": True, "blocked": not ready, "evidence": str(evidence), "current_status": current.get("status"), "current_map": current.get("map")}
         elif args.command == "collect-diagnostic":

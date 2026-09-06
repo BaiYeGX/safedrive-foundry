@@ -9,6 +9,7 @@ import copy
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 import tomllib
@@ -35,6 +36,124 @@ def read_config(path: Path | str) -> dict:
     return config
 
 
+def _budget_path(dataset: Path) -> Path:
+    return dataset / "budget-ledger.json"
+
+
+def _write_budget(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(dict(payload), ensure_ascii=True, indent=2, sort_keys=True, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def _load_budget(dataset: Path, limit_s: float, *, recover_open: bool = True) -> dict[str, Any]:
+    path = _budget_path(dataset)
+    if path.is_file():
+        payload = read_json(path)
+    else:
+        payload = {
+            "schema_version": "safedrive.cora.repair_budget.v1",
+            "dataset_id": dataset.name,
+            "limit_s": float(limit_s),
+            "events": [],
+        }
+    if float(payload.get("limit_s", limit_s)) != float(limit_s):
+        raise RuntimeError("repair_budget_limit_conflict")
+    now = time.time()
+    # A process killed during CARLA work leaves an open event.  Charge the
+    # observed wall time on the next invocation before admitting more work.
+    for event in payload.get("events", []):
+        if recover_open and not event.get("closed", False):
+            event["elapsed_s"] = max(float(event.get("elapsed_s", 0.0)), now - float(event["started_wall_time_s"]))
+            event["closed"] = True
+            event["status"] = "ABANDONED_RECOVERED"
+            event["ended_wall_time_s"] = now
+    payload["consumed_s"] = sum(float(event.get("elapsed_s", 0.0)) for event in payload.get("events", []))
+    return payload
+
+
+def begin_budget_event(dataset: Path, *, phase: str, limit_s: float) -> str:
+    payload = _load_budget(dataset, limit_s)
+    if float(payload.get("consumed_s", 0.0)) >= float(limit_s):
+        _write_budget(_budget_path(dataset), payload)
+        raise RuntimeError("repair_carla_budget_exhausted")
+    event_id = f"{phase}-{time.time_ns()}"
+    payload.setdefault("events", []).append({
+        "event_id": event_id,
+        "phase": phase,
+        "started_wall_time_s": time.time(),
+        "elapsed_s": 0.0,
+        "closed": False,
+        "status": "RUNNING",
+    })
+    payload["consumed_s"] = sum(float(event.get("elapsed_s", 0.0)) for event in payload["events"])
+    _write_budget(_budget_path(dataset), payload)
+    return event_id
+
+
+def close_budget_event(dataset: Path, event_id: str, *, elapsed_s: float, status: str) -> None:
+    path = _budget_path(dataset)
+    payload = _load_budget(dataset, float(read_json(dataset / "repair-protocol.json").get("carla_wall_limit_s", 14400.0)) if (dataset / "repair-protocol.json").is_file() else 14400.0, recover_open=False)
+    found = False
+    for event in payload.get("events", []):
+        if event.get("event_id") == event_id:
+            event["elapsed_s"] = max(float(event.get("elapsed_s", 0.0)), float(elapsed_s))
+            event["ended_wall_time_s"] = time.time()
+            event["closed"] = True
+            event["status"] = status
+            found = True
+            break
+    if not found:
+        raise RuntimeError(f"repair_budget_event_missing:{event_id}")
+    payload["consumed_s"] = sum(float(event.get("elapsed_s", 0.0)) for event in payload.get("events", []))
+    _write_budget(path, payload)
+
+
+def record_budget_event(dataset: Path, *, phase: str, elapsed_s: float, limit_s: float, status: str) -> None:
+    event_id = begin_budget_event(dataset, phase=phase, limit_s=limit_s)
+    close_budget_event(dataset, event_id, elapsed_s=elapsed_s, status=status)
+
+
+def _recipe_entries(config: Mapping[str, Any], name: str) -> tuple[tuple[str, str, float], ...]:
+    """Return the pre-registered source/operator/magnitude tuples.
+
+    The live collector receives these tuples through the immutable plan.  It
+    never re-ranks or substitutes an operator after CARLA starts.
+    """
+    raw = config.get("recipes", {}).get(name, ())
+    entries: list[tuple[str, str, float]] = []
+    for item in raw:
+        source = str(item.get("source", ""))
+        operator = str(item.get("operator", ""))
+        multiplier = float(item.get("multiplier", 0.0))
+        if source not in {"expert", "vla"} or not operator or multiplier not in {1.0, 2.0, 3.0}:
+            raise ValueError(f"repair_recipe_invalid:{name}:{item}")
+        entries.append((source, operator, multiplier))
+    if not entries:
+        raise ValueError(f"repair_recipe_empty:{name}")
+    return tuple(entries)
+
+
+def _assigned_recipe(
+    config: Mapping[str, Any], *, target: str, position: int, diagnostic: bool
+) -> tuple[tuple[str, str, float], ...]:
+    family = ("diagnostic_" if diagnostic else "formal_") + target
+    entries = _recipe_entries(config, family)
+    # Six diagnostic roots are split evenly across the two pre-registered
+    # recipe families.  Formal split-local positions follow the same fixed
+    # order and never consult held-out outcomes.
+    selected = entries[position % len(entries)]
+    return (selected,)
+
+
 def repair_rows(config: Mapping[str, Any], *, batch: int = 0, diagnostic: bool = False) -> tuple[CoraMatrixRow, ...]:
     """Return the frozen diagnostic or one 48-root formal batch plan."""
     if diagnostic:
@@ -52,19 +171,42 @@ def repair_rows(config: Mapping[str, Any], *, batch: int = 0, diagnostic: bool =
         slots += [("calibration", starts["calibration"] + batch * 8 + i) for i in range(8)]
         slots += [("locked_development", starts["locked_development"] + batch * 8 + i) for i in range(8)]
         rows = []
+        split_positions: dict[str, int] = collections.defaultdict(int)
         for index, (slot, seed) in enumerate(slots):
-            family = ("emergency_lead_brake" if index % 5 == 0 else "aggressive_cut_in" if index % 5 == 1
-                      else "red_light_hold" if index % 5 == 2 else "cut_in" if index % 5 == 3 else "slow_lead")
-            weather = "ClearNoon" if index % 2 == 0 else "CloudyNoon"
+            position = split_positions[slot]
+            split_positions[slot] += 1
+            target = "repair_failure" if (position < (20 if slot == "train" else 6)) else "offroad"
+            family = ("emergency_lead_brake" if position % 5 == 0 else "aggressive_cut_in" if position % 5 == 1
+                      else "red_light_hold" if position % 5 == 2 else "cut_in" if position % 5 == 3 else "slow_lead")
+            weather = "ClearNoon" if position % 2 == 0 else "CloudyNoon"
             key = ScenarioKey(str(config["map"]), family, int(seed), weather)
-            rows.append(CoraMatrixRow(key, slot, ("expert", "vla") if index % 2 == 0 else ("vla", "expert"), index, index, True))
+            rows.append(CoraMatrixRow(
+                key,
+                slot,
+                ("expert", "vla") if position % 2 == 0 else ("vla", "expert"),
+                position % 2,
+                index,
+                True,
+                target,
+                _assigned_recipe(config, target=target, position=position, diagnostic=False),
+            ))
         return tuple(rows)
     rows = []
     families = ("emergency_lead_brake", "aggressive_cut_in", "red_light_hold", "cut_in", "slow_lead", "free_flow")
     for index in seed_offsets:
         key = ScenarioKey(str(config["map"]), families[index % len(families)], start + index,
                           "ClearNoon" if index % 2 == 0 else "CloudyNoon")
-        rows.append(CoraMatrixRow(key, split, ("expert", "vla") if index % 2 == 0 else ("vla", "expert"), index, index, True))
+        target = "repair_failure" if index < count // 2 else "offroad"
+        rows.append(CoraMatrixRow(
+            key,
+            split,
+            ("expert", "vla") if index % 2 == 0 else ("vla", "expert"),
+            index % 2,
+            index,
+            True,
+            target,
+            _assigned_recipe(config, target=target, position=index if target == "repair_failure" else index - count // 2, diagnostic=True),
+        ))
     return tuple(rows)
 
 
@@ -196,8 +338,11 @@ def materialize(dataset: Path) -> dict:
     store = CoraDataStore(dataset.parent, dataset.name)
     roots = branches = 0
     for source in (base, dataset):
-        manifest_path = source / "scenario-manifest.json"
-        physical = {r["pair_id"]: r for r in read_json(manifest_path)["rows"]} if manifest_path.exists() else {}
+        manifest_paths = [source / "scenario-manifest.json"] if source == base else sorted(source.glob("scenario-manifest-*.json"))
+        physical: dict[str, dict[str, Any]] = {}
+        for manifest_path in manifest_paths:
+            if manifest_path.exists():
+                physical.update({r["pair_id"]: r for r in read_json(manifest_path)["rows"]})
         for path in sorted((source / "pairs").glob("*.json")):
             record = read_json(path)
             anchor = read_json(source / record["anchor_path"])
@@ -273,12 +418,34 @@ def finalize_repair(dataset: Path, evidence_dir: Path) -> dict:
     collections = []
     for path in sorted(evidence_dir.glob("*-collection.json")):
         collections.append(read_json(path))
-    elapsed = sum(float(row.get("elapsed_s", 0.0)) for row in collections)
+    budget_path = dataset / "budget-ledger.json"
+    budget = read_json(budget_path) if budget_path.is_file() else {}
     admission = read_json(evidence_dir / "admission.json") if (evidence_dir / "admission.json").is_file() else {}
-    elapsed += float(admission.get("carla_budget_consumed_s", 0.0))
+    # The persistent ledger already contains the admission event.  Only use
+    # the legacy admission field when finalizing a dataset without a ledger;
+    # otherwise adding it here would double-count startup time.
+    if budget:
+        elapsed = float(budget.get("consumed_s", 0.0))
+    else:
+        elapsed = sum(float(row.get("elapsed_s", 0.0)) for row in collections)
+        elapsed += float(admission.get("carla_budget_consumed_s", 0.0))
     branches = sum(len(row.get("branches", ())) for row in records)
     added = [row for row in records if row.get("artifact_base") != str(Path(protocol["base_path"]))]
-    limits_ok = len(added) <= int(protocol["max_roots"]) and branches - 1295 <= int(protocol["max_branch_attempts"]) and elapsed <= float(protocol["carla_wall_limit_s"])
+    integrity_failures: list[str] = []
+    for record in added:
+        if not record.get("diagnostic") and not record.get("repair_batch") in {0, 1}:
+            integrity_failures.append(f"batch_binding:{record.get('root_id')}")
+        if not isinstance(record.get("repair_recipe"), list) or not record.get("repair_recipe"):
+            integrity_failures.append(f"recipe_missing:{record.get('root_id')}")
+        for branch in record.get("branches", ()):
+            if branch.get("errors") or not branch.get("cleanup_complete"):
+                integrity_failures.append(f"branch_integrity:{record.get('root_id')}:{branch.get('proposal_id')}")
+    limits_ok = (
+        len(added) <= int(protocol["max_roots"])
+        and branches - 1295 <= int(protocol["max_branch_attempts"])
+        and elapsed <= float(protocol["carla_wall_limit_s"])
+        and not integrity_failures
+    )
     test_report = read_json(evidence_dir / "test-report.json") if (evidence_dir / "test-report.json").is_file() else {"passed": False}
     test_text = str(test_report.get("stdout", "")) + "\n" + str(test_report.get("stderr", ""))
     match = re.search(r"Ran (\d+) tests", test_text)
@@ -297,7 +464,8 @@ def finalize_repair(dataset: Path, evidence_dir: Path) -> dict:
         "diagnostic_roots": len(diagnostic), "diagnostic_gate": diagnostics_ok,
         "diagnostic_quality": diagnostic_gate,
         "resource": {"aggregate_carla_wall_s": elapsed, "limits_ok": limits_ok,
-                      "collection_evidence": collections, "admission": admission},
+                      "collection_evidence": collections, "admission": admission,
+                      "budget_ledger": budget, "integrity_failures": integrity_failures},
         "tests": test_report, "base_verification": protocol["base_verification"],
         "hash_scope": "new_delta_artifacts_only; old_data_old_models_reused_recorded_identities",
         "failures": (["coverage"] if gaps else []) + ([] if limits_ok else ["resources"]) +

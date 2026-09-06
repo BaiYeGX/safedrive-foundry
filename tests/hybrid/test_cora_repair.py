@@ -9,11 +9,32 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "safedrive_foundry"))
 
-from data_pipeline.h6.cora.repair import diagnostic_quality, root_counts, coverage_gaps
+from data_pipeline.h6.cora.repair import (
+    diagnostic_quality,
+    read_config,
+    repair_rows,
+    root_counts,
+    coverage_gaps,
+)
 from data_pipeline.h6.cora.repair_labels import route_labels, safety_trace
 
 
 class RootCoverageTests(unittest.TestCase):
+    def test_repair_plan_keeps_split_local_targets_and_recipe_binding(self):
+        config = read_config(ROOT / "safedrive_foundry/config/h6/cora_c2_repair_v3.toml")
+        rows = repair_rows(config, diagnostic=False, batch=0)
+        self.assertEqual(len(rows), 48)
+        for split, failure_count in {
+            "train": 20,
+            "validation": 6,
+            "calibration": 6,
+            "locked_development": 6,
+        }.items():
+            subset = [row for row in rows if row.split == split]
+            self.assertEqual(sum(row.repair_target == "repair_failure" for row in subset), failure_count)
+            self.assertEqual(sum(row.repair_target == "offroad" for row in subset), len(subset) - failure_count)
+            self.assertTrue(all(len(row.repair_recipe) == 1 for row in subset))
+
     def test_branch_duplication_and_opposite_classes(self):
         def branch(value):
             return dict(outcome_valid=True, guard_verdict="REVIEW", heads={

@@ -646,7 +646,7 @@ def _outcome_heads(
         "guard_eligible": _head(str(proposal.guard.get("verdict")) in {"PASS", "REVIEW"}, "bool"),
         "safety_executable": _head(executable_valid, "bool", valid=decision is not None),
         "repair_attempted": _head(repair_attempted, "bool", valid=decision is not None),
-        "repair_success": _head(repair_success, "bool", valid=decision is not None),
+        "repair_success": _head(repair_success, "bool", valid=decision is not None and repair_attempted),
         "executable": _head(executable_valid, "bool", valid=decision is not None),
         "mrm": _head(decision_kind in {"MINIMAL_RISK", "HARD_REJECT"}, "bool", valid=decision is not None),
         "emergency": _head(decision_kind == "EMERGENCY", "bool", valid=decision is not None),
@@ -983,6 +983,19 @@ def _branch(
         decision=decision,
         executable=executable,
     )
+    # The decision kind alone cannot tell whether QP/RATO actually ran.  The
+    # frozen repair protocol uses the observed Safety trace as the source of
+    # truth and keeps unattempted success explicitly missing.
+    if trace is not None:
+        heads["repair_attempted"] = _head(
+            bool(trace.get("repair_attempted")), "bool", valid=True
+        )
+        trace_success = trace.get("repair_success")
+        heads["repair_success"] = _head(
+            trace_success if trace_success is not None else None,
+            "bool",
+            valid=trace_success is not None,
+        )
     label_payload = {
         "schema_version": "safedrive.cora.outcome_labels.v1",
         "root_id": scenario.pair_id,

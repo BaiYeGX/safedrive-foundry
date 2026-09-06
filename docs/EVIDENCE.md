@@ -51,7 +51,7 @@ cleanup and terminal status
 | H6 v2 | IMPLEMENTED | NOT_RUN | 新代码存在，无新 checkpoint/CARLA formal |
 | H6-CORA C1 engineering | IMPLEMENTED | PASSED | evaluator/loss/selector/tick-owner/benchmark 加固与离线测试完成 |
 | H6-CORA C2 data | MEASURED | GATE_FAILED | 351 valid paired roots；真实覆盖不足，已冻结并停止 |
-| H6-CORA C2 repair v2 | MEASURED | GATE_FAILED | 351 base roots / 1295 branches 的 v3 更正与 root 去重完成；Town03 diagnostic 12 roots / 36 branches，repair-failure 0/2，未进入正式批次 |
+| H6-CORA C2 repair v2/v3 | MEASURED | GATE_FAILED | v2 保留历史失败证据；v3 修通 recipe/trace/预算链，Town03 diagnostic 12 roots / 34 branches，repair-failure 1/2、offroad 5/1，正式批次被诊断门阻断 |
 | H6-CORA C3+ algorithm | PLANNED | NOT_AUTHORIZED | 无 checkpoint、calibrated router、formal 或闭环结果 |
 
 ## 3. 指标口径
@@ -378,6 +378,28 @@ Town05，随后使用可恢复的 Windows-side `DefaultEngine.ini` 临时覆盖�
 但 0 个实际尝试且全部修复失败的 root，未满足 2 个 repair-failure diagnostic gate，故不执行正式
 批次。最终报告保留 10 项 coverage 缺口和 diagnostic gate 缺口，CARLA 已关闭、tick owner free，
 不把工程修复或诊断采集写成数据门通过。
+
+## 10B. C2 repair v3（2026-09-06）
+
+修复版 Evidence 位于：
+
+```text
+generated/h6/cora/h6-cora-c2-repair-20260906-v3/
+docs/runtime-evidence/h6/h6-cora-c2-repair-20260906-v3/
+generated/h6/cora/h6-cora-c2-repair-20260906-v3/budget-ledger.json
+```
+
+本版沿用 351 个 base root / 1295 个 base branch，新增 12 个 Town03 diagnostic root、34 条执行
+branch；合并后为 363 roots / 1329 branches。采集器读取冻结 screening recipe，保留实际
+source/operator/multiplier、Safety trace、parent identity 和不适用记录；旧文件和模型没有进行
+Hash 扫描或重算。预算账本记录本版已记录 CARLA 工作时间 118.4057 s，CARLA 已关闭且 tick owner
+已释放。
+
+v3 诊断门实际结果为 1/2 个独立 `repair_attempted=true, repair_success=false` root 和 5/1 个
+offroad root。由于修复失败门未达到 2，正式 batch collector 在读取 v3 labels 后拒绝启动；没有
+使用诊断或 branch 数量补齐 root，也没有进入 C3。全量回归为 492 tests run、1 skipped、OK。
+最终 `final-delivery.json` 与 `data-quality.json` 保留 `DATA MEASURED / GATE_FAILED / STOPPED`
+及 10 个 coverage 缺口；本版不能写成 `GATE_PASSED`。
 
 ## 11. 环境诊断边界
 

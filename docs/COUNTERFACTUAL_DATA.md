@@ -58,6 +58,20 @@ Town03 诊断实际生成 12 roots、36 branches。诊断有 3 个 offroad root�
 改变原始数据或门槛，也不允许把修复完成或诊断采集宣称为 coverage gate 通过；临时配置已恢复且
 不进入仓库。
 
+## 1B. C2 repair v3 收尾合同（2026-09-06）
+
+`h6-cora-c2-repair-20260906-v3` 继续引用同一 base 数据，新增 delta 不覆盖 v1/v2 Evidence。采集
+器已改为读取冻结 screening recipe，严格保存 source/operator/multiplier；不适用不再静默替换。
+诊断与 batch 使用独立 manifest/run-lock，root target 按 split-local 序号分配，物理去重排除 ID、
+seed 和时间戳，预算账本跨启动、采集和恢复累计。实际 Safety trace 写入 repair heads，未尝试
+修复保持 success 缺测。
+
+本版 Town03 实际生成 12 个诊断 root、34 条执行 branch。诊断得到 1 个独立
+`repair_attempted=true, repair_success=false` root 和 5 个 offroad root；要求分别为 2 和 1，
+因此 batch-1 collector 在读取 v3 labels 后直接阻断。原 351 root/1295 branch 保留，合并报告为
+363 root/1329 branch；全量回归 492 tests run、1 skipped、OK。CARLA 已关闭，预算账本记录 118.4057
+秒的已记录工作时间；本版仍为 `DATA MEASURED / GATE_FAILED / STOPPED`，不能进入 C3。
+
 ## 2. 已确认的旧数据缺口
 
 对 `h6-vla90-train-pilot-20260820-v2` 的 loader 审计：

@@ -1,5 +1,33 @@
 # 当前唯一任务：H6-CORA C2 修复版（已授权实施）
 
+## 2026-09-06 C2 收尾合同（本轮优先）
+
+用户授权继续收尾 C2，目标是修通筛选到采集链并在新增 4 小时 CARLA 工作预算内争取通过原质量门。
+本轮版本为 `h6-cora-c2-repair-20260906-v3`，保留 v1 原数据和 v2 失败证据，不覆盖历史数据。
+VLA 微调、C3、calibration、reserved formal 仍不进入本轮；旧文件、旧数据、旧模型不做 Hash 重扫。
+
+本轮已实际执行的结果：新 collector 严格绑定筛选 recipe，Safety trace 写入 repair head，诊断和正式
+清单隔离，split-local 目标分配、物理初态去重和累计预算账本已加入；Town03 单 CARLA、单 tick owner
+完成 12 个诊断 root、34 条实际 branch，CARLA 资源已释放。诊断得到 1 个 repair-failure root
+（要求 2）和 5 个 offroad root（要求 1），因此正式补采被 collector 正确阻断，最终保持
+`GATE_FAILED`。不得把这次工程修复或 offroad 结果写成质量门通过。
+
+验收证据：
+
+```text
+dataset = generated/h6/cora/h6-cora-c2-repair-20260906-v3
+evidence = docs/runtime-evidence/h6/h6-cora-c2-repair-20260906-v3
+final_status = GATE_FAILED / DATA MEASURED
+added = 12 diagnostic roots / 34 executed branches
+tests = 492 run / 1 skipped / OK
+carla_budget_consumed = 118.4057 s recorded lower bound in persistent ledger
+budget_ledger = generated/h6/cora/h6-cora-c2-repair-20260906-v3/budget-ledger.json
+```
+
+本轮停止点是诊断门缺 1 个独立 repair-failure root；不能在同一版本中超过 12 个诊断 root、
+放宽阈值或执行正式批次。若继续争取 `GATE_PASSED`，需另行授权新的修复版本和诊断预算。
+本轮 Git commit/push 已获用户明确授权。
+
 ## 2026-09-05 本轮优先合同
 
 用户明确授权执行 C2 最快修复计划，本节优先于下方保留的 v1 冻结合同。

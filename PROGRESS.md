@@ -4,6 +4,41 @@
 [`archive/2026-08-27-cora-document-consolidation/`](archive/2026-08-27-cora-document-consolidation/README.md)
 的原始快照和阶段文档中，不能作为活动任务或阈值来源。
 
+## 2026-09-06 — C2 repair v3 收尾，诊断门仍失败
+
+状态：
+
+```text
+H6-CORA C2 repair v3 = COMPLETED / DATA MEASURED / GATE_FAILED / STOPPED
+added CARLA roots = 12 diagnostic roots / 34 executed branches; formal roots = 0
+diagnostic gate = FAILED (repair-failure roots 1/2, offroad roots 5/1)
+H6-CORA C3 = NOT_AUTHORIZED / NOT_STARTED
+calibration execution = NOT_RUN; reserved_formal = NOT_COLLECTED
+```
+
+- 修复版 `h6-cora-c2-repair-20260906-v3` 新增 train-screening recipe 到 live collector 绑定、
+  split-local target 分配、诊断/批次独立 manifest 和 run-lock、物理初态去重、Safety trace 到
+  `repair_attempted/repair_success` head 的映射，以及可恢复累计预算账本。
+- 真实 Town03 运行确认 CARLA 0.9.16、单实例、单 `ScenarioRuntime` tick owner；12 个诊断 root
+  生成 34 条实际 branch，所有 cleanup 完成，CARLA 已正常关闭。
+- 诊断结果为 1 个独立 root 实际尝试 QP/RATO 后仍失败、5 个独立 offroad root。正式 collector
+  入口在读取更正标签后拒绝 batch-1，未消费正式 seed，也没有执行 calibration 或 reserved formal。
+- 全量回归为 `492 tests run, 1 skipped, OK`；v3 final delivery 为 `GATE_FAILED`，原始 351 root
+  与 1295 branch 保留，合并报告为 363 root、1329 branch（新增 12 root、34 branch）。
+- v3 持久账本记录 CARLA 工作下限 118.4057 秒；旧 v2 的 445.23 秒不混入本版本总账本。
+  旧数据、旧模型未做 Hash 重扫。
+
+最终证据：
+
+```text
+generated/h6/cora/h6-cora-c2-repair-20260906-v3/final-delivery.json
+docs/runtime-evidence/h6/h6-cora-c2-repair-20260906-v3/data-quality.json
+generated/h6/cora/h6-cora-c2-repair-20260906-v3/budget-ledger.json
+```
+
+接管事项：本版本已用尽 12 个诊断 root，距离诊断门还差 1 个 repair-failure root。不能在本版本
+内追加 root、改 recipe/seed/阈值、把同 root branch 膨胀成独立样本或把工程修复表述为门通过。
+
 ## 2026-09-05 — C2 repair v2 已实现，Town03 诊断完成，正式批次按诊断门停止
 
 状态：

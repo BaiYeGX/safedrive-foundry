@@ -18,6 +18,8 @@ class CoraMatrixRow:
     expert_slot: int
     matrix_index: int
     collect: bool = True
+    repair_target: str | None = None
+    repair_recipe: tuple[tuple[str, str, float], ...] = ()
 
     @property
     def root_id(self) -> str:

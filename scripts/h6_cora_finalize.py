@@ -48,7 +48,7 @@ def _audit_passed(payload: Mapping[str, Any], name: str) -> bool:
 
 
 def finalize(dataset_id: str) -> dict[str, Any]:
-    if dataset_id == "h6-cora-c2-repair-20260905-v2":
+    if dataset_id.startswith("h6-cora-c2-repair-"):
         from data_pipeline.h6.cora.repair import finalize_repair
         dataset = ROOT / "generated" / "h6" / "cora" / dataset_id
         evidence = ROOT / "docs" / "runtime-evidence" / "h6" / dataset_id

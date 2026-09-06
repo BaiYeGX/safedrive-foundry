@@ -16,6 +16,8 @@ from data_pipeline.h6.cora.config import CORA_C2_CONFIG  # noqa: E402
 from data_pipeline.h6.cora.live import collect_map, freeze_manifest, materialize_map  # noqa: E402
 from data_pipeline.h6.cora.live_repair import collect_plan  # noqa: E402
 
+REPAIR_CONFIG = ROOT / "safedrive_foundry/config/h6/cora_c2_repair_v3.toml"
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -36,9 +38,9 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "repair-diagnostic":
-            result = collect_plan(ROOT / "safedrive_foundry/config/h6/cora_c2_repair.toml", diagnostic=True)
+            result = collect_plan(REPAIR_CONFIG, diagnostic=True)
         elif args.command == "repair-batch":
-            result = collect_plan(ROOT / "safedrive_foundry/config/h6/cora_c2_repair.toml", diagnostic=False, batch=args.batch)
+            result = collect_plan(REPAIR_CONFIG, diagnostic=False, batch=args.batch)
         elif args.command == "materialize-map":
             result = materialize_map(args.dataset_id, args.map)
         elif args.command == "freeze-manifest":

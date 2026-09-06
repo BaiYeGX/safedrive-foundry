@@ -33,7 +33,7 @@ flowchart TD
 | H6 v1/v2 | IMPLEMENTED / MEASURED / NOT_VERIFIED | seed 101 pilot 未达 World/VLA-primary gate；v2 只有代码、无正式验证 |
 | H6-CORA C0/C1 | COMPLETED / STOPPED | 文档收敛与 correctness hardening 完成 |
 | H6-CORA C2 data | MEASURED / GATE_FAILED / STOPPED | 351 valid pairs；覆盖门不足，负结果冻结 |
-| H6-CORA C2 repair v2 | MEASURED / GATE_FAILED / STOPPED | 351 base roots + v3 correction；12 Town03 diagnostic roots / 36 branches；repair-failure diagnostic 0/2，10 个 coverage 缺口保留 |
+| H6-CORA C2 repair v2/v3 | MEASURED / GATE_FAILED / STOPPED | v2 保留 351 base roots + v3 correction；v3 修通 recipe/trace/预算链，12 Town03 diagnostic roots / 34 branches；repair-failure 1/2，10 个 coverage 缺口保留 |
 | H6-CORA C3+ | NOT_AUTHORIZED / NOT_STARTED | 无 checkpoint、calibration、formal 或闭环结果 |
 
 ## 2. 结题研究问题
@@ -119,12 +119,11 @@ branch 或同 anchor interventions 当成独立样本扩充。具体矩阵、稀
 硬门：用于 pair loss 的样本两条候选 outcome 均有效；不满足则停止，不用 episode 第一拍
 或 source-majority 标签补齐。
 
-2026-09-05 repair v2 只完成工程与离线部分：351 base roots/1295 branches 已用 v3 sidecar
-重新标注并按 root cluster 去重，648 个 train/Town03 screening arm 已完成；通过可恢复的
-Windows-side `DefaultEngine.ini` 临时覆盖后，Town03 诊断完成 12 roots / 36 branches。诊断得到
-3 个 offroad root，但没有达到要求的 2 个 repair-failure root，因此不执行正式 48-root 批次。
-修复交付仍为 `DATA MEASURED / GATE_FAILED / STOPPED`，保留 10 项 coverage 缺口和 diagnostic
-gate 缺口，aggregate CARLA wall 为 445.23 s，不进入 C3。
+2026-09-06 repair v3 修通了筛选 recipe 到 live collector、trace head、split-local 清单、物理去重和
+累计预算链：351 base roots/1295 branches 继续以 v3 sidecar 引用，648 个 train/Town03 screening arm
+保留；Town03 诊断完成 12 roots / 34 branches，得到 1 个 repair-failure root 和 5 个 offroad root。
+仍未达到要求的 2 个 repair-failure root，因此正式 48-root 批次被 collector 阻断，交付仍为
+`DATA MEASURED / GATE_FAILED / STOPPED`，保留 10 项 coverage 缺口；CARLA 已关闭，不进入 C3。
 
 ### C3 — CORA Counterfactual Outcome World
 

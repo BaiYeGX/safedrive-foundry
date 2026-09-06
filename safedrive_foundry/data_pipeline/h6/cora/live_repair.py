@@ -25,13 +25,14 @@ from .live import (
 )
 from .matrix import CoraMatrixRow
 from .repair import (
+    begin_budget_event, close_budget_event, diagnostic_quality, materialize, merged_roots,
     read_json, read_config, repair_rows, plan_payload, write_plan,
 )
 from .scenarios import materialize_cora_physical_scenario
 from .store import CoraDataStore
 
 
-REPAIR_EVIDENCE = ROOT / "docs" / "runtime-evidence" / "h6" / "h6-cora-c2-repair-20260905-v2"
+REPAIR_EVIDENCE = ROOT / "docs" / "runtime-evidence" / "h6" / "h6-cora-c2-repair-20260906-v3"
 BASE = ROOT / "generated" / "h6" / "cora" / "h6-cora-c2-dev-20260830-v1"
 
 
@@ -46,44 +47,45 @@ def _atomic(path: Path, payload: Mapping[str, Any]) -> None:
             tmp.unlink()
 
 
-def _target(index: int, split: str, diagnostic: bool) -> str:
-    if diagnostic:
-        return "repair_failure" if index < 6 else "offroad"
-    if split == "train":
-        return "repair_failure" if index < 20 else "offroad"
-    return "repair_failure" if index < 6 else "offroad"
-
-
-def _recipe_for(row: CoraMatrixRow, target: str, source: str) -> tuple[str, float]:
-    # Fixed, pre-registered recipe ordering; no held-out outcome is consulted.
-    operators = {
-        "repair_failure": {"expert": ("speed_scale_up", 3.0), "vla": ("speed_scale_up", 3.0)},
-        "offroad": {"expert": ("lateral_offset_toward_conflict", 3.0), "vla": ("lateral_offset_toward_conflict", 3.0)},
-    }
-    preferred = operators[target][source]
-    # Every family has two pre-registered operators; if the global recipe is
-    # inapplicable, use the first family operator at the same multiplier.
-    from .interventions import FAMILY_OPERATORS
-    if preferred[0] in FAMILY_OPERATORS[row.scenario.family]:
-        return preferred
-    return FAMILY_OPERATORS[row.scenario.family][0], preferred[1]
-
-
-def _factory(row: CoraMatrixRow, target: str):
+def _factory(row: CoraMatrixRow):
+    """Create exactly the intervention entries frozen in the plan row."""
     def factory(root_id: str, family: str, anchor: Any, candidates: Sequence[Any]):
         by_source = {item.provenance.source.value: item for item in candidates}
         results = []
-        for source in ("expert", "vla"):
+        for source, operator, multiplier in row.repair_recipe:
             base = by_source.get(source)
             if base is None:
+                results.append(InterventionResult(root_id, source, operator, "BASE_MISSING", error="base_missing"))
                 continue
-            operator, multiplier = _recipe_for(row, target, source)
             try:
                 results.append(derive_scaled_intervention(root_id, anchor, base, operator, multiplier))
             except InterventionNotApplicable as exc:
                 results.append(InterventionResult(root_id, source, operator, "NOT_APPLICABLE", error=str(exc)))
         return tuple(results)
     return factory
+
+
+def _physical_fingerprint(payload: Any) -> str:
+    """Fingerprint physical initial conditions without IDs or seed labels."""
+    if hasattr(payload, "route"):
+        values = {
+            "route": payload.route,
+            "ego_transform": payload.ego_transform,
+            "npc_actors": payload.npc_actors,
+            "weather": payload.weather,
+            "script": payload.script,
+            "red_light": payload.red_light,
+        }
+    else:
+        values = {
+            "route": payload.get("route"),
+            "ego_transform": payload.get("ego_transform"),
+            "npc_actors": payload.get("npc_actors"),
+            "weather": payload.get("weather"),
+            "script": payload.get("script"),
+            "red_light": payload.get("red_light"),
+        }
+    return stable_sha256(values)
 
 
 def _new_run_lock(config: Mapping[str, Any], plan: Mapping[str, Any], physical: Sequence[PhysicalScenario]) -> dict[str, Any]:
@@ -104,6 +106,15 @@ def collect_plan(config_path: Path | str, *, diagnostic: bool = True, batch: int
     dataset = DATA_ROOT / config["dataset_id"]
     store = CoraDataStore(DATA_ROOT, config["dataset_id"])
     rows = repair_rows(config, batch=batch, diagnostic=diagnostic)
+    phase = "diagnostic" if diagnostic else f"batch-{batch + 1}"
+    if not diagnostic:
+        materialize(dataset)
+        diagnostic_records = [record for record in merged_roots(dataset) if record.get("diagnostic")]
+        gate = diagnostic_quality(diagnostic_records, config)
+        if not gate["passed"]:
+            raise RuntimeError(f"repair_diagnostic_gate_not_passed:{gate}")
+    budget_event = begin_budget_event(dataset, phase=phase, limit_s=float(config["carla_wall_limit_s"]))
+    started = time.perf_counter()
     registered = {(str(item["scenario"]["map_name"]), str(item["scenario"]["family"]),
                    int(item["scenario"]["seed"]), str(item["scenario"]["weather"]))
                   for item in read_json(BASE / "scenario-manifest.json").get("rows", ())}
@@ -125,31 +136,38 @@ def collect_plan(config_path: Path | str, *, diagnostic: bool = True, batch: int
     _require_clean_scene(world)
     physical = []
     fingerprints = set()
-    row_by_id = {row.root_id: row for row in rows}
+    physical_name = f"scenario-manifest-{phase}.json"
+    existing_manifest_paths = [BASE / "scenario-manifest.json"]
+    existing_manifest_paths.extend(
+        path for path in sorted(dataset.glob("scenario-manifest-*.json")) if path.name != physical_name
+    )
+    for manifest_path in existing_manifest_paths:
+        if manifest_path.is_file():
+            for existing in read_json(manifest_path).get("rows", ()):
+                fingerprints.add(_physical_fingerprint(existing))
     for row in rows:
         item = materialize_cora_physical_scenario(world, row)
-        fingerprint = stable_sha256({"scenario": row.scenario.to_dict(), "route": item.route,
-            "ego_transform": item.ego_transform, "npc_actors": item.npc_actors,
-            "weather": item.weather, "script": item.script, "red_light": item.red_light})
+        fingerprint = _physical_fingerprint(item)
         if fingerprint in fingerprints:
             raise RuntimeError(f"repair_duplicate_physical_initial_state:{row.root_id}")
         fingerprints.add(fingerprint)
         physical.append(item)
     physical_manifest = {"schema_version": "safedrive.cora.repair_physical_manifest.v1",
         "dataset_id": config["dataset_id"], "map": config["map"], "plan_sha256": plan["plan_sha256"],
-        "rows": [item.to_dict() for item in physical], "formal_collected": False}
+        "phase": phase, "rows": [item.to_dict() for item in physical], "formal_collected": False}
     physical_manifest["physical_manifest_sha256"] = stable_sha256(physical_manifest)
-    if (dataset / "scenario-manifest.json").exists():
-        old = read_json(dataset / "scenario-manifest.json")
+    if (dataset / physical_name).exists():
+        old = read_json(dataset / physical_name)
         if old.get("physical_manifest_sha256") != physical_manifest["physical_manifest_sha256"]:
             raise RuntimeError("repair_physical_manifest_conflict")
     else:
-        store.write_immutable_json(dataset / "scenario-manifest.json", physical_manifest)
+        store.write_immutable_json(dataset / physical_name, physical_manifest)
     run_lock = _new_run_lock(config, plan, physical)
-    if not (dataset / "run-lock.json").exists():
-        store.write_immutable_json(dataset / "run-lock.json", run_lock)
+    run_lock_name = f"run-lock-{phase}.json"
+    if not (dataset / run_lock_name).exists():
+        store.write_immutable_json(dataset / run_lock_name, run_lock)
     else:
-        run_lock = read_json(dataset / "run-lock.json")
+        run_lock = read_json(dataset / run_lock_name)
     REPAIR_EVIDENCE.mkdir(parents=True, exist_ok=True)
     registry = RunRegistry(REPAIR_EVIDENCE / "run-registry.sqlite3")
     if not torch.cuda.is_available():
@@ -159,7 +177,6 @@ def collect_plan(config_path: Path | str, *, diagnostic: bool = True, batch: int
     old_root = read_json(next((BASE / "pairs").glob("*.json")))
     vla_hash = next(p["provenance"]["generator_hash"] for p in old_root["proposals"] if p.get("audit_source") == "vla" and p.get("kind") == "nominal")
     policy = NominalVLAPolicy(keep_on_gpu=True)
-    started = time.perf_counter()
     sampler = GPUMemorySampler(interval_s=0.1, gpu_index=0).start()
     results = []
     try:
@@ -172,26 +189,29 @@ def collect_plan(config_path: Path | str, *, diagnostic: bool = True, batch: int
             if (dataset / "pairs" / f"{row.root_id}.json").exists():
                 results.append({"root_id": row.root_id, "status": "RESUMED"})
                 continue
-            target = _target(index, row.split, diagnostic)
             record = _collect_root(client, world, store, registry, row, scenario,
                 physical_manifest_sha256=physical_manifest["physical_manifest_sha256"],
                 run_lock_sha256=run_lock["repair_run_lock_sha256"], classic=classic, vla=vla, policy=policy,
-                repair_protocol=True, intervention_factory=_factory(row, target))
+                repair_protocol=True, intervention_factory=_factory(row))
             payload = record.to_dict()
             content = payload.pop("content_sha256", None)
-            payload.update({"root_cluster_id": f"{row.root_id}::capture", "repair_target": target,
+            payload.update({"root_cluster_id": f"{row.root_id}::capture", "repair_target": row.repair_target,
+                            "repair_recipe": [dict(source=s, operator=o, multiplier=m) for s, o, m in row.repair_recipe],
                             "diagnostic": diagnostic, "repair_batch": None if diagnostic else batch,
                             "base_dataset_id": config["base_dataset_id"]})
             payload["content_sha256"] = stable_sha256(payload)
             store.write_root(payload)
             results.append({"root_id": row.root_id, "status": record.terminal_status,
-                            "branches": len(record.branches), "target": target})
+                            "branches": len(record.branches), "target": row.repair_target,
+                            "recipe": [dict(source=s, operator=o, multiplier=m) for s, o, m in row.repair_recipe]})
             _require_clean_scene(world)
     finally:
         gpu = sampler.stop()
     elapsed = time.perf_counter() - started
+    close_budget_event(dataset, budget_event, elapsed_s=elapsed, status="COMPLETED")
     evidence = {"schema_version": "safedrive.cora.repair_collection.v1", "dataset_id": config["dataset_id"],
-        "diagnostic": diagnostic, "batch": None if diagnostic else batch, "plan_sha256": plan["plan_sha256"],
+        "diagnostic": diagnostic, "batch": None if diagnostic else batch, "phase": phase,
+        "plan_sha256": plan["plan_sha256"],
         "map": config["map"], "elapsed_s": elapsed, "gpu": gpu, "results": results,
         "resource": _resource_snapshot(store), "base_verification": config["base_verification"]}
     evidence["collection_sha256"] = stable_sha256(evidence)
