@@ -52,6 +52,7 @@ cleanup and terminal status
 | H6-CORA C1 engineering | IMPLEMENTED | PASSED | evaluator/loss/selector/tick-owner/benchmark 加固与离线测试完成 |
 | H6-CORA C2 data | MEASURED | GATE_FAILED | 351 valid paired roots；真实覆盖不足，已冻结并停止 |
 | H6-CORA C2 repair v2/v3 | MEASURED | GATE_FAILED | v2 保留历史失败证据；v3 修通 recipe/trace/预算链，Town03 diagnostic 12 roots / 34 branches，repair-failure 1/2、offroad 5/1，正式批次被诊断门阻断 |
+| H6-CORA C2 dev baseline | MEASURED | DEV_BASELINE_GATE_PASSED | 现有数据 release 340 usable roots；World 三 seed 已跑完，`NO_DEMONSTRATED_GAIN`；原 coverage gate 仍失败 |
 | H6-CORA C3+ algorithm | PLANNED | NOT_AUTHORIZED | 无 checkpoint、calibrated router、formal 或闭环结果 |
 
 ## 3. 指标口径
@@ -400,6 +401,51 @@ offroad root。由于修复失败门未达到 2，正式 batch collector 在读�
 使用诊断或 branch 数量补齐 root，也没有进入 C3。全量回归为 492 tests run、1 skipped、OK。
 最终 `final-delivery.json` 与 `data-quality.json` 保留 `DATA MEASURED / GATE_FAILED / STOPPED`
 及 10 个 coverage 缺口；本版不能写成 `GATE_PASSED`。
+
+## 10C. C2 dev baseline（2026-09-07）
+
+新合同的 release 与 Evidence：
+
+```text
+generated/h6/cora/h6-cora-c2-devbaseline-20260907-v1/
+docs/runtime-evidence/h6/h6-cora-c2-devbaseline-20260907-v1/
+safedrive_foundry/config/h6/cora_c2_devbaseline_v1.toml
+```
+
+这次不启动 CARLA，也不重新验证旧文件/数据/模型 Hash；release 只引用 base 数据、既有 v3
+corrected-label sidecar 和登记身份。全部 351 个 root 被盘点，按物理初态与 capture 条件隔离
+11 个重复后保留 340 个 usable roots：
+
+```text
+coverage_pilot 25   train 158   validation 53   calibration 52   locked_development 52
+```
+
+训练只允许 train，开发评估只允许 validation；intervention、diagnostic、repair 和稀有事件
+head 不参与本轮优化。29 个公开 head 仍逐 head 保存 value/unit/mask/derivation；World 只学习四个
+连续 head。旧身份政策固定为 `REUSE_RECORDED_IDENTITIES_NO_OLD_FILE_HASH_SCAN`。
+
+World 是 CPU 四线程、共享 128/64 MLP，三个固定 seed 17/29/43，输入为 499-D context＋`10x8`
+candidate。对照包括 train mean、context-only ridge、candidate-only ridge 和 Expert/VLA 固定
+选择。每个模型和对照在相同 validation roots 上报告四个 head 的原单位 MAE/RMSE、进度差、
+1,000 次 root bootstrap 及 map/family/weather 分组。候选交换检查通过（最大输出差约 `2.4e-7`），
+source/slot 元数据不进入输入；candidate-only ridge 的 progress MAE 约 `0.302 m`，MLP 三 seed
+约 `0.555/0.617/0.555 m`，因此 `gain_status=NO_DEMONSTRATED_GAIN`。该结果是当前采样分布的
+validation 开发结果，不是安全概率、闭环收益或通用策略价值。
+
+验收：
+
+```text
+data release = DEV_DATA_READY
+final delivery = DEV_BASELINE_GATE_PASSED
+original coverage gate = GATE_FAILED
+tests = 495 run / 1 skipped / OK
+closed_loop = NOT_MEASURED
+vla_finetune = NOT_RUN
+```
+
+`final-delivery.json`、`audit-report.json`、`baseline-report.json` 和 `test-report.json` 是本次
+可复核入口。由于 baseline 只是开发基线，不升级本 Evidence 为 `VERIFIED`，也不自动启动
+calibration、C3 或 VLA 微调。
 
 ## 11. 环境诊断边界
 

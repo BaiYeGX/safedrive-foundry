@@ -1,7 +1,33 @@
 # CORA-Drive 前沿技术定位
 
-更新日期：2026-08-29。本文只使用论文、官方项目页或官方代码作为活动技术依据。外部结果
+更新日期：2026-09-07。本文只使用论文、官方项目页或官方代码作为活动技术依据。外部结果
 用于定义问题和对比方法，不是本仓库的 Evidence，也不能替代本项目冻结实验。
+
+## 0. C2 dev baseline 的路线决定（2026-09-07）
+
+本轮把 C2 收尾范围限定为现有配对数据上的短时 outcome baseline，并采用以下几条与项目边界
+直接相关的公开依据：
+
+- [NAVSIM（NeurIPS 2024）](https://arxiv.org/abs/2406.15349)及其[官方项目](https://github.com/autonomousvision/navsim)
+  说明短时展开的 progress/TTC 等指标可以用于统一开发评估；本项目因此只报告冻结 CARLA
+  branch 的短时 outcome，不把离线分数包装成闭环收益。
+- [PDM（CoRL 2023）](https://arxiv.org/abs/2306.07962)和[tuPlan Garage](https://github.com/autonomousvision/tuplan_garage)
+  说明简单规则/规划先验可能很强；本轮固定加入均值、context-only 和 candidate-only ridge，
+  不以小 MLP 占优作为预设结论。
+- [BEV-Planner（CVPR 2024）](https://arxiv.org/abs/2312.03031)提醒离线规划成绩可能主要来自
+  自车状态而不是环境信息；本轮保留 context-only、candidate-only 和候选交换/source-blind
+  检查，避免把候选几何或 shortcut 误写成环境理解。
+- [COBS 离线策略评估实证研究](https://arxiv.org/abs/1911.06854)强调评估结论依赖实验条件；本轮
+  明确限定当前采样分布、固定 Safety/controller 和 validation 开发 split。
+- [SimLingo（CVPR 2025）](https://arxiv.org/abs/2503.09594)及[官方代码](https://github.com/RenzKa/simlingo)
+  提供独立 VLA 数据、Expert 和闭环评估的参考边界；本轮冻结 VLA，不把 World baseline 与
+  generator 微调混在一起。
+- [DAgger（AISTATS 2011）](https://proceedings.mlr.press/v15/ross11a.html)说明策略改变会改变
+  后续状态分布；因此将来的 VLA 微调必须重新登记候选版本，并重新检查 World 的适用性。
+
+这些工作支持“先做可复现、小规模、基线对照的 outcome 评估”，但没有任何一篇保证本项目的
+小数据 MLP 获得收益。当前实际结果为 `NO_DEMONSTRATED_GAIN`，这是可交付的负结果，不是隐含的
+安全或闭环成功声明。
 
 ## 1. Vision-Language-Action 驾驶
 

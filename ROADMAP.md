@@ -15,8 +15,8 @@ flowchart TD
     H5 --> H6["H6 VLA-primary v1/v2<br/>NOT VERIFIED"]
     H6 --> C0["C0 Document consolidation<br/>COMPLETED"]
     C0 --> C1["C1 Correctness hardening<br/>COMPLETED"]
-    C1 --> C2["C2 Counterfactual data<br/>GATE FAILED / STOPPED"]
-    C2 -. "not authorized" .-> C3["C3 CORA World<br/>NOT STARTED"]
+    C1 --> C2["C2 Existing-data dev baseline<br/>DEV BASELINE PASSED"]
+    C2 -. "original coverage gate failed; next work optional" .-> C3["C3 World improvement / calibration<br/>NOT STARTED"]
     C3 --> C4["C4 Calibrated router"]
     C4 --> C5["C5 Pilot and frozen formal"]
     C5 --> C6["C6 Showcase and close"]
@@ -32,9 +32,10 @@ flowchart TD
 | H5 | VERIFIED / GATE_FAILED / STOPPED | 222 paired runs；未证明闭环净收益 |
 | H6 v1/v2 | IMPLEMENTED / MEASURED / NOT_VERIFIED | seed 101 pilot 未达 World/VLA-primary gate；v2 只有代码、无正式验证 |
 | H6-CORA C0/C1 | COMPLETED / STOPPED | 文档收敛与 correctness hardening 完成 |
-| H6-CORA C2 data | MEASURED / GATE_FAILED / STOPPED | 351 valid pairs；覆盖门不足，负结果冻结 |
-| H6-CORA C2 repair v2/v3 | MEASURED / GATE_FAILED / STOPPED | v2 保留 351 base roots + v3 correction；v3 修通 recipe/trace/预算链，12 Town03 diagnostic roots / 34 branches；repair-failure 1/2，10 个 coverage 缺口保留 |
-| H6-CORA C3+ | NOT_AUTHORIZED / NOT_STARTED | 无 checkpoint、calibration、formal 或闭环结果 |
+| H6-CORA C2 data | MEASURED / GATE_FAILED / STOPPED | 351 valid pairs；原覆盖门不足，负结果冻结 |
+| H6-CORA C2 repair v2/v3 | MEASURED / GATE_FAILED / STOPPED | v2 保留 351 base roots + v3 correction；v3 修通 recipe/trace/预算链，12 Town03 diagnostic roots / 34 branches；repair-failure 1/2，coverage 缺口保留 |
+| H6-CORA C2 dev baseline | MEASURED / DEV_BASELINE_GATE_PASSED / STOPPED | 351 原 root 审计后 340 usable、11 物理重复隔离；train 158 / validation 53；World 三 seed 完成但 `NO_DEMONSTRATED_GAIN` |
+| H6-CORA C3+ | NOT_AUTHORIZED / NOT_STARTED | 可选的 World 改进、校准、闭环验证和 VLA 微调；本轮均未执行 |
 
 ## 2. 结题研究问题
 
@@ -125,9 +126,30 @@ branch 或同 anchor interventions 当成独立样本扩充。具体矩阵、稀
 仍未达到要求的 2 个 repair-failure root，因此正式 48-root 批次被 collector 阻断，交付仍为
 `DATA MEASURED / GATE_FAILED / STOPPED`，保留 10 项 coverage 缺口；CARLA 已关闭，不进入 C3。
 
+### C2 调整收尾 — 现有数据开发 release 与小型 World 基线
+
+状态：`COMPLETED / DEV_BASELINE_GATE_PASSED / STOPPED`；原 C2 coverage gate 仍为
+`GATE_FAILED`，两者不是同一个验收。
+
+新合同 `c2_dev_baseline_v1` 不再追加 CARLA 样本。它读取 351 个既有 nominal Expert/VLA 配对，
+按物理初态和 capture 条件隔离 11 个重复后形成 340 个 usable roots（train 158、validation 53，
+其余 split 只审计）。四个连续目标用于短时 progress/comfort 预测，collision、red-light、offroad、
+executable 和 repair 只保留真实分布与缺测报告。loader 通过显式 quality profile 拒绝旧失败
+release、held-out training 和缺少数据验收的混用。
+
+固定 World 基线是共享 128/64 MLP，输入 499-D context＋`10x8` candidate，seed 17/29/43；对照
+为 train 均值、context-only ridge、candidate-only ridge、Expert/VLA 固定选择。结果已保存三份
+checkpoint、逐 root prediction、head/group metrics、1,000-root bootstrap 和 swap/source-blind
+检查。candidate-only ridge 最强，MLP 标记 `NO_DEMONSTRATED_GAIN`；结果仅限当前采样分布和
+validation 开发集，不自动进入在线 router、calibration、closed-loop 或 VLA 微调。
+
+下一阶段如需继续，只能另行授权 World 改进/校准/闭环验证；VLA 微调必须建立新的输入—示范
+数据合同并重新检查 World 对新候选的适用性。不能把这个负收益开发结果改写为安全收益，也不
+因效果一般追加模型搜索或采集。
+
 ### C3 — CORA Counterfactual Outcome World
 
-状态：`NOT_AUTHORIZED / NOT_STARTED`（C2 gate failed）。
+状态：`NOT_AUTHORIZED / NOT_STARTED`（原 C2 coverage gate failed；dev baseline 已交付）。
 
 - observable encoder + shared candidate encoder + cross-attention；
 - per-candidate progress/completion/collision/red-light/offroad/comfort/feasibility distributions；

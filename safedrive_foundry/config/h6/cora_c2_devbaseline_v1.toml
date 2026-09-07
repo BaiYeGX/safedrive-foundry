@@ -1,0 +1,27 @@
+schema_version = "safedrive.cora.dev_baseline.v1"
+quality_profile = "c2_dev_baseline_v1"
+dataset_id = "h6-cora-c2-devbaseline-20260907-v1"
+base_dataset_id = "h6-cora-c2-dev-20260830-v1"
+repair_dataset_id = "h6-cora-c2-repair-20260906-v3"
+training_splits = ["train"]
+evaluation_splits = ["validation"]
+audit_splits = ["coverage_pilot", "train", "validation", "calibration", "locked_development"]
+target_heads = [
+  "route_progress_m",
+  "acceleration_rms_mps2",
+  "jerk_rms_mps3",
+  "lateral_acceleration_rms_mps2",
+]
+seeds = [17, 29, 43]
+hidden_dims = [128, 64]
+learning_rate = 0.001
+weight_decay = 0.0001
+batch_size = 32
+max_epochs = 80
+patience = 10
+gradient_clip = 1.0
+pair_progress_weight = 0.5
+ridge_lambda = 1.0
+bootstrap_rounds = 1000
+cpu_threads = 4
+time_limit_s = 1800.0

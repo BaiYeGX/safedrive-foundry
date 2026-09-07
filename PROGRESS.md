@@ -4,6 +4,47 @@
 [`archive/2026-08-27-cora-document-consolidation/`](archive/2026-08-27-cora-document-consolidation/README.md)
 的原始快照和阶段文档中，不能作为活动任务或阈值来源。
 
+## 2026-09-07 — C2 调整完成：开发数据与 World 基线已交付
+
+状态：
+
+```text
+H6-CORA C2 dev baseline = COMPLETED / DEV_BASELINE_GATE_PASSED / STOPPED
+data release = DEV_DATA_READY (351 raw roots -> 340 usable roots, 11 isolated duplicates)
+split roots = coverage_pilot 25 / train 158 / validation 53 / calibration 52 / locked_development 52
+World baseline = MEASURED / NO_DEMONSTRATED_GAIN
+original rare-event coverage gate = GATE_FAILED (保留，不由新合同改写)
+closed_loop = NOT_MEASURED; calibration = NOT_RUN; VLA fine-tune = NOT_RUN; CARLA = 0 s
+```
+
+本轮把 C2 从“补齐稀有事件覆盖”改为“现有配对开发数据＋小型 World 基线”。新 release
+只引用原始 base 文件和已有 v3 更正 sidecar，不复制运行数据，不扫描或重算旧 Hash。审计读取
+全部 351 个原 root；11 个物理重复按规范化初态和 capture 条件隔离，不能靠 ID、seed、时间戳
+增加样本。训练入口只接受 `quality_profile=c2_dev_baseline_v1`，training 只允许 train，evaluation
+只允许 validation；coverage_pilot、calibration、locked_development 仅用于盘点。
+
+World 使用 499-D context 与 `10x8` candidate 编码的共享 128/64 MLP，目标为四个连续短时
+progress/comfort head，三个固定 seed（17/29/43），并与均值、context-only ridge、candidate-only
+ridge、Expert/VLA 固定策略比较。三 seed 都跑完，候选交换等变和 source metadata 隔离检查通过；
+candidate-only ridge 的 validation progress MAE 约 `0.302 m`，MLP 三 seed 约 `0.555/0.617/0.555 m`，
+所以报告写入 `NO_DEMONSTRATED_GAIN`。这只是当前采样分布上的开发评估，不是安全概率、闭环收益
+或通用策略价值声明。
+
+证据路径：
+
+```text
+generated/h6/cora/h6-cora-c2-devbaseline-20260907-v1/release-index.json
+generated/h6/cora/h6-cora-c2-devbaseline-20260907-v1/audit-report.json
+generated/h6/cora/h6-cora-c2-devbaseline-20260907-v1/world-baseline/baseline-report.json
+generated/h6/cora/h6-cora-c2-devbaseline-20260907-v1/final-delivery.json
+docs/runtime-evidence/h6/h6-cora-c2-devbaseline-20260907-v1/test-report.json
+```
+
+最终报告为 `DEV_BASELINE_GATE_PASSED`，同时明确记录原质量门 `GATE_FAILED`、closed-loop
+`NOT_MEASURED` 和 VLA 微调 `NOT_RUN`。全量回归为 495 tests、1 skipped、OK。下一接管点是
+先决定是否基于该负收益结果改进 World/补做独立评估，再单独核验 VLA 微调输入合同；不因本轮
+MLP 不占优追加模型搜索或 CARLA 采集。
+
 ## 2026-09-06 — C2 repair v3 收尾，诊断门仍失败
 
 状态：

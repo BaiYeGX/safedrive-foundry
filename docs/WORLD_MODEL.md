@@ -47,6 +47,25 @@ label 必须保留 proposal→repaired/MRM executable→applied 关系；采集�
 | 同 anchor 双 potential outcomes | C2 待采 |
 | 本文 CORA 模型、joint calibration、formal 闭环结论 | `PLANNED` |
 
+## 2A. C2 dev baseline（2026-09-07）
+
+为结束 C2，本轮先交付一个小型、离线、可复现的开发 baseline，而不是把它写成完整 CORA
+World 或在线 router。release `h6-cora-c2-devbaseline-20260907-v1` 在物理去重后包含 158 个
+train root 和 53 个 validation root；train 只使用既有 nominal Expert/VLA 配对，其他 split
+不进入拟合。
+
+模型是共享权重的 128/64 ReLU MLP，输入允许字段的 499-D context＋展平 `10x8` candidate，
+输出四个连续的短时 progress/comfort outcome。训练固定 AdamW、三 seed（17/29/43）、独立
+target mask、Huber loss 和 progress-difference 项；同时报告 train mean、context-only ridge、
+candidate-only ridge 与 Expert/VLA 固定选择策略。三 seed 均已完成，候选交换后输出随 candidate
+交换且 progress 差反号；source/slot/order/provenance 不在输入。
+
+validation 上 candidate-only ridge 的 route-progress MAE 约 `0.302 m`，三份 MLP 约
+`0.555/0.617/0.555 m`，因此 baseline 的 `gain_status` 是 `NO_DEMONSTRATED_GAIN`。这是当前
+采样分布内的开发结论，不是“World 无效”的普遍定理，也不等于安全或闭环收益；本轮不执行
+calibration、online router、CARLA closed-loop 或 VLA 微调。未来改进 World 或替换 VLA 后，必须
+重新冻结输入/标签/适用性和独立评估。
+
 ## 3. 输入与禁止项
 
 允许：

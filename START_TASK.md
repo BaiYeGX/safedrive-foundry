@@ -1,4 +1,43 @@
-# 当前唯一任务：H6-CORA C2 修复版（已授权实施）
+# 当前唯一任务：H6-CORA C2 开发基线收尾（已授权实施）
+
+## 2026-09-07 C2 调整：现有配对数据＋小型 World 基线（当前合同）
+
+用户已将 C2 的收尾目标调整为交付一份可审计的现有配对开发数据，并完成一个可复现的、
+候选条件下的短时进度与舒适性 World 基线。该目标替代“在本轮补齐所有稀有事件覆盖”的
+停止条件；2026-09-05/06 的 repair v2/v3 仍作为历史失败证据保留，不覆盖、不重跑其 CARLA
+数据，也不改变原始覆盖门。
+
+当前 release 与质量 profile：
+
+```text
+dataset_id    = h6-cora-c2-devbaseline-20260907-v1
+quality       = c2_dev_baseline_v1
+release       = generated/h6/cora/h6-cora-c2-devbaseline-20260907-v1
+evidence      = docs/runtime-evidence/h6/h6-cora-c2-devbaseline-20260907-v1
+data_status   = DEV_DATA_READY
+final_status  = DEV_BASELINE_GATE_PASSED
+old_gate      = GATE_FAILED (保留，未被新合同改写)
+```
+
+本次审计读取原登记的 351 个 root，只保留 340 个可用于新 release 的 root；11 个物理重复
+簇被隔离（跨 split 整簇隔离，同 split 按 root 名称保留一个），没有用 ID、seed 或时间戳
+制造新样本。实际 split 为 coverage_pilot 25、train 158、validation 53、calibration 52、
+locked_development 52。训练只读 train，开发评估只读 validation；其余 split 只做审计。
+仅使用 nominal Expert/VLA 配对和四个连续目标
+`route_progress_m`、`acceleration_rms_mps2`、`jerk_rms_mps3`、`lateral_acceleration_rms_mps2`；
+29-head 独立 mask、repair/intervention/稀有事件标签继续保留并报告，不能被未知值补成负例。
+
+World 基线已实际完成：共享 128/64 MLP，三个固定 seed（17/29/43），与 train 均值、context-only
+ridge、candidate-only ridge 及 Expert/VLA 固定选择策略比较，validation 上做 1,000 次 root
+bootstrap。候选交换等变检查通过（最大绝对差约 `2.4e-7`），输入不含 source/slot 元数据；但
+MLP 没有超过最强的 candidate-only ridge，因此结果诚实标记为 `NO_DEMONSTRATED_GAIN`，不把
+离线进度排序写成安全或闭环收益。三 seed checkpoint、逐 root 预测和报告均保留在 release
+目录；本轮不启动 CARLA、不运行 calibration、不做 VLA 微调、不接入在线 router。
+
+最终工程验收为 `DEV_BASELINE_GATE_PASSED`（数据 release、基线、可重载 checkpoint、测试和
+报告齐全）；原 C2 稀有事件覆盖门仍是 `GATE_FAILED`，closed-loop 和安全收益仍为
+`NOT_MEASURED`。全量回归证据为 495 tests、1 skipped、OK。旧文件/旧数据/旧模型 Hash 仅复用
+已有身份记录，未重新扫描或重算。
 
 ## 2026-09-06 C2 收尾合同（本轮优先）
 

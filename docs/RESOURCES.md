@@ -77,6 +77,18 @@ python -c "import torch; print(torch.__version__); print(torch.cuda.is_available
 
 总控应显式拒绝冲突 profile，不依赖 OOM 后恢复。
 
+### 4A. C2 dev baseline 实际资源口径（2026-09-07）
+
+本次收尾使用独立的离线 `cora_train` 子流程：不启动 CARLA、不加载 VLA、不占用 GPU，固定
+CPU 四线程和 30 分钟累计上限。实际三 seed MLP 与 ridge 对照均在该上限内完成；三个 checkpoint
+只保留在本机 release 目录，不上传原始数据或模型。对应 Evidence 明确写为
+`CARLA = 0`、`closed_loop = NOT_MEASURED`，不能把这个离线测量当作在线 scorer latency 或
+显存预算证明。
+
+新的 release 以 `cora_train` 作为训练配置入口，继续保留 `cora_calibrate`、`cora_online` 和
+`cora_data` 作为后续任务 profile。VLA 在本轮保持冻结；后续 VLA 微调要另建 profile、输入—
+示范合同和资源账本，不能与 World baseline 同一轮混用。
+
 ## 5. 在线显存预算
 
 下表全部是 `budget`，不是既有测量：
@@ -107,12 +119,10 @@ VLA 在 H6-CORA 保持冻结 nominal proposal。任何 LoRA fine-tune 必须等 
 
 ## 7. 数据与磁盘
 
-CORA development 预计包含：
-
-- 240–360 个有效 root anchors（单机预算假设，C2 前按事件覆盖重新冻结）；
-- 每 anchor 至少两个真实 50-tick branches；
-- 部分 offline-only intervention branches；
-- images、timelines、actor future、events、labels 和 manifest。
+C2 dev baseline 实际引用 340 个 usable root anchors（原登记 351，11 个物理重复隔离），其中
+train 158、validation 53；每个训练样本保留既有 nominal Expert/VLA 配对和 29-head sidecar，
+intervention/repair 只作审计。后续正式 CORA 数据若重新采集，必须另行冻结 root/branch 预算，不能
+把这里的开发 release 数字当成 formal 覆盖承诺。
 
 存储原则：
 

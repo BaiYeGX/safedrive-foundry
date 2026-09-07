@@ -28,6 +28,7 @@ def load_cora_roots(
     purpose: str = "training",
     require_complete_pair: bool = True,
     allow_pilot: bool = False,
+    quality_profile: str | None = None,
 ) -> tuple[dict[str, Any], ...]:
     path = Path(dataset_root)
     wanted = frozenset(str(item) for item in splits)
@@ -43,6 +44,28 @@ def load_cora_roots(
         raise ValueError(f"cora_loader_calibration_scope:{sorted(wanted)}")
     if purpose == "evaluation" and not wanted.issubset({"validation", "locked_development"}):
         raise ValueError(f"cora_loader_evaluation_scope:{sorted(wanted)}")
+    if quality_profile is not None:
+        if quality_profile != "c2_dev_baseline_v1":
+            raise ValueError(f"cora_loader_quality_profile:{quality_profile}")
+        release_path = path / "release-index.json"
+        if not release_path.is_file():
+            raise ValueError("cora_dev_release_missing")
+        release = json.loads(release_path.read_text(encoding="utf-8"))
+        if release.get("quality_profile") != quality_profile or release.get("status") != "DEV_DATA_READY":
+            raise ValueError("cora_dev_release_not_ready")
+        if purpose == "training" and wanted != {"train"}:
+            raise ValueError(f"cora_dev_training_scope:{sorted(wanted)}")
+        if purpose == "evaluation" and wanted != {"validation"}:
+            raise ValueError(f"cora_dev_evaluation_scope:{sorted(wanted)}")
+        if purpose not in {"training", "evaluation", "audit"}:
+            raise ValueError(f"cora_dev_purpose:{purpose}")
+        rows = tuple(
+            item for item in release.get("samples", ())
+            if item.get("split") in wanted
+        )
+        if not rows:
+            raise ValueError("cora_dev_release_no_rows")
+        return rows
     if (path / "repair-protocol.json").is_file():
         from .repair import merged_roots, read_json
         if purpose != "audit":

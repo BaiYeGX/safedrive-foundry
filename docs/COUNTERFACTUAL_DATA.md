@@ -72,6 +72,29 @@ seed 和时间戳，预算账本跨启动、采集和恢复累计。实际 Safet
 363 root/1329 branch；全量回归 492 tests run、1 skipped、OK。CARLA 已关闭，预算账本记录 118.4057
 秒的已记录工作时间；本版仍为 `DATA MEASURED / GATE_FAILED / STOPPED`，不能进入 C3。
 
+## 1C. C2 dev baseline 现有数据 release（2026-09-07）
+
+本次调整不新增 CARLA branch，也不把 repair v2/v3 的诊断或 intervention 当作训练样本。新
+`h6-cora-c2-devbaseline-20260907-v1` 通过 `c2_dev_baseline_v1` profile 读取 base pair index
+和 v3 corrected-label sidecar，保留原 root/branch 身份；旧文件、旧数据和旧模型 Hash 不重扫。
+
+审计粒度仍是 physical root/capture cluster。351 个原 root 中，按规范化路线、ego 初态、NPC/灯控、
+天气和 capture 条件检查出 11 个重复：跨 split 的重复簇整簇隔离，同 split 的重复按 root 名称排序
+保留一个。最终 340 个 root 的 split 为 coverage_pilot 25、train 158、validation 53、
+calibration 52、locked_development 52。训练只使用 train 的 nominal Expert/VLA 两候选，开发
+评估只使用 validation；其他 split 继续保留作审计，不能被 loader 当作 held-out training 输入。
+
+29 个 public outcome heads 仍独立保存 value、unit、valid mask 和 derivation version。baseline 只
+学习 `route_progress_m`、`acceleration_rms_mps2`、`jerk_rms_mps3`、
+`lateral_acceleration_rms_mps2` 四个连续 head；collision、red-light、offroad、executable 和
+repair 只报告真实分布和缺测。未知 repair trace 不补成负类，单个辅助 head 缺测不删除其他有效
+监督。新 loader 必须同时看到 `DEV_DATA_READY`、正确 profile、training/evaluation split 和
+完整 release index，否则拒绝读取。
+
+这个 release 的用途是可复现的短时 outcome baseline，不再声称本轮已完成完整 counterfactual
+coverage gate。后续若要重新采集或改变候选生成器，必须创建新的数据合同，并重新检查物理去重、
+reset、proposal/execution 绑定和 World 对新版候选的适用性。
+
 ## 2. 已确认的旧数据缺口
 
 对 `h6-vla90-train-pilot-20260820-v2` 的 loader 审计：
