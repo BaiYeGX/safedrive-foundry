@@ -4,6 +4,242 @@
 [`archive/2026-08-27-cora-document-consolidation/`](archive/2026-08-27-cora-document-consolidation/README.md)
 的原始快照和阶段文档中，不能作为活动任务或阈值来源。
 
+## 2026-09-09 — C3 完成：真实数据适配、M0 基线与 M1 LoRA SFT（VERIFIED）
+
+状态：
+
+```text
+H6-CORA C3 = VERIFIED / ENGINEERING_COMPLETED / ALGORITHM_MEASURED / STOPPED
+authoritative run = c3-vla-sft-20260909-final-v3
+next entry = C4（本轮不自动执行）
+```
+
+本轮使用冻结 C2 dev release `h6-cora-c2-devbaseline-20260907-v1`，没有重跑 C2、重扫旧
+Hash 或使用 calibration/locked/pilot。适配层从独立的 `train` 与 `validation` split 读取
+158/53 个 root（共 211 个 sample），检查 base anchor、navigation、当前图像、ego/history、
+canonical expert proposal 与执行时间线的身份绑定。manifest SHA-256 为
+`e5116aedd2b79e1512f4f0567f1b740880623fce4f977e9470bf6786f21c1bb3`，release index SHA-256
+为 `0c867199d9b6682648471b21a2ab850c86bf8f1eb4d8eb99d73abe3e7c8789b8`。route 使用原生 20
+个空间点（含当前 ego 原点，弧长 0…19 m），speed 使用执行时间线上的原生 10 点（0.25 s
+间隔）；有效 route 点为 train/validation `3160/1060`，有效 speed 点为 `1550/530`。
+3 个提前终止的 train sample 保留 10 个 speed 缺失 mask；缺失没有被填充为有效标签。输入中
+没有 future 或 World label，audit 为 `AUDIT_PASSED`，所有 53 个 validation root 与 train
+root 隔离，执行时间线行数为 1…50，实测 dt 为 0.05 s（浮点表示差异已记录）。C2 已有完整
+可信 expert timeline，因此没有执行补采，也没有启动 CARLA；配置仍记录确认的
+`E:\\CARLA_0.9.16\\CarlaUE4.exe` 路径和“不需要补采”的原因。
+
+真实 GPU smoke 在 RTX 4080 上通过：CUDA 可用，模型使用 BF16，checkpoint 的 336 个 LoRA
+匹配项与 10 个驾驶 head 匹配项均无 missing/unexpected key；LoRA 参数 17,596,416 个，
+驾驶 head 参数 821,248 个，共 18,417,664 个可训练参数，冻结视觉投影、基座和 query
+embeddings。真实 batch 完成 forward/backward、小步更新、adapter 保存和独立 fresh reload，
+round-trip 最大绝对差为 0（容差 `1e-5`），峰值 allocated/reserved 为
+`4.319/4.914 GiB`。C4 共享 hidden 的诊断梯度通路也测到非零 auxiliary gradient（hidden
+896，SFT norm 21.1636，aux norm 2.9575，cosine -0.3814，门控权重 w=0，q=1）；它只用于
+共同预算登记，没有混入 C3 SFT loss。
+
+正式 M0/M1 使用 seed 17、AdamW（LoRA `2e-5`、驾驶 head `1e-4`、weight decay `0.01`）、
+microbatch 1、累积 4、200 个有限有效更新和冻结日程（前 10 步 head-only，第 11 步起 LoRA
+线性预热并余弦衰减）。M1 达到 `200/200` 更新，独立 checkpoint 可重载，LoRA 与驾驶 head
+均实际变化，冻结参数指纹未变。训练耗时 267.697 s（约 4.46 min），峰值 allocated/reserved
+为 `4.259/4.398 GiB`，低于 14.5 GiB 峰值限制；adapter 为 72,156,073 bytes，完整恢复
+checkpoint 为 216,521,989 bytes。资源账本记录 C3/C4 合计 10 h GPU 优化预算和本次实际消耗。
+
+M0/M1 在固定 53 个 validation root 上先 root 内聚合、再 root 等权；配对 bootstrap 固定
+1000 次、seed 71，重复 M0/reload 得到 `eps_ADE=1e-5 m`。结果（越低越好）：
+
+| 指标 | M0 | M1 | 绝对改善 M0−M1 | 相对改善 | 95% 配对 bootstrap CI |
+|---|---:|---:|---:|---:|---:|
+| P-ADE route (m) | 5.032139 | 0.464337 | 4.567802 m | 90.7726% | [4.204761, 4.863890] m |
+| P-FDE route (m) | 5.576035 | 0.585869 | 4.990166 m | 89.4931% | [4.614955, 5.325819] m |
+| P-WP speed (m) | 1.984764 | 0.531818 | 1.452946 m | 73.2050% | [1.240386, 1.675059] m |
+
+两组均为 53/53 root，预测失败率均为 0%；P-SPEED 按合同为 `N/A`，因为没有可信的真实速度
+换算 ground truth。上述是一次 seed 的开发集结果，不代表独立测试或训练稳定性；正向幅度远
+超出预登记 0.01 m / 2% 规划目标，但工程验收不依赖正收益，所有逐 root 明细、有效点数、
+mask 和失败原因均保留。
+
+权威产物均在本机唯一目录
+`generated/h6/cora/c3-vla-sft-20260909-final-v3/`：`manifest.json`、`run_config.json`、
+`audit.json`、`smoke.json`、`m0_predictions.json`、`m1_adapter.pt`、`checkpoint_latest.pt`、
+`m1_training_summary.json`、`training.jsonl`、`m1_predictions.json`、`metrics-spec.json`、
+`metrics.json`、`resource-ledger.json`、`evaluation-report.json`、`verify.json` 和
+`stage-summary.json`。核心内容 hash 见 `verify.json`，其状态为 `VERIFIED`；stage summary
+绑定代码 SHA-256 `a41d4740993b3d3d67950940abb5b7c2ff4a1d9b0a42e66e57f912a4c862bf81`、运行时
+Git HEAD `598308fd4cb57df94f02f784404635e942c3ff9c`、模型 SHA-256
+`ec8943723d266ee9f5f56f45d153a163b22616960bfccb741965ea5daa700d28` 与 release 身份。
+大型权重和本地产物按规则保持 ignored，不进入 Git；报告和复现入口随代码提交。
+
+实际验证命令：
+
+```text
+/home/sdf/.venvs/sdf/bin/python -m unittest discover -s tests -t . -v
+# Ran 506 tests in 73.859s; OK (skipped=1)
+/home/sdf/.venvs/sdf/bin/python -m compileall -q safedrive_foundry scripts
+git diff --check
+```
+
+下一入口已切到 C4；根据单任务循环，本轮在 C3 验收后停止，不自动开始联合训练。
+
+## 2026-09-08 — 论文与源码联合研究后的实施优化（DOCUMENTATION COMPLETE）
+
+本轮检索并核对驾驶 VLA/WAM、专家学生信息不一致、表示保持、LoRA 初始化与辅助梯度
+文献；重点查看部分原文方法段，并读取本地 SimLingo adaptor/dataset、在线运行器、
+C2 ridge 拟合和 release 元数据。研究范围包括近期预印本，不把摘要结果当本项目实测。
+文档只落实实施决定，未增加论文列表或新任务。
+
+源码确认 route 为 20 个空间点（弧长 0…19 m），speed 为 10 个时间点，驾驶 head 对增量
+做 cumsum；在线运行器有全参数冻结/inference_mode，不能直接充当训练入口。
+上游 future 缺文件可复制上一记录、旧 ridge 拟合未逐头 mask，新适配不得将缺失填作有效标签。
+这些是适配风险与源码事实，不表示当前未实现的 C3 已发生同样训练错误。
+
+调整 C3/C4 合同：驾驶/World 分组裁剪，smoke 后恢复 M0、显式可训练白名单和 query 冻结、
+root 无放回轮转、实际累积窗口归一化、训练部署输入一致性与原生采样/累加检查。
+2% 目标/3% 争取目标、两次训练、6 roots/18 attempts 和所有预算不变。
+不移植新视频 backbone、RL、多模型 teacher 或覆盖已有 LoRA 的初始化方法。
+本轮只修改 10 份既有活动文档，未修改运行代码或冻结 Evidence；方案 PLANNED，收益 NOT_MEASURED。
+
+验证：执行 CPU 裁剪代数断言（不是模型测试），检查文档链接/围栏/阶段编号与 diff/stat，
+git diff --check；原 EVIDENCE 全文保留为前缀。未训练、未跑 CARLA、未设置 goal、未 commit/push。
+当前仍 C3 NOT_STARTED；真实监督可用量、梯度链路、显存/耗时与方法收益待对应阶段实测，
+本轮无用户接管操作。
+
+## 2026-09-08 — 离线改善规划提高至 2%–3%（DOCUMENTATION COMPLETE）
+
+按用户要求，将 PROJECT 中 M1/M0、M2/M1 的 P-ADE 及 b+R/b 的进度 W-MAE
+相对改善规划由 1% 提高为目标 ≥2%、争取 ≥3%；仍须同时满足绝对下降 ≥0.01 m。
+补充相对/绝对幅度算例。C5 的进度目标、微弱趋势口径、两次训练和资源预算保持不变。
+当前尚未正式训练，此调整为 PLANNED 目标变更，收益仍 NOT_MEASURED，C3 NOT_STARTED。
+本轮只修改 PROJECT 与本进度记录；检查目标文本、diff/stat 与 git diff --check，
+未启动训练/CARLA、未改历史 Evidence，无需用户接管。
+
+## 2026-09-08 — 论文量化合同完善（DOCUMENTATION COMPLETE）
+
+用户要求将项目优势落实为量化指标。本轮只修改 12 份既有活动文档，在 PROJECT 建立
+c3_c6_metrics_v1 计划合同，并同步 C3/C4/C5/C6、数据、资源、证据和入口。
+定义原生策略误差、四头后果误差、配对排序/遗憾、闭环进度/违规/舒适性、覆盖/干预、
+时延/显存/训练参数与数据接口不变量的单位、公式、分母、缺失处理及解释边界。
+主要方法指标仍为 M2/M1 route ADE；新增规划幅度不改变原微弱趋势阈值或工程验收。
+统一 root 等权与配对区间，保留旧 C2 聚合/平局口径，禁止与新统计直接混算。
+C6 计划从同一原始明细生成四组论文表和配对差图；不新增训练或 CARLA 次数。
+
+复核 SimLingo 官方补充材料和 CARLA 官方评估说明，区分本地开发指标与官方榜单分数；
+文档没有添加论文列表。量化实现/目标均 PLANNED，新增收益 NOT_MEASURED，仍 C3 NOT_STARTED。
+检查 12 份文档的本地链接、代码围栏和阶段编号，历史 EVIDENCE 全文前缀保留；
+diff 首次发现一处行尾空白并修复，最终重新运行 git diff --check。未运行模型测试、训练或闭环，
+未改变冻结模型/数据/运行 Evidence，无 commit/push 或 goal 启动。
+待后续 C3 实现 metrics-spec/逐 root 记录与实际运行验证；本轮无用户接管操作。
+
+## 2026-09-08 — 提高单次实验正向机会的研究修订（DOCUMENTATION COMPLETE）
+
+用户要求进一步搜集论文、提高一次固定实验获得微弱真实收益的机会。
+本轮筛查近期 VLA 适配/能力保持、辅助负迁移、残差 World 与稳定训练方法，
+核对部分原文/作者来源与本地 C2 ridge 报告/代码；没有运行新训练或闭环。
+已有 validation ridge 的进度 ranking 52/52、53 pairs regret=0 为旧开发报告数值，
+不是本轮新实验，也不能作为仍有上升空间的主目标。
+
+C3 改为共同短 head 预热与较小 LoRA 学习率；C4 在固定候选 ridge 上学残差，
+以驾驶梯度相容门控/限幅约束共享辅助更新；新增梯度成本在 C3 smoke 后统一冻结 T。
+仍仅 M1/M2 两次训练、C5 三臂 18 attempts，资源总上限不变。
+主要方法指标明确为 M2/M1 route ADE；M1/M0、C/B 与 World 误差分别报告，
+不得挑次指标包装主任务成功。点估计、数值误差、CI 和代价分别解释。
+
+更新 C3–C6 合同及相关活动文档，未堆论文列表，未设置/启动 goal。
+新配方 PLANNED / NOT_RUN，收益 NOT_MEASURED；当前仍 C3，前置数据/GPU 尚待实测。
+没有修改冻结数据、阈值、模型或运行 Evidence，没有安装/下载/commit/push。
+验证：18 份活动文档的 59 个本地链接、围栏、无小数阶段与四份 goal 合同检查通过，
+git diff --check 通过，已检查 diff/stat。EVIDENCE 原有全文保持为前缀，只追加本轮合同；
+未改冻结运行 Evidence。本轮没有模型回归或训练，不将旧测试数当新回归。
+
+## 2026-09-08 — 四阶段 goal 执行合同完善（DOCUMENTATION COMPLETE）
+
+用户要求现在研究论文、任务文档只写可执行细节。本轮检索与核对驾驶 VLA、辅助未来监督、
+开发闭环评估的一手方法/代码，并检查本地原生 hidden-state 与训练配置入口。
+不新增论文综述，不扩大四阶段/两次训练/一次开发闭环范围。
+
+C3/C4/C5/C6 各有可复制 goal、前置输入、允许改动、执行方法、产物与验收/停止条件；
+统一 ROADMAP 索引、START_TASK 阶段选择与 stage-summary 交接。新增训练默认配置、
+同预算/数据暴露控制、h/teacher 信息隔离、配对运行次序、失败占预算与 C6 离线复现。
+配置是待实测的工程默认值，未宣称来自论文最优结果。当前仍 C3 NOT_STARTED，
+M1/M2/新闭环 NOT_RUN；没有设置 goal、运行训练/CARLA、修改冻结 Evidence 或安装下载。
+
+验证：18 份活动文档的 61 个本地链接、代码围栏、无小数阶段与四份 goal 合同检查通过，
+git diff --check 通过，已检查 diff/stat。EVIDENCE 原有全文保持为前缀，仅追加交接摘要合同，
+既有哈希引用保留。最初一次代码搜索使用不存在的 nominal_policy 路径，随后定位到
+driving_vla/model/nominal_policy.py；未运行模型测试，未将搜索当运行验证。
+没有用户接管事项；实际标签、权重兼容和训练/在线资源仍由后续对应 goal 实测。
+
+## 2026-09-08 — 一周四阶段重构（DOCUMENTATION COMPLETE）
+
+用户要求进一步简化全部项目文档，不使用小数子阶段。本轮在原分支直接重构 18 份活动
+文档；当前仅 C3 数据与常规微调、C4 四维后果联合微调、C5 三臂 18-run 开发闭环、
+C6 复现与论文交付。目标第 1–6 天完成，第 7 天缓冲。
+
+必做训练由三种变为两种新模型 M1/M2；M0 只作离线基线。
+撤下执行机制分解、ensemble、正式校准、四臂/大规模 formal 与额外公开数据下载。
+World 用 C2 已有四个连续标签，不要求新增控制/未来序列。当前任务为完整 C3，
+数据与 GPU smoke 是阶段内检查，不再拆任务。旧正式矩阵与保留集仍冻结。
+
+状态：C3/C4/C5/C6 PLANNED / NOT_RUN；本轮仅文档，没有训练、CARLA、安装或下载。
+C0–C2、历史负结果与运行 Evidence 未改。新的简化计划替代下文当时的复杂路线；
+下文所有排期/模型数量/旧子步骤仅作历史，不能覆盖当前 START_TASK 与 ROADMAP。
+
+验证：18 份活动文档的 59 个本地链接有效，代码围栏配对通过，未残留小数 C 阶段编号；
+C3/C4/C5/C6 各有唯一阶段定义。已检查 diff/stat，git diff --check 通过。
+Evidence 中 12 个历史证据/环境/归档章节原文不变，既有哈希引用全部保留；
+没有修改代码或冻结运行 Evidence，不将历史模型测试充当本轮回归。
+无需用户接管本次文档修改。下一实施按 START_TASK 完成 C3；监督与 GPU 可用性尚待实测。
+
+## 2026-09-08 — C3–C6 完整路线同步（DOCUMENTATION COMPLETE）
+
+用户明确要求直接修改 C3 起所有步骤与现有文档，不新开。本次在原分支完成文档统一：
+原数据准备子步骤 数据/权重/真实梯度准备 → 原常规微调子步骤 常规 VLA SFT → 原联合训练子步骤 直接未来辅助与执行分解联合
+对照 → C4 版本绑定/在线接入/有条件校准 → C5 四臂闭环 → C6 复现与论文材料。
+
+已替换“结题后才微调 VLA”、旧 C1/C2 当前入口与 C3 未授权的活动状态；历史授权/任务
+记录保留并标注日期范围。同步 README、START_TASK、ROADMAP、AGENTS、项目/数据/模型/
+候选/文献/展示/资源/环境/Evidence、runtime 入口及三份已有研究备忘录。
+没有新增文件、分支或任务，没有修改代码、冻结数据/阈值、模型或运行 Evidence。
+
+当前状态：C3–C6 路线已确认 / PLANNED；原数据准备子步骤 NOT_STARTED；SFT/joint training NOT_RUN；
+新 calibration/closed-loop/formal NOT_RUN。C2 工程门通过、原稀有门失败、MLP 未超过 ridge
+均保持原状。M1/M2 为必做真实训练；M3 为必须尝试并如实结论的机制对照；不保证一次正收益。
+本周预算和日期为规划而非实测。下一实施任务严格读取 START_TASK 的 原数据准备子步骤。
+
+验证：18 份活动文档的 74 个本地 Markdown 链接均可解析；阶段/状态交叉检查与
+`git diff --check` 通过；Evidence 中 12 个历史证据/环境/归档章节原文保持一致，
+10 个既有哈希引用全部保留。修改仅涉及 15 个 tracked Markdown 和 3 个此前已存在的
+untracked 研究备忘录；代码围栏配对通过，已检查 diff/stat。未触碰 archive 或运行 Evidence。
+本轮未运行模型测试、GPU batch、CARLA、训练、下载或安装；历史 495 tests 不是本轮回归。
+用户无需为本次文档同步接管环境；原数据准备子步骤 尚需实际核验标签序列、checkpoint 兼容和显存。
+
+## 2026-09-08 — World–VLA 完整主线文献深化（RESEARCH / PROPOSED）
+
+用户进一步明确：完整主线不止 VLA 微调。本轮检索并核对 World/VLA 联合学习、未来表征、
+模型内策略优化和可靠性近邻，形成 [研究记录](docs/WORLD_VLA_FRONTIER_20260908.md)。
+建议优先真实未来辅助监督与 VLA LoRA 联合学习，保留 World 在线 rank/defer 和既有执行链；
+执行机制分解仅为待验证创新候选，不声称已实现或新颖性已证实。前一份 VLA 计划作为训练
+工作包，不能代表整个项目。未运行训练/CARLA、未改模型/数据或冻结合同；文档检查通过。
+
+## 2026-09-08 — 后续主线改为真实 VLA 微调（准备中）
+
+用户明确希望做 VLA 微调，上一轮以审计为主的建议不再采用。新增
+[VLA 微调方案](docs/VLA_FINETUNE_WEEK_PLAN.md)，既有 H 阶段证据全部保留。
+本轮确认本地驾驶权重、InternVL2-1B 权重、原生 LoRA/动作头代码与主要包可定位。
+受限进程 NVML 被阻断后，通过获准只读 probe 读到 RTX 4080 / 16376 MiB / 已用 1073 MiB。
+此结果不代表训练资源实测。训练数据对齐、checkpoint adapter 映射及真实 batch 梯度检查
+尚未完成；VLA fine-tune 仍为 NOT_RUN。未启动 CARLA、未安装包、未下载数据、未修改模型。
+本轮为代码/资产检查与方案文档更新，`git diff --check` 通过；未运行训练或回归测试。
+
+## 2026-09-07 — 一周收尾研究方案（PROPOSED，未实施）
+
+用户补充一周内结束、保留既有成果、不依赖训练正收益的要求。本轮只完成进一步文献检索、
+既有 baseline-report 与指标源码核对，并新增 [独立方案](docs/ONE_WEEK_RESEARCH_PLAN.md)。
+报告中 candidate-only ridge 的 validation progress ranking 为 52/52，53 个有效配对的
+selection regret 为 0；ranking 仅计真实差值绝对值大于 0.5 m 的配对。上述为既有 MEASURED
+报告的核对，未独立重跑实验。方案建议执行感知的决策能力审计，不表示已获得新创新或收益。
+未训练、未启动 CARLA、未读取 calibration/locked 的结果，未改变现有 H 阶段停止状态。
+本轮仅文档修改；`git diff --check` 通过，没有运行模型测试或全量回归。
+
 ## 2026-09-07 — C2 调整完成：开发数据与 World 基线已交付
 
 状态：
@@ -216,7 +452,7 @@ H6-CORA C2 counterfactual data = AWAITING SEPARATE AUTHORIZATION / NOT_STARTED
 - `scripts/h6_run_lock.py` 不在 C1 原允许路径表内，但用户本轮计划明确要求 C1 后 run-lock
   绑定 evaluator、validation lineage 和训练输入哈希，因此只做该必要调用链修改，没有扩展重构。
 
-### C1.1 validation、evaluator、readiness
+### C1 历史工作项 validation、evaluator、readiness
 
 - `safedrive_foundry/data_pipeline/h6/dataset.py` 对 validation row 的 feature、trajectory、target、
   mask、split、seed、group 和样本身份生成稳定 lineage hash；
@@ -240,7 +476,7 @@ H6-CORA C2 counterfactual data = AWAITING SEPARATE AUTHORIZATION / NOT_STARTED
 action/context sensitivity、swap 不变量失败或任一 hash/顺序不一致时 readiness 失败；CPU evaluator
 的 incremental GPU peak 正确记录为 `NOT_MEASURED/value=null`，不能获得正式 readiness。
 
-### C1.2 per-sample multi-task 与 Group-DRO
+### C1 历史工作项 per-sample multi-task 与 Group-DRO
 
 - `model.py` 新增逐样本 head report：objective、progress、completion、collision、red-light、
   offroad、comfort、repair、trust、pair preference 和 executable 各有独立 unreduced loss/mask；
@@ -255,7 +491,7 @@ action/context sensitivity、swap 不变量失败或任一 hash/顺序不一致�
 失败行为：mask 外 target 变化不影响 loss，repair/executable 独立 mask；空监督 batch 不可优化，
 空 group 不会伪装成零风险或 gate pass。
 
-### C1.3 唯一 temporal selector
+### C1 历史工作项 唯一 temporal selector
 
 - 新增 `safedrive_foundry/data_pipeline/h6/temporal.py` 的纯状态机，状态仅保存作用域内
   `expert`/`vla` source 和 source EMA，不保存 candidate ID；HOLD 总是返回本 tick fresh ID；
@@ -269,7 +505,7 @@ action/context sensitivity、swap 不变量失败或任一 hash/顺序不一致�
 失败行为：scope 不匹配会重置，held source 不可用或 unsafe 不会复活，Guard REJECT 不会重新
 进入候选；无 eligible source 返回 `DEFER_SINGLE_CANDIDATE`/MRM 稳定原因。
 
-### C1.4 single tick owner 与 cleanup
+### C1 历史工作项 single tick owner 与 cleanup
 
 - `scripts/h5_collect.py` 删除 runtime 外直接 `world.tick()` 和强制推进/强杀恢复；正常运行仍只
   通过 `ScenarioRuntime.tick_controls()`；
@@ -280,7 +516,7 @@ action/context sensitivity、swap 不变量失败或任一 hash/顺序不一致�
 
 失败行为：residue 永不调用 fake/world tick；clean scene 也不推进 world，只允许一次既有 retry。
 
-### C1.5 benchmark 与 Evidence 真实性
+### C1 历史工作项 benchmark 与 Evidence 真实性
 
 - `scripts/h5_ultimate_benchmark.py` 现在只产生
   `benchmark_scope=latency_only_smoke`、`model_state=random_untrained`、
@@ -535,7 +771,8 @@ hardening，但没有形成新 CUDA checkpoint、CORA 数据或正式 CARLA Evid
 
 ## 2026-08-27 代码与数据审计确认的问题
 
-这些问题是 C1/C2/C3 的依据，不是已经完成的修复。
+以下为 2026-08-27 当时的问题记录；其中“当前”“必须修复”描述当时状态。
+C1 已于 2026-08-30 完成对应工程加固，不能从本历史段落推断仍待修复。
 
 ### 1. 旧 H6 tickwise 反事实监督缺失
 
@@ -581,7 +818,7 @@ offline calibration 用稳定 source key；live EMA 使用 frame-scoped candidat
 
 这些在 C1/C6 分别修复；当前不能作为简历正式结果。
 
-## 最近一次实际离线验证
+## 历史离线验证（2026-08-27，非最新）
 
 2026-08-27 全仓审计期间实际运行：
 
@@ -605,11 +842,6 @@ CARLA 可用；这次失败只代表该进程访问范围。任何后续真实�
 
 ## 当前接管点
 
-下一轮严格执行 [START_TASK.md](START_TASK.md) 的 C1：
-
-1. 先检查分支和工作区；
-2. 只修 validation/loss/temporal/tick-owner/readiness 真实性；
-3. 新行为加直接测试；
-4. 跑专项与全量离线回归；
-5. 更新本文后停止；
-6. 不采 CORA 数据、不训练、不运行 CARLA formal、不自动进入 C2。
+唯一下一任务为 [START_TASK](START_TASK.md) 的 C3：在同一阶段完成数据适配、真实 batch
+与保存恢复检查、M0 离线基线、M1 常规 VLA 微调。验收后更新入口到 C4 并停止。
+本轮文档修改不自动开始训练；后续只有 ROADMAP 的四个完整 C 阶段。

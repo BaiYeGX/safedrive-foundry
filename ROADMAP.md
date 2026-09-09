@@ -1,248 +1,140 @@
-# SafeDrive Foundry 结题路线
+# 一周结题路线
 
-唯一活动研究链仍是 `H0 → H1 → H2 → H3 → H4 → H5 → H6`。H0–H5 已冻结，H6-CORA
-是 H6 的最终结题修订，不创建新的平行路线，不从 `archive/` 恢复旧任务。
+唯一研究链 H0→H1→H2→H3→H4→H5→H6 不变；下面的 C 阶段属于 H6。
+C0–C2 已完成并冻结。本周只做 C3、C4、C5、C6，不再设小数编号或并行路线。
+当前状态：C3 已于 2026-09-09 `VERIFIED`，下一入口为 C4（尚未启动）。唯一执行入口见
+[START_TASK](START_TASK.md)；C3 权威产物为
+`generated/h6/cora/c3-vla-sft-20260909-final-v3/`。
 
-## 1. 总路线与当前状态
+## 已有基础
 
-```mermaid
-flowchart TD
-    H0["H0 Consolidate<br/>VERIFIED"] --> H1["H1 Independent candidates<br/>VERIFIED"]
-    H1 --> H2["H2 Paired outcomes<br/>GATE PASSED"]
-    H2 --> H3["H3 World development<br/>GATE PASSED"]
-    H3 --> H4["H4 Locked evaluation<br/>GATE PASSED"]
-    H4 --> H5["H5 World on/off closed loop<br/>GATE FAILED"]
-    H5 --> H6["H6 VLA-primary v1/v2<br/>NOT VERIFIED"]
-    H6 --> C0["C0 Document consolidation<br/>COMPLETED"]
-    C0 --> C1["C1 Correctness hardening<br/>COMPLETED"]
-    C1 --> C2["C2 Existing-data dev baseline<br/>DEV BASELINE PASSED"]
-    C2 -. "original coverage gate failed; next work optional" .-> C3["C3 World improvement / calibration<br/>NOT STARTED"]
-    C3 --> C4["C4 Calibrated router"]
-    C4 --> C5["C5 Pilot and frozen formal"]
-    C5 --> C6["C6 Showcase and close"]
-```
+| 阶段 | 保留的成果 |
+|---|---|
+| C0 | 文档与工程入口整理 |
+| C1 | 数据、损失、selector、tick owner 正确性加固 |
+| C2 | 340 usable roots；train 158 / validation 53；World 基线交付但未超过 ridge |
 
-| 阶段 | 状态 | 已冻结结论/交付物 |
+原 C2 稀有事件门仍失败；H5 闭环负结果与 H6 旧 pilot 保留。
+这些是已有基础，不重跑、不重新追齐稀有事件。详细历史见 [PROGRESS](PROGRESS.md)。
+
+## C3 — 数据接好，完成 VLA 微调（已完成，2026-09-09）
+
+时间：第 1–2 天。交付：原始模型 M0 的离线基线、常规 LoRA 微调 M1 及可重载权重。
+
+复用本地 SimLingo 与现有 train/validation。把可信 expert 轨迹适配为原生 route/speed
+监督，核对图像、时间、坐标、checkpoint keys。先用真实 batch 验证梯度和保存恢复，
+随后在同一 C3 内完成一次固定配方训练；不再把这些工程动作拆成独立阶段。
+
+只训练原生兼容 LoRA 与驾驶头，冻结基座；采用同一短预热和较小学习率保护已有能力。
+原生 query embeddings 保持冻结；空间/时间标签、增量累加、干净重载、root 无放回顺序
+与驾驶/World 分组裁剪按 C3/C4 合同执行，均包含于原两次训练和 smoke 预算。
+第一天必须确认有效监督和真实 GPU batch。
+现有数据不足时，先检查已有原始 timeline；仍不足才执行一次预登记的有界正常专家补采，
+不下载大数据、不重开 C2 稀有事件任务。若第一天结束仍无有效监督，立即报告具体缺项，
+不得继续承诺能按原日程完成训练。
+
+验收已通过：M1 确实更新 VLA 参数，可重载，有逐 root 开发预测、损失与资源记录；
+完整证据见 [PROGRESS](PROGRESS.md) 与 [EVIDENCE](docs/EVIDENCE.md)。不要求 M1 必然胜 M0
+才进入 C4，但无效训练不能通过。
+
+## C4 — 加一个 World 辅助任务，完成联合微调
+
+时间：第 3–4 天。交付：联合模型 M2，以及 M0/M1/M2 离线对照。
+
+使用与 M1 相同的起始权重、SFT 数据、seed 和优化步数，额外加入候选条件后果监督。
+先使用 C2 已有四个连续目标：进度、加速度 RMS、jerk RMS、横向加速度 RMS。
+不新增未来视频、逐时刻控制预测或稀有事件概率头，不依赖新的序列标签。
+
+World 输入为当前共享表示 h 和原始候选 p；固定候选 ridge 给出 b，小型 head 学习真实
+后果残差。驾驶梯度相容且限幅的辅助项进入 LoRA；配对差分从完整 b+R 预测相减。
+这是一份固定组合配方，初始等于基线不保证训练后更好，梯度相容不保证泛化收益。
+只维护 M1/M2 两份新训练权重，不再要求第三种机制模型、ensemble、RL 或完整梯度截断训练。
+
+验收：联合训练真实完成；World-only backward 可到达 LoRA；无未来/source 信息泄漏；
+候选交换正确；报告 M1/M2 策略误差与 World 对 ridge 的差距。未超过基线照实保留。
+联合学习是研究问题，不能把已有配对损失重新宣称为原创算法。
+
+## C5 — 接入在线，做一轮小型闭环对照
+
+时间：第 5 天，允许使用第 6 天的缓冲。交付：三臂真实 CARLA 开发实验与重放。
+
+| 臂 | VLA | 选择 |
 |---|---|---|
-| H0 | VERIFIED / STOPPED | H-only 活动路线、可恢复归档、单机边界 |
-| H1 | VERIFIED / STOPPED | 独立 Expert/VLA 候选、逐候选 Guard、身份链 |
-| H2 | VERIFIED / GATE_PASSED / STOPPED | 120 terminal、108 valid/distinct、83 decisive paired outcomes |
-| H3 | VERIFIED / GATE_PASSED / STOPPED | metadata-source-blind candidate-conditioned scorer 与开发消融 |
-| H4 | VERIFIED / GATE_PASSED / STOPPED | 64 decisive locked test；小样本离线门通过 |
-| H5 | VERIFIED / GATE_FAILED / STOPPED | 222 paired runs；未证明闭环净收益 |
-| H6 v1/v2 | IMPLEMENTED / MEASURED / NOT_VERIFIED | seed 101 pilot 未达 World/VLA-primary gate；v2 只有代码、无正式验证 |
-| H6-CORA C0/C1 | COMPLETED / STOPPED | 文档收敛与 correctness hardening 完成 |
-| H6-CORA C2 data | MEASURED / GATE_FAILED / STOPPED | 351 valid pairs；原覆盖门不足，负结果冻结 |
-| H6-CORA C2 repair v2/v3 | MEASURED / GATE_FAILED / STOPPED | v2 保留 351 base roots + v3 correction；v3 修通 recipe/trace/预算链，12 Town03 diagnostic roots / 34 branches；repair-failure 1/2，coverage 缺口保留 |
-| H6-CORA C2 dev baseline | MEASURED / DEV_BASELINE_GATE_PASSED / STOPPED | 351 原 root 审计后 340 usable、11 物理重复隔离；train 158 / validation 53；World 三 seed 完成但 `NO_DEMONSTRATED_GAIN` |
-| H6-CORA C3+ | NOT_AUTHORIZED / NOT_STARTED | 可选的 World 改进、校准、闭环验证和 VLA 微调；本轮均未执行 |
+| A | M1 常规微调 | VLA→Expert 的固定 eligible 优先规则 |
+| B | M2 联合微调 | 与 A 相同 |
+| C | 与 B 相同 | 配套 World rank/defer |
 
-## 2. 结题研究问题
+A/B 比较联合训练后的策略变化；B/C 比较同模型的在线选择作用。
+M0 只作离线基线，不再增加原始 VLA 的独立 World 训练和第四臂。
+三臂都生成两个独立候选；A/B 保留相同次数的 shadow scorer 运算用于负载对齐，
+其分数不参与选择，M1 的 shadow 不作模型质量评价。另单列真实关闭 shadow 的成本。
 
-H3–H5 已回答：旧 World 没有在冻结 closed-loop gate 上证明可复现净收益。H6-CORA 不再问
-“如何让 World 偏爱 VLA”，而问：
+World 直接复用 M2 配套 head，不接旧 encoder/cache。当前只做连续后果的开发排序：
+Guard/Safety 保持硬约束；无支持、异常或分数接近时 defer 到冻结非学习规则。
+没有独立校准，不称 calibrated、不输出校准风险概率、不宣称统计安全保证。
+排序权重、尺度、差值门槛、fallback 和 cadence 在运行前只用开发数据确定并冻结。
 
-> 同一 observable anchor 上，使用两个候选各自的真实 potential outcome 进行 metadata-source-blind
-> 反事实后果学习，并在不确定时拒绝决策，是否能降低选择 regret，并在独立 Safety 下取得
-> 安全不劣的闭环效用？
+固定 6 个独立新开发 roots、每 root 三臂，共 18 runs；每 run 最多 60 s 仿真时长。
+覆盖正常行驶和候选分歧两类，每类 3 roots；recipe 与新 seed lineage 在看结果前登记。
+同 root 配对、初态一致，保留全部失败；先用已登记首个 root 检查工程链，不通过就停止，
+不新增另一套 pilot。不得用旧 seed 101 或 reserved 173/179；旧保留集继续隔离。
 
-这里的 outcome 估计对象不是“绕过 Safety 后原始轨迹会怎样”，而是冻结系统干预：
+这是小样本开发闭环，不是原 108-root formal，也不做安全非劣证明。
+报告原始事件数、每 root 进度、轨迹/控制身份、干预/defer、延迟与资源。
+工程/安全接口失败停止运行；性能负收益保留后进入 C6，不再调参重测到通过。
 
-\[
-Y_i = Y\!\left(do(\text{proposal}=\tau_i);\;\pi_{Guard},\pi_{Safety},\pi_{control}\right)
-\]
+## C6 — 整理实验与交付
 
-即给定 Guard 已判定 eligible 的候选，冻结 single-candidate Safety/repair/MRM 和 controller
-后，系统接受这条 proposal 会产生什么后果。采集 branch 禁止跨候选 fallback，避免 `Y_i`
-依赖另一个候选；在线 fallback 作为单独 transition 记录。CORA 预测的是可部署组合的后果，
-不把 learned World 当安全真值。
+时间：第 6 天整理，第 7 天只留修复/复现缓冲，不增加模型或场景。
 
-主指标：
+交付两份新 adapter/heads、训练与评估配置、结果表、典型重放、完整架构图、
+论文方法/实验草稿、失败与限制。已有 C0–C2 成果作为项目基础一并呈现。
+标题写驾驶后果辅助联合学习，硬件只在实验设置说明。
 
-```text
-counterfactual outcome quality
-pairwise/selective regret
-risk calibration and risk-coverage
-defer / switch / ping-pong
-paired unsafe and route progress
-P50/P95/P99 latency, deadline miss, GPU peak
-reset/provenance integrity
-```
+完成是“真实训练、真实闭环、可复现记录齐全”；提升与创新是否成立由数据决定。
+缺少训练或闭环就标 PARTIAL，不改口说全链已完成。完成后停止。
 
-VLA/Classic/MRM 使用率只报告，不作为训练 source preference 目标。
+## 一周工作量边界
 
-## 3. H6-CORA 子阶段
+必做只有：两次固定配方训练、一个四输出 World、一次 18-run 开发对照、一套结题材料。
+不做执行机制分解、三 seed ensemble、conformal 校准、正式大矩阵、视频 World、RL、
+额外公开数据下载或 ROS 重构。它们是以后研究，不是本周验收缺项。
 
-### C0 — 文档与任务收敛
+资源上限见 [RESOURCES](docs/RESOURCES.md)。每阶段验收后更新当前入口并停止，
+不再为普通工程检查拆阶段。本排期是有依赖的可执行目标，不是正收益或必然完工保证。
 
-状态：`COMPLETED`。
+## 按阶段直接设置 goal
 
-- 活动文档只保留当前权威定义、事实、下一任务、环境、资源、Evidence 和展示合同；
-- H3/H4 报告、H5 进入/矩阵、旧 H6 handoff 与 H2 阶段合同进入日期归档；
-- 冻结 H5/H6 负结果；
-- 确立 CORA 主线与停止条件。
+每个完整阶段都有现成 goal 文本、执行顺序、输入、产物、验收与停止条件：
 
-停止点：不改代码、不训练、不运行 CARLA。
+| 要完成的阶段 | 完整任务文档 |
+|---|---|
+| C3 数据与常规微调 | [C3 执行合同](docs/VLA_FINETUNE_WEEK_PLAN.md) |
+| C4 联合微调 | [C4 执行合同](docs/WORLD_MODEL.md) |
+| C5 在线开发对照 | [C5 执行合同](docs/HYBRID_CANDIDATES.md) |
+| C6 复现与交付 | [C6 执行合同](docs/SHOWCASE.md) |
 
-### C1 — 正确性加固
+以后明确要求“完成 C4”之类，即选择该阶段；先核对前置实际交付并把 START_TASK
+切到该阶段引用，再在一个阶段内执行所有必要检查。不能因入口还写前一阶段而重复询问，
+也不能忽略前置缺项直接跑。前置不满足时报告具体缺项，不隐式启动所有前序阶段。
+本轮只完善合同，没有设置/启动 goal。不会因为文档里有 goal 文本就开始训练。
 
-状态：`COMPLETED / STOPPED`。
+每阶段开始登记 run-id，在 generated/h6/cora/<run-id>/ 保存新产物与 stage-summary.json；
+摘要记录 inputs/outputs/config/commands/tests/resources/status/unresolved/next_stage。
+这些是待实现产物合同，不表示现有文件。结束时更新入口并停止，不跨阶段自动执行。
+论文研究只用于形成实施决定；任务文档不要求以后再检索或实现引用工作的全部模块。
 
-- 删除硬编码 validation pass；
-- 修复 per-sample multi-task / Group-DRO；
-- 统一 offline/live temporal selector；
-- 修复 source-key EMA、hysteresis、hold、emergency；
-- 恢复 single tick owner 合同；
-- 加强 summary/readiness/hash 真实性。
 
-硬门：专项与全量测试通过；不产生新测量或自动进入 C2。
+## 固定追求正向，不改变对照口径
 
-### C2 — 反事实 potential-outcome 数据
+主要方法比较固定为 M2 对 M1 的 route ADE，C3 的 M1 对 M0、C5 的 C 对 B 分别报告。
+阈值、数值误差、CI、速度/有效率/事件/延迟代价以 PROJECT 为准。
+保留已饱和的 C2 ridge 排序结果，不把“必须超过 100%”作为目标，也不事后找一个赢的
+次指标代替主指标。模型与运行数量不变，全部结果保留，当前没有任何新正收益实测。
 
-状态：`COMPLETED / DATA MEASURED / GATE_FAILED / STOPPED`。
+## 四阶段共同的论文指标入口
 
-实际交付 351/351 valid nominal pairs、1295 branch outcomes；pilot 通过，development 因 locked
-offroad 正例和 repairability/executability 负类不足而失败。完整数字见
-`docs/runtime-evidence/h6/h6-cora-c2-dev-20260830-v1/final-delivery.json`。该负结果已冻结，不补样、
-不改门，并且不自动进入 C3。
-
-- 复用 H2/H3 capture、exact reset、双分支 50-tick rollout；
-- 同一 anchor 同时获得 `Y(VLA)` 和 `Y(Expert)`；
-- 新增 offline-only 可行轨迹干预，补充 collision/red-light/offroad/delayed-brake hard cases；
-- 冻结 train/val/calibration/formal lineage；
-- 输出 pair coverage、reset、hash、source/slot permutation 和 risk-event 质量报告。
-
-`240–360` 个有效 paired anchors 只是单机预算假设，不是充分样本量承诺。C2 必须分成
-smoke、coverage pilot 和 frozen development 三段；按 root anchor 计算有效样本数，不能把两个
-branch 或同 anchor interventions 当成独立样本扩充。具体矩阵、稀有事件下限、seed、阈值和
-最大资源上限必须在 C2 `START_TASK.md` 中先冻结。
-
-硬门：用于 pair loss 的样本两条候选 outcome 均有效；不满足则停止，不用 episode 第一拍
-或 source-majority 标签补齐。
-
-2026-09-06 repair v3 修通了筛选 recipe 到 live collector、trace head、split-local 清单、物理去重和
-累计预算链：351 base roots/1295 branches 继续以 v3 sidecar 引用，648 个 train/Town03 screening arm
-保留；Town03 诊断完成 12 roots / 34 branches，得到 1 个 repair-failure root 和 5 个 offroad root。
-仍未达到要求的 2 个 repair-failure root，因此正式 48-root 批次被 collector 阻断，交付仍为
-`DATA MEASURED / GATE_FAILED / STOPPED`，保留 10 项 coverage 缺口；CARLA 已关闭，不进入 C3。
-
-### C2 调整收尾 — 现有数据开发 release 与小型 World 基线
-
-状态：`COMPLETED / DEV_BASELINE_GATE_PASSED / STOPPED`；原 C2 coverage gate 仍为
-`GATE_FAILED`，两者不是同一个验收。
-
-新合同 `c2_dev_baseline_v1` 不再追加 CARLA 样本。它读取 351 个既有 nominal Expert/VLA 配对，
-按物理初态和 capture 条件隔离 11 个重复后形成 340 个 usable roots（train 158、validation 53，
-其余 split 只审计）。四个连续目标用于短时 progress/comfort 预测，collision、red-light、offroad、
-executable 和 repair 只保留真实分布与缺测报告。loader 通过显式 quality profile 拒绝旧失败
-release、held-out training 和缺少数据验收的混用。
-
-固定 World 基线是共享 128/64 MLP，输入 499-D context＋`10x8` candidate，seed 17/29/43；对照
-为 train 均值、context-only ridge、candidate-only ridge、Expert/VLA 固定选择。结果已保存三份
-checkpoint、逐 root prediction、head/group metrics、1,000-root bootstrap 和 swap/source-blind
-检查。candidate-only ridge 最强，MLP 标记 `NO_DEMONSTRATED_GAIN`；结果仅限当前采样分布和
-validation 开发集，不自动进入在线 router、calibration、closed-loop 或 VLA 微调。
-
-下一阶段如需继续，只能另行授权 World 改进/校准/闭环验证；VLA 微调必须建立新的输入—示范
-数据合同并重新检查 World 对新候选的适用性。不能把这个负收益开发结果改写为安全收益，也不
-因效果一般追加模型搜索或采集。
-
-### C3 — CORA Counterfactual Outcome World
-
-状态：`NOT_AUTHORIZED / NOT_STARTED`（原 C2 coverage gate failed；dev baseline 已交付）。
-
-- observable encoder + shared candidate encoder + cross-attention；
-- per-candidate progress/completion/collision/red-light/offroad/comfort/feasibility distributions；
-- pair-difference head；
-- candidate-swap equivariance、metadata source-blindness、outcome/difference consistency；
-- 正确 per-head mask 和 per-sample loss；
-- three-seed ensemble、worst-group report；
-- 与 simple rule、candidate-only MLP、旧 factual H6 World 对比。
-
-pair-difference 必须由效用差或显式反对称化结构保证交换后变号，不能只靠 swap augmentation。
-metadata-only probe 必须失败关闭；允许轨迹形状本身具有 planner 风格，但必须报告
-trajectory-to-source 可预测性并证明模型没有只靠风格捷径。
-
-硬门：真实 swap/metadata-source/action/context probes 通过；pairwise regret 和 risk
-calibration 在冻结 development/locked 数据上优于预注册 baseline，否则冻结负结果并停止 C4。
-
-### C4 — 可校准选择与拒绝
-
-状态：`PENDING`。
-
-- ensemble/aleatoric uncertainty；
-- calibration-only residual/conformal bounds；
-- utility lower/upper bounds；
-- choose/hold/switch/defer 状态机；
-- episode/route-scoped source-stable temporal state；
-- offline/live trace parity；
-- Guard 和 Safety 权限保持不变。
-
-`hold` 保持 source、每 tick 仍使用 fresh candidate；`defer` 把排序交给冻结非学习 fallback，
-不是在线 Oracle、人工接管、停止控制或隐式 source quota。两候选/多 outcome 同时做 coverage
-claim 时，必须预注册报告 marginal 还是 joint coverage，避免把逐头覆盖率写成系统级覆盖率。
-
-硬门：risk-coverage、defer-risk、switching、latency 和 parity 通过；统计 coverage 不能写成
-全域功能安全保证。
-
-### C5 — 多臂 closed-loop 验证
-
-状态：`PENDING`。
-
-预注册候选臂及唯一允许变化：
-
-| 臂 | 候选与系统负载 | 选择器差异 |
-|---|---|---|
-| A | 双 generator 同负载，VLA 只 shadow | 始终请求当前 eligible Expert；失败仍走同一 Safety/fallback |
-| B | 与 A 相同 | frozen factual H6 World |
-| C | 与 A 相同 | 同一 CORA checkpoint，但强制二选一、不允许 learned abstention |
-| D | 与 A 相同 | full CORA calibrated choose/hold/defer |
-
-另外单独报告“真正关闭 VLA 的 Classic deployment-cost profile”，只比较资源，不混入 A–D
-选择因果对照。这样 A–D 的 World 增益不会被不同 GPU 负载、候选生成或 Safety 配置混淆。
-
-先运行冻结 12-scenario pilot；pilot 全门通过才运行正式矩阵。正式矩阵规模由 C5 任务在
-运行前冻结，不能根据 pilot 结果挑 map/family/seed。
-
-主成功口径：
-
-- full CORA 相对 Classic 满足预注册 paired unsafe non-inferiority；原始事件数、CORA-only
-  unsafe 和置信区间同时报告，不能只比较 `unsafe_D <= unsafe_A`；
-- paired progress bootstrap lower-95 `>= 0`；
-- selective regret 优于 factual World 和 no-abstention；
-- 无无法解释的 deadline miss；
-- switching/ping-pong、defer、资源与 provenance 通过冻结门。
-
-无论 formal 正负都冻结结果，不改门、不补挑场景、不开启新模型支线。
-
-### C6 — 展示与正式关闭
-
-状态：`PENDING`。
-
-- 三场景可审计 live demo 和预录后备；
-- 架构、数据、模型、风险覆盖、闭环 CI、失败分析图；
-- 环境/依赖/许可证/第三方 attribution；
-- 可跟踪的精简 Evidence summaries 和一键 offline replay；
-- 简历项目描述与五页面试讲稿；
-- 更新 `PROGRESS.md` 为最终 VERIFIED 或冻结负结果并 `STOPPED`。
-
-完成 C6 后项目结题，不自动启动生成式视频 World、VLA 微调、RL、第三候选或全 ROS 2
-重构。
-
-## 4. 全局停止规则
-
-- 每个子阶段只在前一阶段通过后开始；
-- 每个问题最多一次初始实现和两次实质差异修复；
-- 发现数据泄漏、重叠未知修改、冻结 Evidence 冲突或第二 tick owner 立即停止；
-- pilot 失败即冻结，不运行 full；
-- formal 无论正负都结题；
-- 不以工作量、代码量或接近阈值为理由降低科学门。
-
-## 5. 明确非目标
-
-- 不从头训练像素/视频生成 World Model；
-- 不让 World 或 VLA 获得无约束底盘控制；
-- 不训练 learned perturbation 伪造在线第二候选；
-- 不用文本 CoT 代替 reasoning-action/outcome 干预验证；
-- 不追求固定 VLA source usage；
-- 不用 archive 数字、开发强制采样或随机模型 latency 冒充正式结果。
+[PROJECT 论文量化合同](docs/PROJECT.md#论文量化合同c3_c6_metrics_v1planned) 统一公式、
+分母、原始单位、比较方向、CI、规划目标及失败处理。C3 交 M1/M0 策略与资源数据；
+C4 交主要 M2/M1 策略比较及 b+R/b 后果误差；C5 交完整 6-root 三臂进度/安全/时延；
+C6 从同一明细复算四组论文表与配对差图。只增加记录与离线计算，不增加训练/闭环次数。

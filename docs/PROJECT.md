@@ -1,242 +1,212 @@
-# SafeDrive Foundry 项目定义
+# 项目定义
 
-## 1. 项目定位
+## 研究主线
 
-SafeDrive Foundry 是 CARLA–ROS 2 纯软件在环研究项目，研究如何在可审计安全边界内组合
-预训练 VLA 与 Classic Expert。项目不试图用单个基础模型替代所有规划、安全和控制模块，
-而是把两种不同 inductive bias 的 planner 作为独立候选来源：
+研究真实短时驾驶后果的辅助监督，能否改善 VLA 微调，并帮助在线选择独立 Expert/VLA
+候选。复用已有 CARLA–ROS 2 SIL、同锚点分支、Guard、Safety 和控制器。
+硬件写实验设置；不声称实车部署或从头训练基础模型。
 
-- SimLingo VLA 提供视觉语义、语言—动作对齐和长尾先验；
-- Classic Frenet/ST Expert 提供几何、规则、动力学和确定性先验；
-- learned World 只预测候选后果、排序或 defer；
-- Guard、Safety Kernel 和 MPC/PID 保留硬约束与执行权。
+本周完整范围固定为 [ROADMAP](../ROADMAP.md) 的 C3、C4、C5、C6。
+C3 已于 2026-09-09 `VERIFIED`（真实数据适配、M0/M1 离线评估和 200 更新 LoRA SFT）；
+当前下一入口为 C4，旧 C2 基线未证明学习增益。
 
-当前最终主线为：
+## 方法与工作量
 
-> **CORA-Drive：Counterfactual Outcome Routing with Abstention for Hybrid
-> VLA–Expert Driving。**
+M0 为原始 VLA；M1 为一次常规 LoRA SFT；M2 从同一起始权重训练，
+增加候选条件四维后果残差与配对差分监督；以固定候选 ridge 作基线，用驾驶梯度相容门控
+限制辅助更新。通过门控的 World 梯度进入共享 LoRA。
+只需要两次固定配方优化，不再训练执行机制分解或额外 seed 模型。
 
-## 2. 术语与状态
+面向 2%–3% 目标先修正原生监督/输入与优化实现：空间 route 与时间 speed 分离，
+增量 head 正确累加，smoke 后恢复原始起点，root 无放回采样，驾驶/World 分组裁剪。
+具体合同见 C3 执行文档与 WORLD_MODEL；C3 的适配、冻结和测量已由权威 run 验证，C4 的
+联合学习质量控制仍待实现，不能把 C3 的适配收益冒充 C4 方法收益。
 
-| 术语 | 固定含义 |
+SFT 标签来自可信 expert；World 标签来自候选各自的真实分支。
+先用已有进度、加速度 RMS、jerk RMS、横向加速度 RMS，逐字段 mask。
+World 是紧凑后果模型，不是完整未来视频/状态生成器；描述必须与实际输出一致。
+
+候选小改进是把真实配对后果监督用于共享驾驶表示适配，并检验策略和在线选择作用。
+联合学习、配对差分都已有先例；本项目旧代码也已有差分监督，因此不能宣称该 loss 原创。
+只有实验支持的具体作用和适用范围可作为方法结果，完整工程不自动等于论文新颖性。
+
+## 在线与数据边界
+
+Observable → 独立 Classic Expert + nominal VLA → per-candidate Guard →
+World rank/defer → Safety → MPC/PID。nominal 可绑定原始或微调版本。
+Guard eligible 仅 PASS/REVIEW；REJECT 不进入 World。Safety 修正与回退全程可追溯。
+World 只读当前观察和候选，无 source/slot/order/provenance 或真实未来信息。
+共享 h 在候选特有输入前提取，不能从 teacher-forced 未来答案获得表示。
+
+原 C2 split、去重、阈值和失败证据保留。旧 calibration/locked/pilot 只审计，
+新开发闭环另登记 lineage，seed 101 与 reserved 173/179 均不使用。
+控制 tick owner 和 CARLA READY 规则不因简化而放宽。
+
+## 评估与成功口径
+
+C4 离线比较 M0/M1/M2 策略误差、M2 World 对既有 ridge 的差距。
+C5 只做 M1 无 World、M2 无 World、M2 有 World 三臂，共 6 roots / 18 runs。
+分别检查联合训练和选择器作用，不把不同模型自己的预测当最终裁判。
+
+只做开发实验，不进行概率校准、安全非劣证明或原正式大矩阵。
+结果报告原始事件、逐 root 进度、干预/defer、身份链和尾延迟；小样本不外推普遍安全。
+资源不足、数据不够、训练未完成须标 PARTIAL；负收益完整记录。
+结题材料包含真实权重、配置、预测、重放、方法与实验草稿。当前执行入口见
+[START_TASK](../START_TASK.md)，证据标准见 [EVIDENCE](EVIDENCE.md)。
+
+
+## 正向结果的预登记口径
+
+本次以提高一次固定实验的可信收益机会为目标，方案和指标在 M1/M2 正式训练前冻结；
+没有任何论文保证本项目正收益。以下比较分别回答不同问题，不允许事后交换主次。
+
+| 比较 | 主要指标 | 支持的结论 |
+|---|---|---|
+| C3：M1 对 M0 | 同有效 root 的原生 route ADE（m，越低越好） | 本地驾驶示范适配的开发收益 |
+| C4：M2 对 M1 | 同有效 root 的原生 route ADE（本轮主要方法指标） | 残差后果辅助组合的开发收益 |
+| C5：C 对 B | 完整配对 6 roots 的平均 route progress 差（m） | World 路由组合的闭环开发趋势 |
+| C4 辅助分析 | b+R 对 b 的四头原始单位 MAE、进度 regret | 后果预测作用，不能代替策略/闭环收益 |
+
+ADE 定义为每个 root 内有效原生 route 点欧氏距离先平均，多样本再在 root 内平均，
+最后各 root 等权；不将 canonical 重采样误差、speed-waypoint 位置误差或所有 frame
+堆一起替代。SFT 数据不足以形成有效 root 时先报数据缺口，不更换易赢指标。
+
+C3/C4 的数值阈值在 M1 前登记：eps_ADE=max(1e-5 m, 10*重复 M0/重载导致的 ADE 数值差)。
+delta_ADE=对照 ADE-处理 ADE；超过 eps_ADE 才称测得下降。
+同时报告 speed-waypoint 误差、canonical 有效率、非有限输出、末点误差与各组结果。
+如果路线误差下降但速度/有效率退化，要写出代价，不能称“全面改善”。
+95% root bootstrap CI（固定 1000 次、统计 seed=71）跨零时只称开发集正向趋势，
+不称统计证实；单个训练 seed 不支持训练稳定性声明。所有主要/辅助指标一并交付。
+
+C5 微弱正向趋势要求完整配对下 mean(progress_C-progress_B)>0.01 m，
+同时无新增 C-only collision/red-light/offroad root，且 deadline miss 不增加。
+这是开发报告中的操作性判断，不是安全非劣证明；展示每个 root 和全部原始事件。
+有收益但有安全/延迟代价时分别报告，不用进度覆盖代价。缺有效配对则 PARTIAL，
+不能删掉失败 root 后宣称整个矩阵正向。小样本的效果仍需以后独立验证。
+
+C2 ridge ranking 52/52、regret=0 是已知饱和的旧开发口径，完整保留；
+不以提高它作为新模型必达目标，也不将比旧 MLP 好冒充比当前强基线好。
+M1 正向不证明 C4 方法创新；C/B 正向不证明 learned residual 独立贡献，
+可能来自固定 b 或回退。没有新增消融预算，组合贡献须保留归因限制。
+
+## 论文量化合同（c3_c6_metrics_v1；C3 已实施，C4–C6 仍 PLANNED）
+
+本节是 C3–C6 新实验唯一指标定义入口；C3 已随 run config 冻结并保存版本/hash，C4–C6
+实施时仍须各自冻结并保存版本/hash。
+下列目标均为项目自行设定的期望幅度，不是文献保证、实测结果或工程完成门槛。
+保持两次训练和 18 次闭环尝试；指标从已有预测、标签和 trace 离线计算，不增加实验臂。
+旧 C2 的统计权重、阈值和 Evidence 不重写；新旧口径不同时分别列名，不能直接相减。
+
+### 统一统计与缺失规则
+
+- 统计单位是独立 root。同一 root 的帧、候选、重复前向不是独立样本。
+  离线先对每个 root 内有效点/样本求均值，再对 root 等权；逐指标列实际 root、样本、点数。
+- 比较使用事先锁定、双方相同的输入和真值 mask。缺真值不补零；预测失败不能转成真值缺失。
+  非有限预测单列失败率，误差只在双方有限预测交集计算并明确其条件性；失败增加时不能称全面占优。
+- 越低越好的指标定义改善量 Δ=对照−方法；越高越好定义 Δ=方法−对照。
+  相对改善为 100×Δ/|对照|%；对照为零或低于预登记数值精度时填 N/A，并保留绝对差。
+  百分率相减使用百分点（pp），不与相对百分比混用。
+- 配对 CI 使用相同 root 索引重采样 1000 次、统计 seed=71，取差值分布的 2.5/97.5 百分位。
+  C5 按两个预登记场景组分别重采样 3 roots 后合并；报告 6 个原始配对差、小样本限制。
+  少于 2 个有效 root 的指标 CI=N/A；单训练 seed 的区间不包含训练随机性。
+- 开发集均值改善大于数值误差为“观察到下降”；区间跨零为“开发趋势”。即使区间全为正，
+  也仅支持本开发样本的区间证据，不等于独立测试或普遍提升。辅助指标区间均作描述，
+  不逐项检验后选显著项；本周不报告“至少一项显著”的总体结论。
+- 全局、正常组、预设分歧组均展示；分组由 manifest 预先固定，不按实际收益重新分类。
+  排除理由、失败数与缺失数一起交付；合法碰撞/超时/任务失败保留为实验结果。
+
+### 策略与后果预测指标
+
+| ID / 指标 | 定义与单位 | 比较及用途 |
+|---|---|---|
+| P-ADE 原生路线误差 ↓ | 有效原生 route 点的平均欧氏距离，m；样本→root→全局 | M1/M0 适配；M2/M1 为主要方法比较 |
+| P-FDE 原生末点误差 ↓ | 每样本预定路线末点欧氏距离，m；末点缺失则 mask，不用更早点代替 | 检查远端路线代价 |
+| P-WP 速度分支位置误差 ↓ | 原生 speed-waypoint 各有效点欧氏距离，m | M0/M1/M2；不是速度误差 |
+| P-SPEED 速度误差 ↓ | 仅有可信时间间隔及匹配速度真值时计算平均绝对误差，m/s；否则 N/A | 禁止由位置误差直接改单位 |
+| P-VALID canonical 有效率 ↑ | 合法 canonical 输出数 / 全部请求数 ×100% | 同输入、同转换器/阈值；报告 n/N |
+| P-FAIL 推理失败率 ↓ | 非有限、异常、缺输出请求数 / 全部请求数 ×100%；分类并去重计总数 | 不因删除失败使 ADE 虚高 |
+| W-MAE 后果绝对误差 ↓ | 每头 mean(|预测−真值|)，按有效候选→root→全局 | b+R 对 b，同一批合法数据和 mask |
+| W-RMSE 后果均方根误差 ↓ | 每 root 先求 sqrt(mean(error²))，再各 root 等权 | 揭示大误差；不冒充池化 RMSE |
+| W-NMAE 标准化误差 ↓ | 每头 W-MAE / max(train std, 1e-3)，无量纲 | 4 头等权均值仅为辅助摘要，逐头必须保留 |
+| W-PAIR 后果差分误差 ↓ | mean(|(ŷa−ŷb)−(ya−yb)|)，逐头原单位，双方 label 均有效 | 同锚点两个真实分支；不可用模型预测充当真值 |
+| W-RANK 进度排序准确率 ↑ | 在双方进度有效且 |ya−yb|>0.5 m 的 pair 上，预测与真值差同号的比例 | 同时列 eligible pair 数；预测平局计未判对，不以饱和旧值作必达目标 |
+| W-REGRET 进度选择遗憾 ↓ | max(ya,yb)−所选候选真实进度，m；预测严格较大者入选，精确平局取两种选择 regret 的平均 | 离线原始预测诊断，root 等权；新平局口径与旧 C2 分开列 |
+
+W 四头顺序、单位固定为 route_progress_m（m）、acceleration_rms_mps2（m/s²）、
+jerk_rms_mps3（m/s³）、lateral_acceleration_rms_mps2（m/s²）。训练标准化损失不是物理误差。
+新 b 每头仅用该头有效 train label 拟合，缺失值不能填零后参与 ridge；normalizer 同样逐头 mask。
+原始 W 指标与 Guard eligible 子集的指标分别注明分母，不按模型好坏切换子集。
+任何缺少真实双分支 label 的在线选择都不能计算实际 counterfactual regret。
+
+### 闭环、选择与安全指标
+
+| ID / 指标 | 定义与单位 | 解释约束 |
+|---|---|---|
+| C-PROGRESS 路线进度 ↑ | 记录既有路线弧长坐标的终点−起点，m；固定路线投影版本，不能用累计行驶距离代替 | 主比较 C−B；补充 B−A；逐 root、均值、中位数、最差差值与 CI |
+| C-RC 剩余路线完成率 ↑ | 100×clip(进度/该 root 初始剩余路线长度,0,1)，% | 长度为零填 N/A；不是官方 benchmark Driving Score |
+| C-EVENT 违规 root 率 ↓ | 至少一次该类事件的合法 run 数 / 合法 run 数 ×100%，分别 collision/red-light/offroad | 同列事件原始计数；每个 root 在每类至多计一次，不以每帧重复事件增大样本量 |
+| C-NEW 新增违规 ↓ | 分别数 C 发生而同 root B 未发生的三类事件，单位 roots | 既定趋势门要求三类各为 0；也列反向 B-only，不能证明安全非劣 |
+| C-COMFORT 舒适性 ↓ | 每 run 按真实 dt 对 a²、j²、a_lat² 积分除有效时长再开方；单位同四头 | 使用版本固定的信号/差分/滤波，与旧 label 不同则另名；列时长，停住或早停导致下降不能单独称驾驶更好 |
+| C-COVER 决策覆盖率 ↑ | 2 eligible 时非 defer 的 World 决策数 / 2 eligible 的有效调用数 ×100% | 分母为零填 N/A；同时报告 0/1/2 eligible 次数，覆盖高不是天然优势 |
+| C-DEFER 放弃率 | defer 次数 / 2 eligible 的有效调用数 ×100%，按低 margin/无支持/异常分解 | 与覆盖互补前须核对相同分母；无校准概率，不报 ECE/风险保证 |
+| C-OVERRIDE 残差改变选择率 | C 中 b+R 与 b-only 选择不同次数 / 两者都可判定的 shadow 调用数 ×100% | 仅诊断残差参与，不证明未执行选择的后果或残差独立收益 |
+| C-INTERVENE 安全干预率 | Safety 改写/拒绝请求次数 / 收到的候选请求数 ×100%，另列 MRM/Emergency 次数与持续秒数 | 干预少可能来自候选改善或危险漏检，不能独立作为安全优势 |
+| C-COMPLETE 矩阵完成率 | 有合法结果的 planned runs / 18 ×100%；完整配对 roots / 6 ×100% | 两项均 100% 才完整；基础设施失败占尝试预算并单列，合法负结果计完成 |
+
+终止条件、事件去重规则、信号字段、路线投影与 offroad 判定沿用运行配置并记录版本。
+如果旧 trace 无法支持某一派生量，标 N/A/缺字段；不得事后造阈值或把没有记录写成零事件。
+episode 事件率以每臂最多 6 为分母，不能声称高精度安全改善；不建立加权总分掩盖安全代价。
+本周为自定义开发矩阵，不使用官方 DS/PDMS 名称或与 Bench2Drive/NAVSIM 榜单数字横比。
+
+### 开销、机制与工程完整性
+
+| 指标 | 定义、单位与报告方式 |
 |---|---|
-| proposal/candidate | generator 在当前 observable anchor 独立提出的原始轨迹 |
-| Guard eligible | `PASS` 或 `REVIEW`；`REJECT` 对 World 不可见 |
-| selected | router/fallback 请求 Safety 检查的当前候选 |
-| executable | Safety 接受或有 provenance 地 repair 后批准的轨迹 |
-| applied | controller 实际跟踪的 executable identity |
-| hold | 保持 source 选择，不复用上一 tick 的过期轨迹 |
-| defer | 把 learned 排序权交给冻结非学习 fallback，仍输出受 Safety 审查的动作 |
-| source-blind | World feature schema 无 source/slot/order 元数据，不等于轨迹风格不可被推断 |
+| 决策时延 ↓ | 从 observation ready 到 Safety 可用输出的实测 wall time，ms；逐臂 P50/P95/P99、最大值及调用数，设备耗时须正确处理异步 CUDA |
+| World 增量开销 ↓ | 同一调用内 feature 已就绪到 b+R/选择完成的跨度，ms；不计共享 VLA 为零成本，也不相减两个 P95 伪造增量 |
+| deadline miss ↓ | 超过预登记决策 deadline 的请求数 / 全部请求数，%；超时/无结果计 miss；实际 deadline 与调用周期随 C3 smoke 冻结，不能由 20 Hz sim tick 推定 VLA 实时性 |
+| 输出新鲜度 ↓ | 控制使用时 sim timestamp−观察 sim timestamp，ms；P95/P99 与旧输出回退数，分清 simulation 和 wall clock |
+| 训练时间/显存 ↓ | M1/M2 各自实际总 wall hours、完成 updates、samples；torch allocated/reserved 峰值及可获得的整卡峰值分别报告 GiB，不能混用 |
+| 可训练参数量 ↓ | LoRA、原生驾驶头、新 World 头分别参数数和总和；可训练总和 / 同配置模型总参数 ×100%；adapter 大小 MiB |
+| 辅助梯度参与 | 预热后有有效 World label 的更新中 w>0 且辅助梯度非零的比例，%；列梯度余弦、q、施加前后范数比及实际 LoRA 更新量 |
+| 接口与数据不变量 | split/root 泄漏数=0、在线禁用字段数=0、REJECT 进入 World 次数=0、学习模块控制/tick 越权次数=0；逐项提供可审计记录 |
 
-项目进度与算法 Evidence 是两个维度：C0 已完成、C1 当前进行，表示结题 program 已启动；
-新的 CORA 数据、模型和闭环 Evidence 仍是 `PLANNED`。
+工程不变量的零违规属于完成条件，不能在没有对照实验时包装成“降低风险 100%”。
+只报实际采集到的性能；A/B 的 shadow 开销单列，不能据该三臂宣称 World 比无 scorer 部署更快。
+不新增全参训练来测参数节省，不把结构性可训练参数比例当作已测训练加速比。
+所有资源沿用 RESOURCES 的 GPU 总 10 h、M1/M2 各 4 h 和既有 CARLA 上限，不另设硬实时门。
 
-## 3. 研究历史与当前问题
+### 希望达到的幅度与论文表达
 
-H3–H5 的问题是：
+| 优势候选 | 自定规划目标（未实测；不是成功保证） | 未达到目标但有微弱变化时 |
+|---|---|---|
+| M1 对 M0 的适配 | P-ADE 绝对下降 ≥0.01 m；相对下降以 ≥2% 为目标、≥3% 为争取目标 | 大于 eps_ADE 就按真实差值报告，不把它算作 M2 创新 |
+| M2 对 M1 的方法收益 | P-ADE 绝对下降 ≥0.01 m；相对下降以 ≥2% 为目标、≥3% 为争取目标 | 超 eps_ADE 的下降可称开发改善；连同 CI、P-WP/FDE/失败率说明代价 |
+| b+R 对 b 的预测收益 | 进度 W-MAE 绝对下降 ≥0.01 m；相对下降以 ≥2% 为目标、≥3% 为争取目标 | 其他头改善按本头单位和相对值报告，不能替代主指标 |
+| C 对 B 的闭环收益 | 平均 C-PROGRESS 增加 ≥1 m，且满足既定新增违规/ deadline 条件 | 原 >0.01 m 的趋势口径保留；它是微弱变化门槛，不是驾驶实用价值标准 |
 
-> 在候选、Safety、控制器和场景相同的条件下，旧 World selector 是否比冻结非学习 selector
-> 带来可复现的闭环净收益？
+上述离线 2%/3% 是相对误差下降，分别与绝对下降 ≥0.01 m 同时满足才算对应规划达标。
+例如对照 ADE=0.50 m，方法 ADE=0.49/0.485 m，分别对应下降 2%/3%；这是算例，不是实测。
+若对照 MAE=0.30 m，下降 3% 只有 0.009 m，应如实报告相对改善，但尚未满足绝对幅度目标。
+本次在正式训练前按用户要求提高期望，不追加训练、seed、checkpoint 搜索或闭环次数。
+这四个目标分别回答不同问题，不设“任意一个达标就证明整体方法有效”的总验收。
+目标值没有外部基准含义，不能看结果后向下调整；工程完成、数值变化、规划达标、区间证据分列。
+若 ADE 接近零，绝对目标可能不可达，仍保留原目标与相对/绝对实测值，不重设口径。
+舒适性、覆盖和开销不新增必须获胜的门槛：它们量化收益代价，防止为了多赢一项而增加调参。
 
-H5 正式 Evidence 回答：未达到冻结门。H6 v1/v2 又尝试让 World/VLA 成为主驾，但 seed
-101 pilot 的逐 tick preference 和实际 VLA 使用仍失败。历史结果保持不变。
+### 结果表与可复现字段
 
-代码/数据审计确认旧路线的主要因果缺口：一个 live tick 只执行一个候选，因此未执行候选
-的 outcome 缺失；旧 H6 tick rows 没有双 outcome，episode 第一 tick 又被用于监督整段结果。
-模型可能学习 source/episode shortcut，而不是：
+所有表格至少包含 metric_id/version、方向、单位、比较双方、原始均值、绝对差、相对差、
+95% 配对 CI、有效 root/样本/分母、缺失/失败数、数值精度、数据 split、证据状态和原始路径。
+run config 另锁定公式、mask、聚合、版本/hash、目标与基线模型身份。
+计划保存 metrics-spec.json、逐 root 明细和 metrics-summary.json 到既有 run-id 目录；
+这些是待实现的产物合同，不代表文件/CLI 已存在。缺测用 null+reason，不填 0。
+C6 以同一份明细自动生成论文表与文字，保留全量辅助指标，不手填选择性优胜数字。
 
-\[
-p_\theta(Y\mid O_t,\tau_i)
-\]
+## 本周后的去向
 
-当前结题问题改为：
-
-> 在同一 observable anchor 上分别执行 VLA/Expert 候选，获得两个真实 potential outcomes；
-> 使用 metadata-source-blind、candidate-swap-equivariant World 预测结构化后果；通过独立校准在证据
-> 不足时 defer。该方法能否降低 selective regret，并在 Safety 不变时取得安全不劣的闭环
-> 效用？
-
-更准确的估计对象是冻结下游栈下的 proposal-level intervention：
-
-\[
-Y_i = Y\!\left(do(\text{proposal}=\tau_i);\pi_{Guard},\pi_{Safety},\pi_{control}\right)
-\]
-
-因此 label 包含 Safety 接受、bounded repair 或 MRM、controller 执行及其后果，但 branch
-禁止跨候选 fallback，另存 `would_require_fallback`。模型输入仍是 Guard eligible 的原
-proposal；它预测“把这条 proposal 交给冻结下游系统”的后果，而不是
-声称识别实车世界中不可观测的自然因果效应。这个结论只适用于冻结 CARLA 场景、reset 和
-下游 policy 版本。
-
-## 4. 系统主干
-
-```text
-CARLA/ROS observable snapshot
-        ├── pretrained SimLingo VLA ── candidate_vla ───── Guard ──┐
-        └── Classic Frenet/ST Expert ─ candidate_expert ── Guard ──┤
-                                                                    ▼
-                                      Counterfactual Outcome World
-                                                                    ▼
-                                  calibrated choose / hold / defer
-                                                                    ▼
-                                independent Safety → MPC/PID → CARLA
-```
-
-World 的结果重新通过 offline-only exact-reset branch collection 形成下一版开发标签，但
-Oracle、actor future、outcome 和 formal answer 永远不进入在线输入。
-
-两候选均 eligible 但 World 证据不足时，router 输出 `DEFER_AMBIGUOUS`：若当前 held source
-仍 eligible，则使用它在当前 tick 的 fresh candidate；否则按 Expert→VLA 的冻结顺序请求
-Safety，均失败才 MRM。该顺序必须预注册和记录，不能通过 defer 暗中实现固定 source quota。
-
-## 5. 核心贡献
-
-### 5.1 异构、独立的双候选
-
-VLA 与 Expert 同锚点、同坐标、同 horizon，各自独立生成一条轨迹。学习模块不能复制、
-扰动或重命名其中一条来伪造在线第二候选。两种来源的价值来自互补先验，而不是人为保证
-VLA 胜率。
-
-### 5.2 反事实 potential-outcome 数据
-
-对同一个 anchor：
-
-\[
-(O_t,\tau_V,Y_V,\tau_E,Y_E)
-\]
-
-CARLA 场景被精确重建，两条候选各执行一次 short horizon；reset、actor/light script、
-candidate hash、Safety binding 和控制必须可比。只观察到一个 outcome 的 tick 不进入
-pairwise loss。
-
-### 5.3 source-blind outcome model
-
-共享候选编码器预测：
-
-```text
-progress distribution
-completion probability
-collision / red-light / offroad probability
-comfort distribution
-feasibility / repairability
-epistemic disagreement
-pairwise utility difference
-```
-
-source、slot、branch order、Guard verdict、Oracle、rollout future 和真实 outcome 不进入
-World feature view。candidate swap 后 absolute outcomes 必须跟随轨迹交换，pair difference
-必须反号。
-
-这里的 source-blindness 是 schema 和干预不变性主张。VLA/Expert 的轨迹曲率、速度或停止
-风格可能让来源从合法 trajectory feature 中被统计推断；这不是靠删除字段就能消除的。项目
-必须另外报告 trajectory-to-source probe、按 source winner 分层的 regret，以及在 source
-metadata swap、候选交换和物理 action intervention 下的稳定性。
-
-### 5.4 可校准拒绝
-
-World 不直接把 softmax 当作安全置信度。独立 calibration split 产生 outcome/utility bounds；
-只有候选效用区间明确分离时才 choose/switch，否则 hold 或 defer。统计 coverage 不等于全域
-安全证明，最终硬权限仍由 Safety Kernel 保留。
-
-### 5.5 可证伪闭环 Evidence
-
-最终不是以离线 accuracy 或 VLA 使用率结题，而是用冻结多臂 exact-reset closed loop 对比：
-
-```text
-Classic selection baseline（dual-generator shadow load）
-factual H6 World
-CORA without abstention
-full CORA with calibrated abstention
-```
-
-报告安全、进度 CI、regret、risk-coverage、defer、切换、deadline、显存和 provenance。
-formal 无论正负都冻结并停止。
-
-A–D 主对照固定运行两个 generator、同一 Guard/Safety/controller 和相同 workload；A 只是
-把选择锁为 Expert，以隔离 selector 效应。真正关闭 VLA 的 Classic profile 只用于部署成本
-比较，不能与 A–D 的效果差异混算。
-
-## 6. 固定在线边界
-
-- 两个 generator 只读同一决策时刻的可观测输入。
-- candidate 统一为 map frame、`T=10`、`dt=0.25s`、`horizon=2.5s`。
-- Guard 在 World 前逐候选运行；`REJECT` 不可被 World 复活。
-- World 可预测、排序、hold 或 defer；不能生成轨迹、改写 Guard/Safety 或直接控车。
-- Safety 对最终轨迹重新验证，可 repair、fallback 或 MRM。
-- controller 只跟踪由 Safety 批准且 executable ID 完整绑定的轨迹。
-- 每次 run 只有一个登记 tick owner 推进 CARLA；正式 collector 用 `ScenarioRuntime`，ROS
-  `carla_sync_driver` 只作互斥 bring-up 模式；业务/清理脚本不得直接创建第二 tick master。
-- 仅限 CARLA SIL，不声明实车、公共道路、生产或 ISO 26262 认证安全性。
-
-## 7. 数据隔离
-
-| 数据 | Generator | World 在线输入 | World 离线标签 | Oracle/审计 |
-|---|---:|---:|---:|---:|
-| 当前图像、ego、route、history | 是 | 是 | — | 是 |
-| 当前可观测 actor/light/lane | 是 | 是 | — | 是 |
-| candidate trajectory | 不回灌 | 是 | — | 是 |
-| source/slot/order/provenance | 仅自身 provenance | 否 | 仅绑定 | 是 |
-| Guard/Safety verdict | 否 | 否 | 是（feasibility/repair/MRM label） | 是 |
-| branch actor future/outcome | 否 | 否 | 是 | 是 |
-| formal label/seed answer | 否 | 否 | 否 | 是 |
-| Regression/故障注入答案 | 否 | 否 | 否 | 是 |
-
-train、validation、calibration、pilot 和 formal 必须按 root lineage/map/family/seed 隔离。
-同一 anchor、近重复轨迹或其 intervention 不能跨 split。
-
-## 8. 成功口径
-
-### 数据
-
-- pairwise 样本两条候选 outcome 都真实有效；
-- reset/signature/provenance 全通过；
-- slot/source/branch permutation 不改变标签；
-- formal 数据不进入训练、选择 checkpoint 或 calibration。
-
-### 模型
-
-- 优于冻结 simple/candidate-only/factual baselines；
-- metadata-only source probe 确认 schema 不含 source；trajectory-to-source probe 作为 shortcut
-  风险诊断报告，不把物理可预测性伪装成必须随机；
-- candidate swap、action/context intervention 和 outcome consistency 通过；
-- NLL/Brier/ECE、unsafe recall、pairwise regret 和 worst-group 完整报告；
-- 三 seed 方向一致，不只挑最佳 checkpoint。
-
-### Router
-
-- offline/live trace parity；
-- risk-coverage、selective regret 和 defer reason 可审计；
-- source-stable EMA/hold，不发生 frame-ID 重置；
-- P99、deadline miss、显存和 switching 达到预注册门。
-
-### Closed loop
-
-- full CORA 满足 C5 预注册的 paired unsafe non-inferiority；同时报告原始事件数、CORA-only
-  unsafe 和置信区间；
-- paired progress bootstrap lower-95 `>=0`；
-- selective regret 优于 factual/no-abstention；
-- reset、candidate、selected、final、executed、applied 身份完整；
-- formal 结果冻结，不根据结果改 map/family/seed/gate。
-
-具体数值阈值必须在相应阶段 `START_TASK.md` 中先冻结；本文不给尚未测量的结果升级状态。
-
-## 9. 非目标
-
-- 不从头训练 GAIA/Drive-WM 类像素视频生成模型；
-- 不让 World 伪造在线第三候选或学习扰动第二候选；
-- 不把固定 VLA 使用率当作模型质量目标；
-- 不用语言 CoT 代替 action/outcome 干预验证；
-- 不在 CORA 完成前启动 VLA LoRA、RL、全 ROS 2 重构或新 planner；
-- 不用 archive、开发强制采样、随机模型 benchmark 或单元测试数字冒充正式 Evidence。
-
-## 10. 证据状态
-
-只允许：
-
-```text
-PLANNED → IMPLEMENTED → MEASURED → VERIFIED
-```
-
-失败和负收益与正结果同等保留。代码存在不等于测量，单元测试通过不等于 CARLA 正式通过，
-统计 coverage 不等于功能安全保证。
+C6 只根据实际证据写下一步建议，不自动执行或创建阶段。
+若 M2 对 M1 有开发趋势，下一优先项是独立 seed/lineage 复核；
+若只有 World 误差改善，下一项是检查策略是否利用辅助表示；
+若只有 C/B 改善，下一项才是独立 b-only 闭环消融。
+结果全不占优则保留并诊断，不靠新标题或小数阶段继续无界尝试。

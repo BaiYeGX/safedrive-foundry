@@ -1,195 +1,61 @@
-# CORA-Drive 前沿技术定位
+# 相关工作与本周方法定位
 
-更新日期：2026-09-07。本文只使用论文、官方项目页或官方代码作为活动技术依据。外部结果
-用于定义问题和对比方法，不是本仓库的 Evidence，也不能替代本项目冻结实验。
+本次只整理已有文献检索，不新增论文结论或声称复现外部成绩。
+原始来源保留如下；未确认会议状态的不推断录用。
 
-## 0. C2 dev baseline 的路线决定（2026-09-07）
+## 本周采用的研究方向
 
-本轮把 C2 收尾范围限定为现有配对数据上的短时 outcome baseline，并采用以下几条与项目边界
-直接相关的公开依据：
+从 DriveVLA-W0、FLARE、SimWAM 借鉴“真实未来辅助监督可以塑造策略表示”的方向，
+在本项目中用现有四维真实驾驶后果与配对差分训练共享 LoRA；当前具体配方采用
+固定候选基线残差与驾驶梯度相容门控，细节见 WORLD_MODEL。
+不移植视频生成、想象 RL、执行中介或多教师结构；这些不在本周工作量内。
 
-- [NAVSIM（NeurIPS 2024）](https://arxiv.org/abs/2406.15349)及其[官方项目](https://github.com/autonomousvision/navsim)
-  说明短时展开的 progress/TTC 等指标可以用于统一开发评估；本项目因此只报告冻结 CARLA
-  branch 的短时 outcome，不把离线分数包装成闭环收益。
-- [PDM（CoRL 2023）](https://arxiv.org/abs/2306.07962)和[tuPlan Garage](https://github.com/autonomousvision/tuplan_garage)
-  说明简单规则/规划先验可能很强；本轮固定加入均值、context-only 和 candidate-only ridge，
-  不以小 MLP 占优作为预设结论。
-- [BEV-Planner（CVPR 2024）](https://arxiv.org/abs/2312.03031)提醒离线规划成绩可能主要来自
-  自车状态而不是环境信息；本轮保留 context-only、candidate-only 和候选交换/source-blind
-  检查，避免把候选几何或 shortcut 误写成环境理解。
-- [COBS 离线策略评估实证研究](https://arxiv.org/abs/1911.06854)强调评估结论依赖实验条件；本轮
-  明确限定当前采样分布、固定 Safety/controller 和 validation 开发 split。
-- [SimLingo（CVPR 2025）](https://arxiv.org/abs/2503.09594)及[官方代码](https://github.com/RenzKa/simlingo)
-  提供独立 VLA 数据、Expert 和闭环评估的参考边界；本轮冻结 VLA，不把 World baseline 与
-  generator 微调混在一起。
-- [DAgger（AISTATS 2011）](https://proceedings.mlr.press/v15/ross11a.html)说明策略改变会改变
-  后续状态分布；因此将来的 VLA 微调必须重新登记候选版本，并重新检查 World 的适用性。
+M1 常规 SFT 对 M2 联合微调回答策略作用；同一 M2 的 World off/on 回答在线选择作用。
+已有 C2 ridge 很强，必须保留；新实验不能用改指标掩盖旧 NO_DEMONSTRATED_GAIN。
+本项目旧损失已有配对差分，联合未来监督也有强近邻，不能将二者重新命名为新发明。
+具体贡献取决于新的可复核作用、适用范围和失败分析，不能保证论文新颖性已成立。
 
-这些工作支持“先做可复现、小规模、基线对照的 outcome 评估”，但没有任何一篇保证本项目的
-小数据 MLP 获得收益。当前实际结果为 `NO_DEMONSTRATED_GAIN`，这是可交付的负结果，不是隐含的
-安全或闭环成功声明。
+## 论文证据表
 
-## 1. Vision-Language-Action 驾驶
+下列是本轮重点核对的原始来源。会议状态只在来源支持时注明；未注明的不推断录用。
+检索摘要不等于完整复现，作者报告收益不等于本项目可达到的收益。
 
-### SimLingo
+| 工作 | 方法及与本项目关系 | 原始来源 |
+|---|---|---|
+| DriveVLA-W0，ICLR 2026 | 未来图像监督补充低维动作监督；借鉴联合学习动机，不复现数据扩展规模 | https://proceedings.iclr.cc/paper_files/paper/2026/hash/0d70423f59c5fdd24f0dd3fa52e34623-Abstract-Conference.html |
+| FLARE: Robot Learning with Implicit World Modeling，2025 | 在策略中增加未来 token，对齐冻结未来视觉表示；辅助未来监督已有强近邻 | https://arxiv.org/html/2505.15659v1 |
+| FRAPPE，2026-02 | 分阶段、多视觉未来表征对齐；多教师/并行专家不是本周必要项 | https://arxiv.org/html/2602.17259v1 |
+| DriveLaW，CVPR 2026（作者仓库） | 视频生成 latent 注入动作 diffusion planner；借鉴显式信息接口 | https://github.com/xiaomi-research/drivelaw |
+| DriveWorld-VLA，2026-02 | 共享 latent、动作条件未来生成、未来引导评价与修正；总框架已被覆盖 | https://arxiv.org/html/2602.06521v1 |
+| VLA-World，2026-04 | 候选引导下一帧生成，再反思修正；正文报告 8 A100 训练、4 A100 推理 | https://arxiv.org/html/2604.09059v1 |
+| LCDrive，初稿 2025-12 | 动作 token 与世界 token 交替；附录用未来车辆 boxes 与候选 ego pose 构建紧凑目标 | https://arxiv.org/html/2512.10226v1 |
+| DIAL，2026-03 | 以预测 latent intent 为结构瓶颈，再由逆动力学产生动作；提示辅助预测未必被策略利用 | https://xpeng-robotics.github.io/dial/ |
+| HyWorldVLA，2026-07 | 前期像素与 latent 双监督，后期 latent 与动作专家联合训练；过大辅助损失权重可退化 | https://arxiv.org/html/2607.20988v1 |
+| SimWAM，2026-08 | 联合 video/action flow matching；未来与动作分支互不可见，部署去除视频分支 | https://arxiv.org/html/2608.07468v1 |
+| VLA-MBPO，2026-03 | chunk 级世界模型与从真实数据起点出发的短分支 rollout，降低误差累积 | https://arxiv.org/html/2603.20607v1 |
+| WIMLE，ICLR 2026 | ensemble/latent sampling 不确定性给合成 transition 加权；可靠性加权不新 | https://arxiv.org/html/2602.14351v2 |
+| REVAMP，作者页标明投稿 CoRL 2026 | 动力学/Q 共享模型、双可靠性信号、定向真实交互与策略更新；没有核实录用 | https://revampcorl.github.io/REVAMP/ |
+| RENEW，2026-07 | 人类偏好修复世界模型动力学，不确定性定向查询；不采用人工偏好为本周依赖 | https://arxiv.org/html/2607.14180v1 |
+| DreamZero，2026-02 | 视频基础模型联合生成动作与视频；其跨机器人适配结果不能外推成本地驾驶收益 | https://arxiv.org/abs/2602.15922 |
+| Pre-VLA，2026-05 | 在执行或 WM rollout 前验证动作并有界重采样；Guard-before-World 不能称为新贡献 | https://arxiv.org/abs/2605.22446 |
+| WAM robustness study，v5 2026-07 | 比较视觉/语言扰动下的 WAM/VLA；提示结构、预训练、数据混杂需要控制 | https://arxiv.org/abs/2603.22078v5 |
 
-[SimLingo（CVPR 2025）](https://openaccess.thecvf.com/content/CVPR2025/papers/Renz_SimLingo_Vision-Only_Closed-Loop_Autonomous_Driving_with_Language-Action_Alignment_CVPR_2025_paper.pdf)
-同时研究 closed-loop driving、vision-language understanding 和 language-action alignment。
-其关键观点是：模型能在语言中识别红灯/障碍，不代表动作真的与理解一致；Action Dreaming
-等任务用于加强语言与 path/speed 行为的对齐。
+已核对近邻仍需纳入：SafeAlign-VLA（https://arxiv.org/html/2605.19524v1）、
+FACT（https://arxiv.org/html/2608.10232v1）、Delta-JEPA
+（https://arxiv.org/html/2606.31232v1）、DynaDreamer
+（https://arxiv.org/html/2607.13410v1）。
+注意：机器人 FLARE 与驾驶 FLARE 是不同论文，不能混用模型配置与结果。
 
-本项目复用其预训练 nominal VLA 作为真实候选来源，但不把语言解释或 VLA confidence 当作
-安全证书。CORA 检查的是轨迹条件后果与实际执行。
+## 驾驶基础与评估边界
 
-### Alpamayo-R1（2025 预印本）
+[SimLingo](https://arxiv.org/abs/2503.09594)与
+[官方代码](https://github.com/RenzKa/simlingo)是本地 VLA 微调的基础。
+[PDM](https://arxiv.org/abs/2306.07962)、
+[BEV-Planner](https://arxiv.org/abs/2312.03031)提示强先验与 shortcut 对照；
+[DAgger](https://proceedings.mlr.press/v15/ross11a.html)提示换策略后需真实闭环检查。
+本周只做小样本开发评估，无概率校准或安全非劣证明。
+完整步骤只有 [ROADMAP](../ROADMAP.md) 中的 C3、C4、C5、C6；
+论文多不意味着必须多实现模型。硬件只写实验设置。
 
-[NVIDIA Alpamayo-R1](https://research.nvidia.com/labs/avg/publication/wang.luo.etal.arxiv2025/)
-使用 Chain of Causation 数据、reasoning VLM 和 diffusion trajectory decoder，把因果推理与
-轨迹规划对齐，并报告 reasoning-action consistency。
-
-CORA 不复制其大规模模型/RL 路线；可借鉴的评估思想是：解释必须通过 action/outcome
-干预验证，不能只检查文本是否通顺。
-
-### Latent-CoT-Drive
-
-[Latent Chain-of-Thought World Modeling（CVPR 2026）](https://openaccess.thecvf.com/content/CVPR2026/html/Tan_Latent_Chain-of-Thought_World_Modeling_for_End-to-End_Autonomous_Driving_CVPR_2026_paper.html)
-把 action-proposal token 与表达候选未来后果的 world-model token 交错在 latent reasoning
-空间，并使用 future rollout supervision 与 closed-loop RL。它强化了“reasoning 必须和 action
-outcome 对齐”的趋势。
-
-CORA 不训练 latent CoT 或 RL policy；它把 proposal generation、outcome prediction、拒绝和
-Safety 权力拆开，以便在单机系统里做可证伪归因。
-
-## 2. 驾驶 World Model 的三种含义
-
-### 2.1 像素/视频生成式世界模型
-
-[GAIA-1](https://wayve.ai/wp-content/uploads/2024/04/2309.17080.pdf) 以 video、text、action
-生成未来驾驶视频，目标接近 learned simulator、场景生成与表征学习。其规模和数据远超
-单张 RTX 4080 可从头复制的范围。
-
-[Drive-WM（CVPR 2024）](https://openaccess.thecvf.com/content/CVPR2024/html/Wang_Driving_into_the_Future_Multiview_Visual_Forecasting_and_Planning_with_CVPR_2024_paper.html)
-生成 action/trajectory-conditioned multiview future，并探索用 image-based reward 评价多种
-驾驶 future。
-
-本项目不把“能生成逼真视频”等价为“action-conditioned 后果忠实”，也不把像素生成作为
-结题目标。
-
-### 2.2 BEV/latent dynamics model
-
-[WoTE（ICCV 2025）](https://www.openaccess.thecvf.com/content/ICCV2025/papers/Li_End-to-End_Driving_with_Online_Trajectory_Evaluation_via_BEV_World_Model_ICCV_2025_paper.pdf)
-让 planner 产生多条轨迹，BEV World 为各候选预测 imagined future，reward model 再选择。
-它说明候选条件 future evaluation 可以比只看当前状态更适合 trajectory selection。
-
-[World4Drive（ICCV 2025）](https://openaccess.thecvf.com/content/ICCV2025/papers/Zheng_World4Drive_End-to-End_Autonomous_Driving_via_Intention-aware_Physical_Latent_World_Model_ICCV_2025_paper.pdf)
-在 latent space 中预测 intention-conditioned future states 并选择多模态轨迹。
-
-[ProDrive（2026 预印本）](https://arxiv.org/abs/2604.25329) 强调 planner candidate 与
-BEV future 的 ego-environment co-evolution；[DriveWorld-VLA（2026 预印本）](https://arxiv.org/abs/2602.06521)
-和 [DriveLaW（CVPR 2026）](https://openaccess.thecvf.com/content/CVPR2026/html/Xia_DriveLaW_Unifying_Planning_and_Video_Generation_in_a_Latent_Driving_CVPR_2026_paper.html)
-进一步研究 world latent 与 VLA/planner 的统一。
-
-这些近期工作说明“候选动作必须影响预测 future”是主流方向，但它们不自动证明任意 World
-在 closed loop 有用。
-
-### 2.3 方法谱系对照
-
-| 路线 | 典型输出 | action-conditioned | 主要用途 | CORA 取舍 |
-|---|---|---:|---|---|
-| GAIA-1 / Drive-WM | 视频/多视角 future | 是 | 生成、仿真、image reward | 不从头复制，资源和忠实度验证成本过高 |
-| WoTE / World4Drive / ProDrive | BEV/latent future | 是 | 多候选生成与评价 | 借鉴 candidate-conditioned evaluation |
-| DriveLaW / DriveWorld-VLA / LDrive | unified latent world-action | 是 | planning 与 imagination 联训 | 不联训 VLA，保留归因和 Safety 分离 |
-| CORA | 结构化 outcome distribution | 是 | 异构候选排序、校准拒绝 | 实时、可审计，但不生成完整 future state |
-
-### 2.4 Outcome/value world model
-
-CORA 属于轻量 outcome model：不重建像素/BEV，而直接预测
-`p(outcome | observation, trajectory)`。优势是实时、结构化、可校准、适合异构 planner 和
-独立 Safety；限制是不能声称学习了完整视觉世界生成规律。
-
-简历和报告使用：
-
-```text
-candidate-conditioned trajectory outcome model
-counterfactual outcome World
-trajectory consequence scorer
-```
-
-不使用“9B generative world simulator”等不符合实现的描述。
-
-## 3. 反事实与闭环分布漂移
-
-[Model-Based Policy Adaptation](https://arxiv.org/abs/2511.21584) 将 end-to-end driving 的
-closed-loop 下降归因于 observation/objective mismatch，使用 counterfactual trajectories、
-policy adapter 和 multi-step Q model 适配闭环目标。
-
-[AD-R1](https://arxiv.org/abs/2511.20325) 指出标准 World 可能存在 optimistic bias：对危险
-action 幻想安全 future。其 Counterfactual Synthesis 主动加入 collision/offroad 等危险结果，
-训练更“诚实”的 critic。
-
-CORA 与它们的共同点：
-
-- action-conditioned outcome；
-- counterfactual/hard-risk data；
-- 不以普通安全日志中的相关性替代因果动作差异；
-- 最终用 closed-loop 而不是 open-loop imitation metric 判定。
-
-CORA 的差异：
-
-- 两个在线候选来自异构 VLA/Classic，而不是同一 policy 的采样；
-- 使用 CARLA 同锚点 exact-reset 获得冻结 simulator/policy 下的双分支 interventional outcomes；
-- World 在线 schema 保持 metadata-source-blind，并额外审计轨迹风格捷径；
-- 独立 Guard/Safety 不参与 learned critic 权力扩张；
-- 单机 4080 上优先结构化 outcome，而不是大规模 occupancy/video generation 或 RL。
-
-## 4. 选择性决策与安全边界
-
-[SafePath](https://arxiv.org/abs/2505.09427) 将 conformal prediction 用于候选路径集合和委托，
-展示 uncertainty-aware selection 与 autonomy/safety coverage 的权衡。
-
-CORA 借鉴的是独立 calibration 和 abstention 思想：候选 utility bounds 未明确分离时 defer。
-必须同时声明：conformal coverage 依赖 calibration 分布与 exchangeability 假设，不等于实车
-全域安全保证；Safety Kernel 仍需独立验证最终轨迹。
-
-SafePath 的 candidate generator、LLM formulation 和高不确定性时的人类 delegation 与本项目
-不同。CORA 的 defer 是软件在环中的冻结非学习 fallback/Safety，不得把 SafePath 的理论主张
-直接移植为 CORA 的系统级安全保证。
-
-## 5. 本项目的合理创新主张
-
-公开工作已经分别存在多候选 planning、World future evaluation、counterfactual synthesis、
-selective prediction 和 safety shield。因此在没有系统文献检索前，不能声称单个概念世界首创。
-
-本项目可以验证并主张的组合贡献是：
-
-1. 同一 CARLA anchor 上对异构 VLA/Classic 候选执行 exact-reset 双分支 potential outcomes；
-2. metadata-source-blind、candidate-swap-equivariant 的结构化后果模型；
-3. risk/outcome calibrated choose/hold/defer，而不是固定 VLA source quota；
-4. learned World 与 Guard/Safety/MPC 权力分离；
-5. factual World、counterfactual World、no-abstention 和 full CORA 的冻结多臂 closed-loop
-   可证伪对照。
-
-最接近的公开思路已经覆盖了单个组成部分，因此真正需要 Evidence 支撑的 novelty 不是
-“第一次使用 VLA/World/conformal”，而是下面这条组合链是否在当前约束下成立：
-
-```text
-heterogeneous independent proposals
-→ same-anchor simulator interventions
-→ metadata-source-blind outcome estimation
-→ calibrated non-learning handback
-→ authority-separated closed-loop evaluation
-```
-
-只有本项目 Evidence 通过后，才能声称这些组合在当前 CARLA matrix 上降低 regret 或改善
-闭环效用；否则应报告为负结果和瓶颈诊断。
-
-## 6. 面试解释边界
-
-| 可以说 | 不能说 |
-|---|---|
-| 集成预训练 SimLingo VLA | 从头训练了 SimLingo/VLA foundation model |
-| 构建 candidate-conditioned outcome World | 构建 GAIA 类生成式视频 World |
-| 用 exact-reset 获得双候选 potential outcomes | 在实车上获得因果安全保证 |
-| 使用 calibration/abstention 管理统计不确定性 | conformal 已证明任意 OOD 全域安全 |
-| 独立 Safety Kernel 提供 fail-closed 边界 | 达到量产功能安全认证 |
-| 完成 CARLA/ROS 2 同步 SIL | 完成全车量产 ROS 2 自动驾驶栈 |
+本次进一步研究只更新执行决定，没有新增论文综述。残差预测与辅助梯度门控都有先例，
+梯度不冲突也不自动意味着泛化提升；不可将该组合重命名为已证实创新。

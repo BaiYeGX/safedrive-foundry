@@ -9,9 +9,14 @@
 - CARLA Server 在 Windows；ROS 2、客户端、模型和训练在 WSL2 Ubuntu。
 - 固定硬件为 RTX 4080 16GB 和 i5-13600KF，不得假设第二张 GPU 或远程服务器。
 - 唯一活动研究链为 `H0 → H1 → H2 → H3 → H4 → H5 → H6`。
+- 本周后续只用 C3、C4、C5、C6 四个完整阶段；普通工程检查不拆小数编号阶段。
+  两次训练、一次小型开发闭环与结题材料为当前范围，具体合同见 ROADMAP。
 - 核心在线链为 `Observable → Classic Expert + nominal VLA → per-candidate Guard →
   World rank/defer → Safety → MPC/PID`。
 - Classic Expert 与 nominal VLA 各自独立提出一条轨迹；学习模块不得伪造第二候选。
+- nominal VLA 可使用阶段锁定的原始或微调权重；C4 联合学习的 World 辅助梯度应进入共享
+  LoRA。真实未来/控制只作离线 label；预测执行只在模型内部使用，无控制或 tick 权限。
+- 硬件限制属于实验设置，不作为论文标题或创新贡献；工程完成与学习收益分开验收。
 - `Guard eligible` 固定指 `PASS` 或 `REVIEW`；`REJECT` 候选不得进入 World。
 - World 只在通过 Guard 的候选之间排序或放弃判断，不能生成轨迹、覆盖硬安全约束、
   获得无约束底盘控制或 tick 权限。
@@ -42,8 +47,8 @@
 | `PROGRESS.md` | 已确认动态事实 |
 | `docs/PROJECT.md` | 系统边界、成功口径和证据合同 |
 | `docs/HYBRID_CANDIDATES.md` | Expert/VLA 候选与 Guard 合同 |
-| `docs/COUNTERFACTUAL_DATA.md` | CORA 同锚点双分支 potential-outcome 数据合同 |
-| `docs/WORLD_MODEL.md` | candidate-conditioned World 合同 |
+| `docs/COUNTERFACTUAL_DATA.md` | SFT/World 训练视图、同锚点双分支与 split 合同 |
+| `docs/WORLD_MODEL.md` | VLA 联合学习、执行后果 World 与在线选择合同 |
 | `docs/RELATED_WORK.md` | VLA、World、反事实与选择性决策的活动技术定位 |
 | `docs/SHOWCASE.md` | 结题演示、简历和面试主干—枝干合同 |
 | `docs/RESOURCES.md` | 本机资产与资源预算 |

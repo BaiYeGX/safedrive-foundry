@@ -92,7 +92,7 @@ Start-Process -FilePath 'E:\CARLA_0.9.16\CarlaUE4.exe' `
 - 运行结束验证 asynchronous settings 恢复、tick owner free、registry terminal。
 
 `single tick owner` 是运行期不变量，不是“仓库只能存在一个含 `world.tick()` 的文件”。合法
-owner 实现可以有多个模式，但一次 run 只能激活一个；C1 必须让 preflight/lease 和 Evidence
+owner 实现可以有多个模式，但一次 run 只能激活一个；C1 已加固；后续 preflight/lease 和 Evidence 仍必须
 明确解析当前 owner，而不是靠操作人员记忆避免冲突。
 
 ## 6. ROS 2
@@ -126,6 +126,20 @@ python -c "import carla; print(carla.__file__)"
 正式训练还记录 driver/runtime、PyTorch/CUDA、device name、available/total memory；正式在线
 记录 whole-GPU peak。用户确认不能替代运行 artifact。
 
+## 训练准备与运行
+
+C3 在同一阶段完成 torch/CUDA 实际导入、checkpoint keys/预处理、真实 batch 梯度、
+保存重载和正式 SFT。C4 复用该环境完成联合训练，不另建一套依赖。
+find_spec 或设备只读 probe 不是训练兼容证明；bitsandbytes 不作为本周依赖。
+不自动重装 CUDA、改系统 Python 或照搬上游多 GPU 配置。
+
+真实训练 CLI 已实现并跑通，入口为 `scripts/h6_cora_sft.py`；C3 的 audit/smoke/baseline/train/
+evaluate/verify 命令与实际输出登记在其权威 run 的 `run_config.json`。当前下一入口为 C4，
+尚未登记 C4 的新命令。
+离线训练无需 CARLA preflight，训练与渲染不并发。
+只有 C3 必要补采与 C5 开发闭环需要本次 READY 和唯一 ScenarioRuntime owner。
+C6 默认日志 replay，无需额外 live。资源上限见 [RESOURCES](RESOURCES.md)。
+
 ## 8. 常见错误
 
 | 现象 | 处理 |
@@ -152,3 +166,11 @@ git diff --check
 
 真实 CARLA/CUDA 任务在此基础上加 task-local probe/preflight。报告只写实际运行结果；测试
 通过不等于真实 SimLingo forward、CARLA closed loop 或 formal Evidence 通过。
+
+
+## 新配方 smoke
+
+C3 真实训练 smoke 同时检查小型残差 head 与两类 LoRA 梯度的峰值/耗时，
+共享参数的 unscale/FP32 norm、accumulation window、clip 与 optimizer 顺序需直接测试。
+零残差输出层初始导致第一步共享辅助梯度为零属于预期，预热后必须验证非零通路。
+不新增参考 VLA、依赖库或并行 CARLA 负载；真实共同 T 在 M1 正式训练前按资源上限冻结。

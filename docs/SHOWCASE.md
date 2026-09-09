@@ -1,211 +1,115 @@
-# CORA-Drive 结题展示与面试合同
+# 一周结题与展示
 
-当前可展示的是 H1–H6 已冻结实现、Evidence 和从负结果得到的 CORA 设计；CORA paired data、
-checkpoint、calibrated router 与四臂 formal 仍为 `PLANNED`。本文同时包含“现在可讲版本”和
-“C6 formal 后版本”，演示时必须按实际状态选择，不能提前使用未来时态成果。
+## 要交付的完整项目
 
-## 1. 面试官应记住的一句话
+已有双候选/Safety/数据工程，加上两次真实训练和一次小型闭环。
+讲述顺序：问题 → 现有执行链 → 真实后果辅助 VLA → 策略/选择对照 → 结果与限制。
+标题可围绕“真实执行后果辅助的驾驶策略联合学习”，不写单 GPU，也不预先承诺创新成立。
 
-> VLA 提出具有语义泛化能力的 nominal 轨迹，Classic Expert 提出具有几何/规则先验的
-> 轨迹；反事实 World 预测每条候选的后果并在证据不足时拒绝决策；独立 Safety Kernel
-> 始终保留最终执行权。
+## 最小交付清单
 
-英文：
-
-> VLA proposes; the World model predicts consequences; calibrated routing decides whether it
-> knows enough; the safety kernel retains final authority.
-
-## 2. 主干—枝干结构
-
-```text
-主干：Observable → VLA/Expert → Guard → Counterfactual World
-                 → calibrated choose/defer → Safety → MPC/PID → CARLA
-
-枝干：
-VLA          → vision-language-action、预训练模型集成、path/speed、alignment
-Classic      → Frenet/ST、几何/规则先验、强 baseline
-Data         → potential outcomes、exact reset、counterfactual intervention
-World        → cross-attention、multi-head outcome、pair difference
-Uncertainty  → ensemble、NLL/Brier/ECE、conformal、risk-coverage
-Safety       → Guard、repair、MRM、fail closed、authority separation
-Control      → executable identity、MPC/PID、freshness、20Hz deadline
-Systems      → CARLA synchronous runtime、ROS 2 bridge、single tick owner
-Evidence     → split、run-lock、hash、bootstrap CI、负结果与停止条件
-```
-
-所有枝干必须回答“为什么、怎么做、效果、边界”，不能只罗列名词。
-
-## 3. 五分钟主讲
-
-### 0:00–0:40 问题
-
-VLA 语义和长尾先验强，但轨迹几何、安全与 confidence 不稳定；Classic 稳定可解释，但长尾
-语义弱。项目研究如何在不把安全权交给基础模型的前提下利用二者互补。
-
-### 0:40–1:30 架构
-
-说明两个候选独立、Guard 在 World 前、World 对 source 元数据不可见且可 defer、Safety 最终重验、
-controller 只跟踪绑定 executable。强调 World 不能生成第三轨迹或绕过安全。
-
-### 1:30–2:20 旧结果与失败
-
-```text
-H4 locked: World 64/64 vs simple 57/64
-H5 closed loop: 222 runs / 74 paired roots, unsafe 4 vs 6,
-                progress lower-95 = -0.0709 m, gate failed
-H6 pilot: strict VLA preference 21.83%, applied VLA 47.50%,
-          pair score 590/600, provenance gate failed
-```
-
-结论不是“模型完全没用”，而是离线准确率没有转化为可复现闭环净收益。
-
-### 2:20–3:30 根因与 CORA
-
-- logged tick 只有执行候选 outcome；
-- 旧 H6 逐 tick 双 outcome 为 0；
-- episode 第一 tick 监督 whole outcome；
-- source/episode shortcut 和 optimistic bias；
-- 未校准二选一、offline/live temporal mismatch。
-
-CORA 用同锚点双分支 potential outcomes、swap-equivariant outcome model 和 calibrated
-abstention 修复。
-
-### 3:30–4:30 当前计划与证伪方式
-
-现在应说“已经预注册将比较”Classic、factual World、CORA no-abstention、full CORA 四臂，
-而不是说已经获得 CORA 结果。说明将报告 pairwise/selective regret、risk-coverage、安全/
-进度 CI、切换、延迟和显存，并且 formal 无论正负都冻结。C6 完成后才把这一段换成实际图表。
-
-### 4:30–5:00 技术判断
-
-强调生成式视频 World、BEV/latent dynamics 和 outcome World 的区别；解释为什么在单张
-4080、实时 selector 和安全组合目标下选择结构化 outcome，而不是缩小版 GAIA。
-
-## 4. 深挖问题准备
-
-| 面试追问 | 必须能讲清 |
+| 内容 | 必须有 |
 |---|---|
-| VLA 是否是你训练的？ | 预训练 SimLingo 的真实集成、适配、一次 forward、raw path/speed、运动学平滑；不是从头训练 |
-| 为什么保留 Classic？ | 不同 inductive bias、强 baseline、fallback、可解释性；不是故意弱化对照 |
-| World 为什么叫 World？ | action/candidate-conditioned future outcome；不是像素生成，明确能力边界 |
-| 你预测的 counterfactual 到底是什么？ | Guard eligible proposal 经过冻结 Safety/repair/controller 后的 CARLA interventional outcome，不是实车自然因果真值 |
-| 为什么离线 64/64 仍闭环 gate failed？ | 小 locked set、label mismatch、covariate shift、calibration/temporal drift |
-| 反事实如何获得？ | 同 anchor exact reset、两个 forced branch、相同初态/外生脚本/Safety/controller；交互导致的 future 可以不同 |
-| 如何避免 source shortcut？ | metadata 从 feature schema 物理排除；再用 shared weights、source/candidate swap、trajectory-to-source 与干预 probe 审计风格捷径 |
-| uncertainty 怎么做？ | aleatoric distribution head、epistemic ensemble、独立 calibration、risk-coverage |
-| conformal 是否保证安全？ | 只在统计假设下保证 calibration coverage；独立 Safety 才是在线硬边界 |
-| defer 后谁开车？ | held source 的 fresh candidate；不可用时按 Expert→VLA 的非学习顺序，再经 Safety/MRM；不是 Oracle 或无控制 |
-| World 选错怎么办？ | Guard 前置、Safety 重验、repair/fallback/MRM、executable identity fail closed |
-| 实时性如何保证？ | 轻量 vector model、P99/deadline、同卡 workload profile、no hidden demo override |
-| ROS 2 做到什么程度？ | status/tick synchronization bridge；主算法仍主要 Python runtime，不夸大全栈 |
-| 如何保证实验可信？ | frozen split/seed/gate、run-lock、hash、失败保留、pilot→formal、bootstrap CI |
+| 模型 | M1 常规微调、M2 联合微调 adapter/heads 与重载记录 |
+| 数据 | 使用的 root 清单、teacher/outcome 身份、mask 与 split |
+| 离线结果 | M0/M1/M2 驾驶误差、World 四头误差、既有 ridge 对照 |
+| 闭环 | 三臂 18 runs 的全部实际结果、失败、干预/defer、延迟 |
+| 展示 | 一张训练/部署图、一张结果表、正常/分歧案例重放 |
+| 论文材料 | 方法、设置、实验、失败与限制草稿 |
+| 复现 | 真实已测命令、配置、版本、日志与 Evidence 索引 |
 
-## 5. C6 计划中的 Live demo 合同
+优先已有日志 replay，live demo 不是额外验收门；不再做五套讲稿或大图表包。
+预测后果和实际执行必须标清；不能用旧 demo 强制 throttle/旧 scorer 路径冒充新系统。
 
-以下场景只有在对应 CORA checkpoint、calibration 和 frozen config 真实存在后才能标为
-`live CORA`。在此之前，可以用现有 H1/H5/H6 Evidence replay 解释候选、Guard、Safety 和负
-结果，但必须在画面标注 `historical replay / CORA not yet implemented`。
+## 结论规则
 
-### 固定场景
+C3/C4 真实更新后才能说完成微调；仅找到权重或训练外置 MLP 不算。
+World 梯度进入 LoRA 证明连接存在，不自动证明收益。配对差分和联合学习已有先例。
+C5 是 6 roots 的开发证据，不称 formal、安全非劣或全域安全证明。
+无校准则不画假风险覆盖曲线，不报告 calibrated probability。
+方法没有增益如实写，缺训练/闭环则标 PARTIAL，不能把未完成包装成成功。
+历史 C2/ridge 负结果与 H5 失败保留，不能用它们或旧成功数冒充新模型成绩。
 
-1. `semantic-win`：在冻结 Evidence 中 VLA proposal 后果优于 Expert，不预先指定必须出现；
-2. `rule-risk`：红灯/障碍场景中 Expert 更优，或 VLA 被 Guard/World/Safety 拒绝；
-3. `ambiguous-cut-in`：World bounds 重叠并 defer，非学习 fallback 与 Safety 保持稳定执行。
+状态：C3 已 `VERIFIED`，C4/C5/C6 仍 `PLANNED`；实际引用以 [EVIDENCE](EVIDENCE.md) 为准。
+C3 的训练、评估与复现记录位于 `generated/h6/cora/c3-vla-sft-20260909-final-v3/`。
+后续阶段完成后继续更新 [PROGRESS](../PROGRESS.md) 与当前任务入口并停止。
 
-场景、map、seed、weather、route 和 checkpoint 在录制前冻结。live 失败时可以播放同一
-配置的预录后备，但必须标注 replay/live 状态。
 
-### 必须显示
+## C6 可直接设置的 goal
 
-```text
-frame / sim time / map / seed
-VLA and Expert polylines
-candidate ids and short hashes
-Guard PASS/REVIEW/REJECT
-per-candidate progress/risk/comfort/uncertainty
-utility lower/upper bounds
-raw selection / stabilized selection / defer reason
-Safety accept/repair/fallback/MRM
-final executable and applied source
-controller mode
-per-stage latency / deadline
-collision / red-light / route progress
-checkpoint / config / code hash
-```
+> 完成 C6：按 docs/SHOWCASE.md，核对 C3/C4/C5 的真实交付，在现有布局内整理
+> 可复现权重与配置、离线和闭环结果表、训练/部署架构图、典型日志重放、
+> 方法与实验草稿及失败限制。完成最小离线复现，逐项标清已完成/未测/负结果，
+> 更新项目入口与最终状态后停止，不新增训练或 CARLA 实验。
 
-### 禁止
+## C6 输入与执行
 
-- Safety/control 后强制 throttle 或 steer；
-- `--map` 仅记录不真正加载；
-- 随机/未训练 checkpoint 冒充模型质量；
-- 静默吞掉相机、tick、cleanup、identity 错误；
-- 普通 demo JSON 命名为正式 Evidence；
-- 只展示车在动而不展示候选、World、defer 和 Safety。
+C3/C4/C5 summaries 是事实来源，不能依据 ROADMAP 的 PLANNED 表填结果。
+允许整理报告、图表、重放工具、复现入口与文档，必要的新工具有直接测试；
+不改原始 logs、weights、split 或失败记录，不自动发布/上传模型与数据。
 
-## 6. 最终图表
+**核对一张交付表。** M1、M2 是否实际训练和重载；M2 是否有共享梯度；
+C5 完成多少有效 runs/roots；数据、模型和配置能否关联。缺项有明确原因和恢复所需条件。
+前阶段失败时仍可整理已有成果，但最终标 PARTIAL，不能把整理完成等同于整个项目完成。
 
-结题至少提供：
+**只制作必要材料。**
+- 方法图同时画离线 label 与在线输入；标明冻结/训练参数、World 四输出及 Safety 权限。
+- 离线表列 M0/M1/M2 同 root 策略误差、M2 World 对相同子集 ridge 的误差、
+  mask/有效数、更新次数、参数数与 GPU 时间；不同预算标明。
+- 闭环表列 A/B/C 每个 root 的事件、进度、干预、来源、defer 与尾延迟，保留全部失败。
+- 正常与分歧案例各从预登记类别中取 root-id 最小的有效 run；不足就说明缺失，
+  不挑收益最大场景。若有失败案例，附首个失败记录，不增加实验。
+- 方法/实验草稿说明输入、监督、损失、模型、预算、对照、具体结果及限制；
+  论文相关工作另由已有 RELATED_WORK 提供，不向任务合同堆引用。
 
-1. 系统主干图；
-2. exact-reset potential-outcome 数据图；
-3. factual vs counterfactual label coverage；
-4. per-head calibration/ECE/Brier；
-5. pairwise/selective regret；
-6. risk-coverage/defer 曲线；
-7. 四臂 paired progress bootstrap CI；
-8. unsafe、switch、ping-pong、latency/VRAM 表；
-9. action/context intervention 单调性；
-10. 失败场景时间线。
+**验证复现。** 从真实命令和固定 config 出发，以一个已有 train smoke 样本检查 checkpoint
+加载/前向，以一个已有开发 root 的保存预测重算指标，以一份已有 trace 跑离线 replay。
+不完整重训，不重复 CARLA，不重扫旧大文件 Hash；原身份引用与新 artifact 身份分别记录。
+缺少可运行命令则在阶段范围内补齐最小离线入口并测试，不能交付只有伪代码的“一键复现”。
 
-图中明确区分 development、calibration、pilot、formal，不能把不同 split 混在一个最优值中。
+## C6 验收与退出
 
-## 7. 简历边界
+新阶段产物放现有 generated/h6/cora/<run-id>/ 布局，stage-summary.json 列出实际报告、
+图表、replay、草稿、环境/config、输入权重身份、复现命令与测试结果。
+报告每一数值能追溯到 raw run/预测/聚合规则；实际原始数据与模型保持本机，不自动上传。
 
-### 当前已可使用
+完整交付需 C3/C4 真实训练与 C5 完整开发实验均已有效完成、离线复现通过；
+方法无提升也可完成，未做的实验必须保留 NOT_RUN/PARTIAL。
+只在已有证据允许时用 VERIFIED，不能因项目“结题”批量升级状态。
+更新 README/PROGRESS/EVIDENCE/START_TASK 为实际完成或明确 PARTIAL 的停止状态，
+保留剩余问题与可恢复位置，不开启 C7、下一模型、live demo 或补样任务。
 
-- 基于 CARLA 0.9.16 同步 runtime 集成预训练 SimLingo VLA 和独立 Frenet/ST Expert，并提供
-  ROS 2 clock/status bridge；实现逐候选 Guard、fail-closed Safety 与 executable-bound MPC/PID；
-- 构建 metadata-source-blind candidate-conditioned outcome scorer，在小型 locked decisive set 上
-  达到 64/64、simple baseline 57/64；
-- 完成 222 次 run / 74 个 paired roots 的 exact-reset World ON/OFF closed-loop 评测并报告
-  bootstrap CI、tail latency、
-  switching 和完整负结果；
-- 2026-08-27 离线基线为 436 tests：435 passed、1 个真实 GPU/checkpoint live-forward 项 skipped；
-  该数字不是当前覆盖率，也不等于实时 CARLA 全覆盖。
 
-### 只有 CORA formal 通过后可使用
+## 如何呈现微弱正向结果
 
-- 提出并验证 exact-reset counterfactual potential-outcome learning；
-- 显著降低 pairwise/selective regret；
-- 在安全不劣条件下取得闭环 progress 净收益；
-- calibrated abstention 改善 risk-coverage/switching。
+按 PROJECT 的预登记比较分别呈现 M1/M0、M2/M1、C/B，不合并成一个“至少有一项赢”的
+总体成功概率。先给原始差值、分母与数值误差，再给 root CI 与速度/有效率/安全/延迟代价。
+主要指标无增益时仍保留其显著位置；辅助指标有下降就精确写该指标，不改称整体方法成功。
+CI 跨零写“本开发集观察到趋势，尚未证实”，不能包装成稳定提升。
 
-如果 CORA formal 为负，仍可写成“设计并完成可证伪的反事实/拒绝消融，定位未转化为闭环
-收益的瓶颈”，但不能继续使用本节四条正向效果描述。
+架构图体现固定候选基线 b、残差 R 与辅助梯度门控；不能宣传基线或已有门控方法原创。
+本周 M2 是组合配方，无各部件独立完整训练/闭环消融；论文中如实保留这个归因限制。
+只在真正观测到微弱正向时引用具体数字；本轮设计没有实测收益，不预填表。
+后续复核建议依 PROJECT，不在 C6 启动额外实验。
 
-### 永远不能夸大
+## C6 论文量化表格交付
 
-- 从头训练了 VLA foundation model；
-- 构建了 GAIA 类生成式视频 World；
-- 已经证明实车或量产安全；
-- 完成全 ROS 2 自动驾驶栈；
-- 单元测试、开发强制采样或随机 latency 等于 formal 结果。
+以 [PROJECT 论文量化合同](PROJECT.md#论文量化合同c3_c6_metrics_v1planned) 为唯一口径，
+从既有预测/trace 生成四组表，可在同一报告内呈现，无需新实验：
 
-## 8. 最终结题包
+- 策略表：M0/M1/M2 的 P-ADE、P-FDE、P-WP、有效率/失败率，M1/M0 与 M2/M1 配对改善和 CI。
+- World 表：b/b+R 四头物理单位误差、差分误差、进度排序与 regret；同时列有效 root/pair 数。
+- 闭环表：6 roots × A/B/C 全明细、C/B 与 B/A 汇总、违规、deadline、舒适性、defer 和残差参与。
+- 设置/资源表：数据 root/样本数、训练参数/步数、实际时长/显存、在线 P95/P99 和缺测原因。
 
-```text
-README and architecture
-frozen task/config/matrix
-data-quality and model cards
-locked Evidence summaries and hashes
-ablation report
-three-scenario live/replay demo
-three-minute video
-five-slide interview deck
-resume bullets
-limitations and negative-result page
-environment/license/attribution
-```
+另以配对差值图呈现 M2/M1 的各 root ADE 与 C/B 的 6 个进度差；零线与区间可见，
+不能截掉负值。可复用现有图表位置，不增加新的研究阶段。
+所有表含原始均值、绝对/相对差、分母、状态；目标列和实测列分离。
+正文先写主要结果，再写预测/闭环/资源与代价。若主要指标不占优，保留其同等显著位置，
+辅助误差改善只能支持限定的预测结论；没有测量就写 NOT_MEASURED。
+离线复算需核对单位、分母、pair join、missing 与 root 聚合；CI 与数值不能手工改写。
 
-C6 完成后把最终状态写入 `PROGRESS.md` 并停止，不再自动开展生成式 World、VLA fine-tune、
-RL 或第三候选研究。
+训练设置表同时列原生 route 空间采样、speed 时间采样、cumsum、输入身份、query 冻结、
+干净 M0 起点、root 采样与分组裁剪。两臂共同的数据/适配修正属于公平基线设置，
+不将其全部记为 World 方法创新。新增分组裁剪未做独立完整消融，不能单独宣称其贡献百分比。
+辅助监督用于表示学习不意味着“任何模型都不需要在线未来预测”；本项目结论限定于实际实验。

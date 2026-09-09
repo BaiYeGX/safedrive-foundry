@@ -1,353 +1,165 @@
-# CORA Counterfactual Outcome World 与选择性路由合同
+# 本周 World–VLA 模型合同
 
-## 1. 准确定义
+## 唯一模型与研究问题
 
-CORA World 是 candidate-conditioned trajectory outcome model，不是像素视频生成器、轨迹
-generator、Safety 或 controller。它学习：
+状态：C3 M1 常规保守 SFT 已于 2026-09-09 `VERIFIED`；C4 M2 后果辅助联合微调仍
+`PLANNED / NOT_RUN`。C3 权威 run 为 `generated/h6/cora/c3-vla-sft-20260909-final-v3/`。
+两者从 M0 同一起点训练，使用同 SFT 数据、seed、步数、LoRA 范围和预热/学习率日程。
+本周只有这两份新训练模型，不做执行中介、ensemble、视频 World、RL 或多配置搜索。
 
-\[
-p_\theta(Y_i\mid O_t,\tau_i)
-\]
+当前改进是：**保留简单候选基线，学习它的后果残差；限制辅助梯度干扰驾驶主任务。**
+这是降低退化风险的待验证组合，既有残差和梯度门控并非新发明，不保证正收益。
 
-其中 `O_t` 是当前可观测 history/route/actors/lights，`τ_i` 是 Guard eligible 候选，`Y_i`
-是执行该候选后的 short-horizon progress、risk、comfort 和 feasibility。
-
-World 只对候选预测、排序并提供 uncertainty；calibrated router 可 choose、hold 或 defer；
-Safety 保留最终批准、repair、fallback 和 MRM 权限。
-
-预测 estimand 固定为：
-
-\[
-p_\theta\!\left(Y_i\mid O_t,\tau_i;\pi_{Safety},\pi_{control}\right)
-\]
-
-即 Guard eligible proposal `τ_i` 被交给冻结 single-candidate Safety/controller 后的 outcome。
-label 必须保留 proposal→repaired/MRM executable→applied 关系；采集时禁止跨候选 fallback，
-否则 `Y_i` 会依赖 pair。CORA 不预测绕过下游安全栈的“裸轨迹世界”。
-
-## 2. 当前实现与结题目标
-
-现有 H3/H4/H6 代码已经具备的 scaffolding 与 CORA 目标必须分开：
-
-- 499-D vector observable context；
-- `10×8` candidate tensor；
-- shared candidate-conditioned Transformer/MLP scorer；
-- 多 outcome heads；
-- temperature/calibration、router、temporal state 和三 seed scaffolding；
-- locked evaluation、readiness、run-lock 和 closed-loop collector。
-
-但当前正式结论仍是 H5 gate failed、H6 not verified。CORA 在现有基础上重点修复标签、
-对称性、loss、uncertainty 和 selector，而不是从头训练大型视觉生成模型。
-
-| 能力 | 当前状态 |
-|---|---|
-| 499-D context、10×8 candidate、旧多头 scorer | 已实现并有 H3–H6 历史代码/Evidence |
-| H6 v2 14-output、lineage/readiness scaffolding | `IMPLEMENTED / NOT_VERIFIED` |
-| 正确 per-sample Group-DRO、真实 validation、统一 temporal state | `IMPLEMENTED / NOT_MEASURED / NOT_VERIFIED`（C1 工程） |
-| 同 anchor 双 potential outcomes | C2 待采 |
-| 本文 CORA 模型、joint calibration、formal 闭环结论 | `PLANNED` |
-
-## 2A. C2 dev baseline（2026-09-07）
-
-为结束 C2，本轮先交付一个小型、离线、可复现的开发 baseline，而不是把它写成完整 CORA
-World 或在线 router。release `h6-cora-c2-devbaseline-20260907-v1` 在物理去重后包含 158 个
-train root 和 53 个 validation root；train 只使用既有 nominal Expert/VLA 配对，其他 split
-不进入拟合。
-
-模型是共享权重的 128/64 ReLU MLP，输入允许字段的 499-D context＋展平 `10x8` candidate，
-输出四个连续的短时 progress/comfort outcome。训练固定 AdamW、三 seed（17/29/43）、独立
-target mask、Huber loss 和 progress-difference 项；同时报告 train mean、context-only ridge、
-candidate-only ridge 与 Expert/VLA 固定选择策略。三 seed 均已完成，候选交换后输出随 candidate
-交换且 progress 差反号；source/slot/order/provenance 不在输入。
-
-validation 上 candidate-only ridge 的 route-progress MAE 约 `0.302 m`，三份 MLP 约
-`0.555/0.617/0.555 m`，因此 baseline 的 `gain_status` 是 `NO_DEMONSTRATED_GAIN`。这是当前
-采样分布内的开发结论，不是“World 无效”的普遍定理，也不等于安全或闭环收益；本轮不执行
-calibration、online router、CARLA closed-loop 或 VLA 微调。未来改进 World 或替换 VLA 后，必须
-重新冻结输入/标签/适用性和独立评估。
-
-## 3. 输入与禁止项
-
-允许：
-
-- ego history、当前 ego state；
-- route polyline、navigation command；
-- 当前可观测 actors/lights/lane/topology；
-- 当前/历史图像的冻结特征（若在阶段任务中预注册）；
-- candidate trajectory 及其可重算 kinematics。
-
-禁止：
-
-- source、slot、branch order、Guard verdict、provenance reason；
-- actor future、rollout event、真实 outcome、Oracle/winner；
-- Regression/故障答案、scenario family answer、formal label；
-- World 输出修改 Guard/Safety/repair/MRM/controller 权限。
-
-feature object 应从允许字段新建，不从完整记录事后删除禁止字段。
-
-source-blind 只承诺元数据不可见。轨迹几何可能暴露 planner 风格，所以要同时做两种不同
-检查：metadata-only/source-swap 用于验证 schema；trajectory-to-source probe 用于量化行为
-捷径风险。后者高于随机是诊断信号，不等价于数据泄漏，也不能被当作结果标签输入。
-
-## 4. 模型结构
-
-建议使用共享权重、候选交换等变结构：
-
-\[
-z_O=f_O(O_t),\qquad z_i=f_\tau(\tau_i)
-\]
-
-\[
-h_i=\operatorname{CrossAttention}(z_i,z_O)
-\]
-
-\[
-\hat Y_i=g_Y(h_i)
-\]
-
-每个 candidate 共享 `f_τ` 与 `g_Y`。pair difference 必须由结构保证反对称，例如：
-
-\[
-\widehat{\Delta U}=u_\theta(h_A,z_O)-u_\theta(h_B,z_O)
-\]
-
-或对任意 pair 网络显式反对称化：
-
-\[
-\widehat{\Delta U}=\tfrac12\left[f_\theta(h_A,h_B,z_O)-f_\theta(h_B,h_A,z_O)\right]
-\]
-
-交换 A/B 后：
+## 表示与残差后果
 
 ```text
-absolute outcome A/B 跟随 trajectory 交换
-pair utility difference 变号
-uncertainty 跟随对应 candidate
+h = E_phi(current image, navigation, ego/history)
+route_hat, speed_hat = P(h)
+b = frozen_candidate_ridge(canonical proposal)
+residual = R(h, canonical proposal)
+y_hat = b + train_target_scale * residual
+y = [progress, acceleration_rms, jerk_rms, lateral_acceleration_rms]
 ```
 
-候选 identity 只用于把输出绑定回 trajectory，不作为 embedding。
+b 只使用允许的 canonical candidate 编码，不能读 source/slot/order/provenance 或未来。
+优先复用 C2 candidate-only ridge 算法与固定正则设置，在本次允许的同一 train 子集重新
+拟合并保存新系数；不改 C2 release，不扫描旧 Hash。b 不随 M2 更新，拟合耗时入总账。
+不得拿 validation 选择 b 的正则或逐头挑赢家。继续报告 train-mean/context-only 等参照，
+candidate ridge 并非每个舒适性头都已证明最强。
 
-仅把 `h_A-h_B` 输入普通 MLP、或只做 swap augmentation，都不能数学保证输出变号；它们只能
-作为额外训练/测试，不能替代结构约束。
+R 使用 concat(h, flatten(candidate)) → 128/64 ReLU MLP → 四维线性输出。
+最后输出层权重/bias 零初始化；因此初始 y_hat 等于 b。隐藏层正常初始化，
+不能全层置零导致不能学习。零初始化只保证初始预测一致，不保证训练后保持基线水平。
+预热后 R 最后一层已更新，再检查 World-only LoRA 梯度；第一个零初始化 step 的共享
+梯度为零是预期现象，不能被误判为永久 detach。
 
-## 5. Outcome heads
+h 在候选特有输入前提取，显式 observation token mask 排除 padding、答案和 future。
+两候选共享同一次 VLA 的 h 与同一个 R。禁止用第二个冻结 VLA 代替共享梯度。
+不缓存随 LoRA 改变的 h；只允许缓存不变图像处理或冻结视觉特征，并绑定版本。
 
-最低输出：
+## 数据、loss 与更新
 
-| head | 类型 | 说明 |
-|---|---|---|
-| progress | mean + scale | 2.5s route progress |
-| completion | Bernoulli | 预注册 local-goal/route completion；2.5s 内正例不足则只作审计 |
-| collision | Bernoulli / severity | 碰撞与严重度 |
-| red-light | Bernoulli | stop-line/red-light violation |
-| offroad | Bernoulli + duration | corridor/drivable-area |
-| comfort | mean + scale | acceleration/jerk/lateral acceleration |
-| feasibility | Bernoulli | controller/Safety executability |
-| repairability | Bernoulli | bounded repair 后通过 final validation |
-| epistemic | ensemble disagreement | 分布外/模型不确定性 |
-| pair difference | real/logit | 两候选 utility 差或 dominance |
+四头均为原有真实短时分支标签，不新增序列或风险概率。其语义是冻结 Safety/controller
+接受 proposal 后的后果；SFT teacher 与 branch outcome 分离，不复制另一个候选的后果。
+canonical T=10、dt=0.25 s 不变。有效 mask、单位、early terminal 规则沿用数据合同。
 
-progress/comfort 等连续量使用合适的 NLL/Huber；hazard 使用 BCE/focal/asymmetric loss；每个
-head 的 mask、单位和有效计数独立。
-
-## 6. Loss 合同
-
-\[
-\mathcal L=
-\mathcal L_{outcome}
-+\lambda_{pair}\mathcal L_{pair}
-+\lambda_{swap}\mathcal L_{equiv}
-+\lambda_{cons}\mathcal L_{consistency}
-+\lambda_{tail}\mathcal L_{tail}
-\]
-
-- `L_outcome`：各候选真实 potential outcome；
-- `L_pair`：同 anchor 两候选真实 utility/outcome difference；
-- `L_equiv`：candidate swap 一致性；
-- `L_consistency`：pair head 与 absolute outcome 组合方向一致；
-- `L_tail`：collision/red-light/offroad hard cases，不允许零正样本伪通过。
-
-pair utility 不直接覆盖各 outcome head。风险先做约束/支配关系，舒适和 progress 只在风险
-可比的候选之间组合；utility 权重、归一化、风险阈值和 tie/defer margin 必须在对应阶段冻结。
-这样不能用少量 progress 抵消碰撞或红灯风险。
-
-### Per-sample 与 Group-DRO
-
-正确顺序：
-
-1. 每个 head 按自身 mask 计算 per-sample loss；
-2. 只在有效 head 上按冻结权重合成 per-sample multi-task loss；
-3. 按 map/family/weather/route/risk-event 分组；
-4. Group-DRO 对真实 group loss 更新权重；
-5. 报告每组有效计数、原始 loss 和权重。
-
-禁止用一个 scalar objective 与异质输出向量做绝对差来构造 group loss。空 mask 必须是
-`NOT_MEASURED`，不能当作 0 loss/pass。
-
-C1 实现固定在 `safedrive_foundry/data_pipeline/h6/model.py`：objective、progress、completion、
-collision、red-light、offroad、comfort、repair、trust、pair preference 和 executable 各自保留
-unreduced loss 与独立 mask。candidate head 先在单个样本的有效候选内聚合，pair head 只在双
-outcome 有效时启用；逐样本总 loss 是“有效 head 的冻结权重加权和 / 有效权重和”。无有效
-head 的样本不进入优化，整 batch 无有效监督时 fail closed。
-
-持久 `GroupDROState` 在训练开始前登记 train 数据中的 map/family/weather/group key，只以真实
-target/mask 的逐样本多任务监督计算 group mean 并更新指数权重/floor。当前 batch 未出现的
-group 保留历史权重，空 group 输出 `NOT_MEASURED/count=0/loss=null`；coverage、temporal 等
-非监督 penalty 不构造 Group-DRO 风险。
-
-## 7. 基线与因果检查
-
-| 检查 | 要回答的问题 |
-|---|---|
-| no-action | history 是否已解释标签，模型没有使用 trajectory？ |
-| candidate-only MLP | context 是否提供额外价值？ |
-| CV/CTRV / hand reward | 复杂模型是否超过简单动力学/规则？ |
-| frozen factual H6 World | 反事实监督是否修复旧标签问题？ |
-| metadata-only/source swap | schema 是否真的不含 source/slot/order？ |
-| trajectory-to-source probe | 合法轨迹风格能多大程度预测来源，模型是否只靠风格？ |
-| candidate swap | 是否依赖 slot/绑定？ |
-| source metadata swap | trajectory 不变时预测是否不变？ |
-| action intervention | risk/outcome 是否随轨迹物理变化？ |
-| context intervention | risk/outcome 是否随相关场景变化？ |
-| history masking | 模型是否使用时序状态？ |
-
-对 intervention 既报告分类准确率，也报告物理方向单调性，例如更晚制动不应降低 stop-line
-risk，轨迹更接近障碍物不应降低 collision risk。
-
-## 8. 不确定性与 calibration
-
-区分：
-
-- aleatoric：outcome 本身噪声，由 distribution head 表示；
-- epistemic：训练覆盖不足，由独立 seed ensemble/模型分歧表示；
-- calibration：在独立 calibration split 上估计 residual/temperature/quantile；
-- selection：根据 outcome/utility bounds 选择或 defer。
-
-示意：
-
-\[
-LCB(U_i)=w_p(\hat p_i-q_{p,i})-w_r(\hat r_i+q_{r,i})-w_c(\hat c_i+q_{c,i})
-\]
-
-只有：
-
-\[
-LCB(U_i)>UCB(U_j)+\delta
-\]
-
-才允许选择 `i`。否则 hold 或 defer。
-
-风险比较先于软 utility：若某候选的 risk upper bound 超过冻结上限，它不能靠 progress LCB
-进入占优；两个候选都不满足 learned risk 条件时直接 defer 给非学习 fallback/Safety。
-
-conformal/coverage 的有效范围必须说明 calibration distribution 和 exchangeability 假设；
-不能写成任意 OOD、任意闭环状态或实车环境的全域安全保证。
-
-必须明确 coverage 单位。逐 outcome、逐 candidate 的 marginal coverage 不能直接宣传为“两
-候选所有风险头同时覆盖”；系统级 claim 需要对 candidate/head 的 joint residual 或预注册的
-multiple-comparison 校正，并按 root anchor 聚类评估。
-
-## 9. Temporal selector
-
-唯一状态机：
+M1/M2 用同一 SFT root 顺序与采样次数；World 缺标签只关对应辅助 mask。
+本周不额外采样无 SFT 的 World-only roots；b 也使用相同允许 train 子集，记录实际有效数。
+训练集拟合 target mean/std，std 下限 1e-3；常量头显式报告，不把低误差当能力。
 
 ```text
-raw outcomes/scores
-→ calibrated utility intervals
-→ dominance / ambiguity
-→ minimum hold / hysteresis
-→ choose / switch / defer
-→ Safety
+L_sft = 与 C3 完全相同的 route/speed SmoothL1
+L_aux = 0.1 * L_outcome + 0.05 * L_pair
+L_outcome = standardized(y_hat, y) 的有效候选/四头 Huber 均值
+L_pair = standardized((y_hat_A-y_hat_B), (y_A-y_B)) 的有效双分支四头 Huber 均值
 ```
 
-要求：
+预测差由同一个共享模型相减保证反对称。b 贡献也必须相减，不能只监督残差差分却忽略
+真实标签中的基线差。物理单位用于最终报告，归一化只用于训练。
 
-- temporal state 按 episode/route revision 作用域内的稳定 source key，而不是 frame candidate ID；
-- emergency override、hysteresis 和 minimum hold 独立；
-- raw、EMA、interval、selected source、defer/switch reason 每 tick 记录；
-- offline calibrator 与 live router 调同一实现；
-- replay trace 必须逐 tick 完全一致；
-- router 不能通过 EMA/hold 提高 raw model coverage 指标。
-
-`hold` 只延续 source 决策，当前 tick 仍使用 fresh candidate；`defer` 调用冻结非学习规则：
-held source 仍 eligible 时优先，否则 Expert→VLA，最终都经过 Safety，均失败才 MRM。defer
-不是在线 Oracle、人工接管或无控制。
-
-C1 唯一实现位于 `safedrive_foundry/data_pipeline/h6/temporal.py`。状态只保存稳定
-`expert`/`vla` source 与 source EMA，不保存 frame-scoped candidate ID；scope 由
-run/episode identity 加 route revision 定义，变化时清空 EMA、hold 和历史。状态机固定依次执行
-scope/eligibility、EMA、held unavailable/emergency risk、emergency margin、minimum hold、
-hysteresis、普通 choose/switch，并输出统一 raw/EMA/margin/hold/switch/defer trace 与稳定 reason。
-VLA75 offline calibration 和 live router 调用同一核心；旧 H5 historical 模式保持旧行为。
-
-## 10. Checkpoint selection/readiness
-
-checkpoint selection 只能使用实际 evaluator 输出：
+前 max(1,ceil(0.05*T)) optimizer steps，M1/M2 都冻结 LoRA、更新驾驶头；
+M2 同时拟合新 R。随后共同解冻 LoRA，M2 在一个梯度累积窗口上分别计算：
 
 ```text
-outcome NLL/Brier/ECE
-unsafe recall/AUPRC
-pair accuracy/regret
-swap/source/action/context probes
-worst-group metrics
-measured P50/P95/P99
-measured GPU peak
+g_s = grad(L_sft, shared_LoRA)
+g_a = grad(L_aux, shared_LoRA)
+w = max(0, cosine(g_s, g_a))
+q = min(1, 0.25 * norm(g_s) / (norm(g_a) + eps))
+shared_LoRA.grad = g_s + w * q * g_a
 ```
 
-硬编码 `pass=True`、`swap_error=0`、`p99_ms=0`、`gpu_gib=0` 均无效。未运行就是
-`NOT_MEASURED`，readiness 必须拒绝缺项。summary 绑定 dataset manifest、split、seed、
-checkpoint ensemble、evaluator artifact、config、code/worktree 和自哈希。
+零范数时辅助项置零。梯度在 unscale 后以 FP32 统计，在整个 accumulation window 聚合后
+门控；不能每个 microbatch independently gate 后声称公式等价。
+驾驶头只接 SFT 梯度，World head 正常接 L_aux 梯度。合成后，LoRA+驾驶头作为驾驶参数组
+共同 clip=1.0（M1/M2 相同），World head 另行 clip=1.0，再做 optimizer.step；
+不能将 World head 与驾驶参数一起计算全局裁剪范数。两组参数不得重复或遗漏。
+记录余弦、w/q、辅助激活比例、两类梯度范数与参数变化。门控不能把共享辅助永久关闭后仍
+宣称完成联合表示学习；若实际全部关闭，报告联合机制未发生，不能硬开门制造证据。
 
-C1 evaluator schema 为 `safedrive.world.vla75.evaluator.v1`，记录 checkpoint/seed、validation/
-config/code/worktree/input lineage、per-head loss/count/hazard positives、pair accuracy/regret、
-group loss/count/weight、candidate/source/action/context/history probes、实测 latency 和 incremental
-GPU peak 状态，并使用排除自身字段计算的 `evaluator_sha256`。checkpoint metadata 同时绑定
-validation lineage、selection metrics 与其 hash；最终 evaluator 必须重算并验证一致。
+这是训练梯度层面的干扰控制。AdamW 动量/预条件、非线性和数据外推下没有保证，
+不能称为泛化提升证明或保证每步主 loss 不增。门控与残差是一个组合配方；
+本周没有单独训练完整消融，不能据结果拆分两者各自贡献。
+M2 的额外 backward/门控成本在 C3 smoke 实测后用于共同 T 冻结，不能偷偷减少 M1 更新。
 
-training summary schema 为 `safedrive.world.vla75.training_summary.v2`，固定绑定三个有序 seed、
-checkpoint、evaluator 和输入 lineage，并使用 `summary_sha256`。readiness 识别但拒绝 v1 summary，
-对 summary/evaluator/checkpoint/input/self hash、有效计数、probe、latency/GPU 状态和顺序
-fail closed，输出 self-hashed readiness。CPU 或未执行 CUDA 时 GPU peak 必须是
-`NOT_MEASURED/value=null`，因此不具备正式 readiness；artifact 验证状态和 CORA algorithm
-验证状态始终分开。
+## C4 可直接设置的 goal
 
-C1 后新建 formal run-lock 固定为 `safedrive.h6.vla75.run_lock.v2`，calibration payload
-必须绑定三个 evaluator hash、validation lineage 和 training input lineage；创建脚本在写盘前
-调用验证器。`run_lock.v1` 仅保留历史 artifact 的只读兼容，不能作为 C1 后新建的 formal lock。
+> 完成 C4：按 docs/WORLD_MODEL.md，读取 C3 的原始起点、数据和共同预算，完成
+> 固定基线残差 World 与驾驶梯度门控的 M2 联合微调；验证真实辅助梯度、候选交换、
+> 无泄漏与重载，交付预登记指标、完整逐 root 对照和资源记录。达到验收后更新
+> PROGRESS、将入口指向 C5 并停止，不追加模型、搜索或 CARLA 实验。
 
-## 11. 评估
+## C4 执行与验收
 
-### 离线
+前提为 C3 有效 M1、原始 checkpoint、manifest、共同日程与真实命令；缺项报告，
+不隐式重跑 C3。允许改 h 暴露、b/R、联合 loader/梯度更新、配置与直接测试。
+先在 train smoke 验证 b 的 Torch/离线实现等价、零残差等于 b、非零残差可学习、
+预热后辅助能到 LoRA、无效 mask、候选交换与 checkpoint round-trip。
+实现错误在正式训练前解决，最多两次实质修复，不用重跑挑正结果。
 
-- per-head NLL/Brier/ECE/AUROC/AUPRC；
-- pairwise accuracy 和 regret；
-- selective regret / risk-coverage / defer-rate；
-- source/map/family/weather/risk-event worst group；
-- swap/intervention/consistency；
-- three-seed mean、spread 和方向；
-- P50/P95/P99、deadline miss、GPU peak。
+正式仅一份配方、一个 seed、共同 T；采用最后有效 checkpoint，保存恢复状态。
+M0/M1/M2 用同一 validation root 子集与 evaluator。保留全部分母、缺失与失败；
+子集上的 b/ridge 指标重算，不能混用 C2 全 53 roots 数字。
+主要研究指标以 PROJECT 为准；额外报告四头 MAE、b 与 b+R、残差大小、
+no-action/context masking、swap 和梯度门控分布。这些诊断不增加新训练。
 
-### 在线
+C2 validation 中 ridge 进度 regret=0，ranking 52/52 的口径继续保留，
+不是“必须进一步提升”的可达目标。绝对误差仍有空间，但也不能改指标掩盖旧负结果。
+b+R 如未胜 b，则 learned residual 收益未证实；胜旧 MLP 不等于胜强基线。
 
-使用相同 candidates、Guard、Safety、controller、scenario/reset 比较：
+必须达到共同 T、真实共享辅助更新、重载和有效开发评估；预算不足标 PARTIAL，
+不同更新数标不等预算，不能宣称公平增益。完整 M2 优化最多 4 小时；
+所有训练含预热/smoke/失败合计仍最多 10 小时，不另启第三模型或参考网络。
 
-```text
-Classic selection baseline（dual-generator shadow load）
-factual World
-CORA without abstention
-full CORA
-```
+新 run-id 保存 M2 adapter/heads、b 系数、normalization、feature schema、config、
+manifest 引用、预测、梯度/消融诊断与 stage-summary.json。输出声明 PLANNED/
+IMPLEMENTED/MEASURED/VERIFIED 按实际证据升级，不按结果正负升级。
 
-四臂都运行双 generator 以保持 selector 对照的 workload；Classic 臂将 VLA 置为 shadow 且
-始终请求 eligible Expert。真正关闭 VLA 的 profile 另做资源对照，不能与效果臂混算。
+## C5 在线使用与归因
 
-主要 gate 见 [PROJECT](PROJECT.md) 与对应阶段 `START_TASK.md`。VLA/Classic/MRM usage、
-repair/fallback transition 只做诊断，不是 source quota。
+加载同版本的 M2、b、R、normalization 与 h 提取函数；复用一次 VLA forward。
+World 只看 Guard eligible 候选，输出连续后果排序或 defer，无校准风险概率。
+Guard/Safety/控制权限不变。异常、无支持或优势不足时沿用 held-source/Expert→VLA defer，
+HOLD 仍用 fresh candidate，0/1/2 eligible 与时间状态机遵守候选合同。
 
-## 12. 资源边界
+A/B 保留同结构 b+R shadow、同次数调用，不用其分数控制；M1 shadow 不是有效质量证据。
+C 使用真实 b+R。额外从同一 tick 保存 b-only 的排序与 learned residual 是否改变排序，
+只作决策诊断，不能把未执行选择的后果伪造成真实闭环反事实。
 
-首版继续使用 object/vector context 或冻结视觉特征，模型规模服从 RTX 4080 16GB 上
-CARLA + VLA + World 同时在线的预算。资源不足时优先减少 batch/history/feature 分辨率，
-不改变 candidate、label、Safety 或 formal gate。
+C/B 有增益可能来自 b 或非学习回退，而非 R；没有独立闭环 b-only 臂就不宣称残差的
+独立闭环贡献。已有配对开发数据可比较 b 与 b+R 的离线作用，局限必须同时报告。
+本周不增加第四臂、风险校准、线上模型选择或训练。
 
-前沿方法定位与为什么不复制大型视频 World 见 [RELATED_WORK](RELATED_WORK.md)。
+## 历史基线（冻结）
+
+C2 release h6-cora-c2-devbaseline-20260907-v1：train 158 / validation 53，
+499-D context + 10x8 candidate，共享 128/64 MLP，seed 17/29/43。
+candidate ridge progress MAE 约 0.302 m，MLP 约 0.555/0.617/0.555 m，
+开发结论 NO_DEMONSTRATED_GAIN。这些不是 M2 的结果，完整记录见 EVIDENCE。
+
+## C4 量化交付
+
+执行 [PROJECT 论文量化合同](PROJECT.md#论文量化合同c3_c6_metrics_v1planned)。M2/M1 的
+P-ADE 是主要方法指标，连同 P-FDE/P-WP/有效率/失败率和训练成本完整比较。
+b+R/b 必交四头 W-MAE、W-RMSE、W-NMAE、W-PAIR、进度 W-RANK/W-REGRET 及全部有效分母。
+新 b 与 normalizer 按每头有效 train label 拟合；不得用缺失值填零训练。
+原始数据、Guard eligible 子集及旧 C2 聚合口径分别标明，不跨版本相减。
+记录辅助梯度参与比例、实际 LoRA 更新、b/R 输出尺度；门控参与不是预测或驾驶收益。
+所有新指标用同一逐 root 明细生成绝对/相对改善和 CI；不因 World 辅助指标获胜改写主结果。
+
+## 联合学习的额外干扰检查
+
+独立裁剪用于消除新增 World head 对驾驶梯度缩放的隐式耦合：即使辅助项被门控为零，
+World head 的大梯度也不应单凭全局 norm 把驾驶更新缩小。该修订不保证 AdamW 更新或泛化占优。
+烟雾验证中人为放大 World-head 梯度，应只影响该组裁剪系数，不能改变合成前的驾驶梯度；
+正式记录两组 clip 前后 norm、系数、辅助贡献及实际更新。此检查在现有 smoke 内完成。
+
+g_s 是 route+speed 的总 SFT 梯度，与 g_a 相容不保证单独 route ADE 改善；
+在已有日志同时记录 route/speed loss，结果同时报告 P-ADE/P-WP，不能将总 loss 下降替代主指标。
+不因此新增第三套每头梯度门控或额外反向搜索，仍为原两类共享梯度、相同共同 T。
+每个 root 的有效候选/头先平均，再按实际 accumulation window 等权；pair 项只对双方有效的头
+求均值。无 pair 的 root 辅助 pair 项为零并计缺失，不能跳过它改变 SFT 暴露或优化步数。
+
+h 明确由当前观察的有效 token 做 masked mean，排除 padding、teacher/future 和候选特有 token；
+沿用可微张量，不使用 runtime 已转 numpy 的输出。保存 token mask 与展开顺序的版本，
+两候选复用同一个 h、同一次前向。R 不增加 dropout，避免额外随机流干扰 M1/M2 对照。
+本周不新增 full VLM teacher、LoRA 重初始化、视频生成或 RL；优先修正原生监督与优化耦合。

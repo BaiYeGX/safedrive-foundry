@@ -1,4 +1,43 @@
-# CORA 反事实 potential-outcome 数据合同
+# 训练与反事实数据合同
+
+## 本周只准备两种视图
+
+状态：C3 数据适配 `VERIFIED`（2026-09-09）；C4 World 视图仍 `PLANNED / NOT_RUN`。
+C3 用可信专家轨迹微调 VLA；C4 用已有真实四维后果联合学习。权威 C3 manifest 位于
+`generated/h6/cora/c3-vla-sft-20260909-final-v3/manifest.json`。
+数据先用 C2 release 的 train 158 / validation 53，不重开稀有事件覆盖任务。
+
+| 视图 | 输入 | 标签 |
+|---|---|---|
+| SFT | 当前图像、导航、ego/history | 可信 expert 原生 route/speed |
+| World | 相同当前观察 + 原始 candidate | progress、acceleration RMS、jerk RMS、lateral acceleration RMS |
+
+每个目标独立 mask；World 不要求本周新增逐时刻控制/未来视频/actor sequence。
+SFT teacher 不等于 branch outcome；不能复制 Expert 后果给 VLA。
+失败分支可用于真实后果监督，但不能自动成为正确驾驶示范。
+配对损失只用同 root 两个真实有效分支；缺一个 outcome 不得补造。
+
+## C3 一次完成数据适配
+
+核对图像可读取、时间与坐标、原生驾驶 target 时域、可信 teacher 来源和物理 root 隔离。
+canonical 保持 T=10、dt=0.25 s。当前 input 与未来 label 物理分离；
+source/slot/order/provenance/Guard verdict 不进入 World。
+数据不足先检查已有 timeline；必要时只做一次正常专家补采，见 [RESOURCES](RESOURCES.md)。
+补采前登记新 train/dev roots、采集清单和预算；不能用原 VLA 自标冒充专家。
+
+旧 release 的 calibration 52、locked_development 52、coverage_pilot 25 仍仅审计，
+11 个重复 root 继续隔离。不能用改名、相邻 frame 或同 root 分支扩大独立样本量。
+第一天结束仍没有有效 SFT 监督则报告阻塞，不把“四个 World 标签存在”当作 SFT 数据可用。
+
+## C5 一次开发闭环
+
+新预登记 6 个 roots，每 root 三臂；正常行驶/候选分歧各 3 roots。
+recipe、seed、初始化、cadence、终止与排除规则先冻结，不能看结果后挑场景。
+不用 seed 101、reserved 173/179 或旧保留集。全部实际失败与资源记录保留。
+这是新开发评估，不替代原正式矩阵；本周无新 calibration、无安全非劣证明。
+
+下文 C2 原始合同与失败记录仅解释历史数据。原 split、阈值、outcome 身份规则不变；
+旧“不能进入 C3”等描述对应当时阶段，新的执行范围以本文及 ROADMAP 为准。
 
 ## 1. 要解决的问题
 
@@ -235,7 +274,8 @@ formal
 calibration 不参与 checkpoint selection；formal 不参与任何训练、阈值、temperature、conformal
 quantile、router parameter 或 failure diagnosis 后重跑。
 
-已消费 seed 101 永远不进入新 formal。具体新 lineage 只能由 C2/C5 `START_TASK.md` 预注册。
+已消费 seed 101 永远不进入新 formal。具体新 lineage 由对应 C3/C4/C5 的 `START_TASK.md`
+在采集前预注册；C2 原 lineage 与保留用途不变。
 
 统计单位是 root anchor。两个 branch、同 anchor 的多个 intervention 和时间序列 tick 都属于
 同一 cluster；train/test 隔离、bootstrap 和有效样本量不能把它们当独立观测膨胀置信度。
@@ -267,7 +307,7 @@ quantile、router parameter 或 failure diagnosis 后重跑。
 ### 覆盖与尾部
 
 必须按 map/family/weather/source winner/risk event 报告计数，不只给总样本数。collision、
-red-light、offroad 等稀有 target 样本不足时，停止并重新设计 development curriculum；不能
+red-light、offroad 等稀有 target 在 C2 原质量门下样本不足时，停止对应覆盖任务并冻结缺口；不能
 用 class weight 隐藏零正样本。
 
 还必须报告 candidate/branch 缺失机制：按 source、Guard 状态、risk family 和 branch order
@@ -304,7 +344,7 @@ dirty-worktree identity、config、matrix、model/checkpoint、CARLA、seed line
 `h6-cora-c2-dev-20260830-v1` 完成 351/351 terminal roots、351/351 valid nominal pairs、1295 个
 真实 branch outcomes 和 351 次 nominal VLA forwards。Pilot gate 通过；development gate 因
 locked-development offroad 正例仅 1 个，以及 repair_success/executable 负类不足而失败。完整性、
-29-head public labels、feature reproduction、inventory 与资源审计通过；formal 未采集，C3 未授权。
+29-head public labels、feature reproduction、inventory 与资源审计通过；formal 未采集；C3 当时未授权，当前后续路线见本文第 0 节。
 该结果冻结为 `DATA MEASURED / GATE_FAILED / STOPPED`。
 
 C2 只完成 development paired data 与质量审计：
@@ -318,3 +358,32 @@ C2 只完成 development paired data 与质量审计：
 `240–360` root anchors 只是当前单机预算假设。C2 应先冻结 smoke、coverage pilot、development
 三段上限和稀有事件下限；若预算内仍没有足够 Guard-eligible hazard outcomes，冻结数据不足的
 负结论，不通过复制 intervention/tick 或放宽 Guard 来制造样本量。
+
+
+## 残差辅助的数据口径
+
+C4 固定 b 与残差 R 使用同一允许 train 子集，b 只读 canonical candidate；
+标签归一化与 b 系数不拟合 validation。不能因某头在 validation 上更好而临时换基线。
+World mask 缺失不删除任一策略的 SFT 样本；teacher 质量按真实字段/时间/坐标与行为规则判定，
+不按 M0/M1/M2 误差筛选。无 SFT 的 World-only roots 本周不额外采样。
+root 指标与固定比较规则见 PROJECT，旧 split/labels/阈值与饱和排序报告保持不变。
+
+## 量化分母与标签合同
+
+遵守 [PROJECT 论文量化合同](PROJECT.md#论文量化合同c3_c6_metrics_v1planned)。manifest
+记录 root、样本、候选、原生有效点、四头有效 mask 和各 split 计数；root/lineage 交集必须为 0。
+缺 label 与推理失败分开存储；不能通过预测是否成功决定真值 mask。
+同锚点 pair 的差分指标必须两边真值都有效，单边有效只进入对应逐候选指标。
+每头 ridge/normalizer 仅使用有效 train label；val 不参与拟合、标准化或目标幅度选择。
+保存原始单位、dt、路线投影、信号差分/滤波版本；新 root 等权与旧 C2 候选聚合口径分别命名。
+
+## C3 原生监督审计细节
+
+本地上游 route label 是弧长 0…19 m 的空间采样，speed-waypoint 是时间采样；
+分别保存有效空间长度/点 mask 与时间戳/dt，不能以 canonical 2.5 s 轨迹长度冒充全部原生真值。
+原生 head 为增量后 cumsum 的累计位置预测，label 坐标应与最终累计输出一致。
+原始记录缺帧时不得复制上一帧后标有效；短路线不得把 padding 当真实未来监督。
+专家当前规划路线与执行后位置序列分开标 teacher 类型；名义导航折线不能自动充当避障 expert。
+标签所需的隐藏状态仍只离线使用，训练输入严格复用部署的导航/速度/图像约定。
+记录 resolved speed 及 startup assist/override 配置，不能训练喂真实速度、部署却喂修改速度而不说明。
+训练根按无放回轮转、同根 anchor 轮换；有效集合先冻结，所有分布诊断不改变验证分母。

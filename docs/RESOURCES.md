@@ -1,180 +1,93 @@
-# 本机资产与 H6-CORA 资源预算
+# 本周资源与预算
 
-本文是本机资产和单机资源边界的活动说明。路径/版本配置是机器可读真源；任何一次任务的
-GPU/CARLA 可用性仍由该任务实际 probe/Evidence 证明。
+硬件为 RTX 4080 16GB、i5-13600KF；Windows CARLA 与 WSL2 CUDA 共用同一张卡。
+资源是实验设置，不是论文贡献。以下是规划上限，实际性能必须记录，不能借用历史 probe。
 
-全文区分三类口径：`configured` 是仓库/用户确认的资产，`measured` 必须指向运行 artifact，
-`budget` 是后续任务的停止上限。预算数字不能写进简历成为实测性能。
+## 本地资产
 
-## 1. 固定硬件与运行分工
+| 资产 | 路径 |
+|---|---|
+| 项目 | /mnt/e/autonomous driving |
+| SimLingo 参考代码 | /mnt/e/autonomous driving/simlingo-main |
+| VLA 权重 | /mnt/e/autonomous driving/models/simlingo |
+| VLM 底座 | /mnt/e/autonomous driving/models/InternVL2-1B |
+| Python 环境 | /home/sdf/.venvs/sdf |
+| CARLA | /mnt/e/CARLA_0.9.16 |
 
-```text
-GPU: NVIDIA RTX 4080 Desktop 16GB
-CPU: Intel i5-13600KF, 14 cores / 20 threads
-Host: Windows 11 + WSL2 Ubuntu 24.04
-CARLA Server: Windows
-ROS 2 / client / VLA / World / training: WSL2
-```
+机器可读真源：versions.lock、config/vla/local_assets.toml 与 config/runtime/carla_start.toml
+（后两者位于 safedrive_foundry）。不自动装包、换 CUDA 或下载公开大数据。
 
-用户已确认本机 GPU 与 CARLA 可用。某个受限代理进程无法访问 CUDA/RPC，只说明该进程的
-权限/网络上下文，不能否定资产存在；正式运行仍必须保存实际 `torch.cuda`、preflight、
-CARLA version 和 GPU resource Evidence。
+## 只保留三种工作负载
 
-Windows CARLA 与 WSL CUDA 共享同一物理 GPU。不得假设第二张 GPU、远程服务器或云训练。
+- 训练：C3/C4 GPU 优化，CARLA 渲染与其他 optimizer 不并发。
+- 在线：C5 CARLA + 一个 VLA + 小型 World + Safety，不训练。
+- 离线整理：数据检查、评估、C6 重放材料，不启动模拟器。
 
-## 2. 本机路径
+这些是任务模式，不宣称已有同名 CLI 或配置实现。统一入口见 [ENVIRONMENT](ENVIRONMENT.md)。
 
-| 资产 | WSL 路径 | 用途 |
-|---|---|---|
-| 仓库 | `/mnt/e/autonomous driving` | 项目根 |
-| SimLingo code | `/mnt/e/autonomous driving/simlingo-main` | 上游模型/预处理参考 |
-| SimLingo weights | `/mnt/e/autonomous driving/models/simlingo` | nominal VLA checkpoint |
-| InternVL2-1B | `/mnt/e/autonomous driving/models/InternVL2-1B` | VLM 底座资产 |
-| CARLA 0.9.16 | `/mnt/e/CARLA_0.9.16` | Windows Server 文件 |
-| default venv | `/home/sdf/.venvs/sdf` | Python/CUDA/CARLA client |
+## 上限与日程
 
-机器可读配置：
+| 项目 | 上限 |
+|---|---|
+| C3 常规训练 | 完整优化最多 4 小时 |
+| C4 联合训练 | 完整优化最多 4 小时 |
+| 全部 GPU 优化 | 含 smoke/失败累计最多 10 小时 |
+| 训练数据补采 | 仅必要时一次，最多 12 新 roots / 24 attempts / 2 小时 CARLA 含启动恢复，先到即停 |
+| C5 开发闭环 | 6 roots × 3 臂 = 18 runs，每 run 最多 60 s 仿真 |
+| C5 CARLA wall | 含启动、失败、恢复最多 4 小时 |
+| whole-GPU peak | <=14.5 GiB |
+| 采集前空闲磁盘 | >=60 GiB，并容纳预计新增量 |
+| 新公开数据下载 | 本周不做 |
 
-```text
-versions.lock
-safedrive_foundry/config/vla/local_assets.toml
-safedrive_foundry/config/runtime/carla_start.toml
-```
+C3 第 1–2 天，C4 第 3–4 天，C5 第 5 天，C6 第 6 天，第 7 天缓冲。
+第一天真实监督/GPU 不通就报告阻塞；不拖到最后一天才发现训练不可行。
+达到上限保留实际结果，不自动增样、加 seed、加模型或删失败。
+M1/M2 步数在预算内按真实吞吐冻结，避免把额外训练时间混成方法优势。
 
-`simlingo-main` 是第三方上游参考，不得替代本项目 Runtime、Guard、Safety 或 tick master。
+microbatch=1 起步、梯度累积、原生 LoRA 与实际可用 mixed precision；具体配置经真实 batch 冻结。
+不能照搬上游多 GPU/batch/DeepSpeed 学习率。减显存不能 detach 联合梯度后冒称联合学习。
+20Hz 是 Runtime tick 目标；VLA cadence、chunk 与超时策略在 C5 前绑定并实测。
 
-## 3. Python 基线
+## 历史与记录
 
-活动默认：
+C2 CPU baseline 为当时四线程/30 分钟预算，三 seed MLP 已完成；这不等于 GPU 微调测量。
+2026-09-08 设备只读 probe 当时为总量 16376 MiB、已用 1073 MiB，不是可用资源承诺。
+记录 wall time、优化步数、allocated/reserved/整卡峰值、P50/P95/P99 与 deadline miss。
+清理只针对可重建缓存，不删除旧模型、冻结 Evidence 或失败数据；不重扫旧 Hash。
 
-```text
-/home/sdf/.venvs/sdf
-Python 3.12.3
-PyTorch CUDA build
-Linux carla 0.9.16 client
-```
+C3 实测资源账本已写入
+`generated/h6/cora/c3-vla-sft-20260909-final-v3/resource-ledger.json`：RTX 4080 CUDA/BF16
+正式 M1 共 200 updates，wall `267.697 s`，峰值 allocated/reserved 为 `4.259/4.398 GiB`，
+adapter `72,156,073 bytes`，完整恢复 checkpoint `216,521,989 bytes`。本次低于 4 h 单次
+训练和 14.5 GiB 峰值上限；C3/C4 合计 10 h 优化总账仍按合同保留，C4 尚未消耗新预算。
 
-每次需要 GPU 的任务先实际运行：
+## 固定训练与运行口径
 
-```bash
-source /home/sdf/.venvs/sdf/bin/activate
-python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NO_CUDA')"
-```
+C3 的完整任务文档登记 M1/M2 共用的初始 optimizer/seed/batch 与最多 200 updates；
+这些是起始工程默认值，须在正式 M1 前依据真实 smoke 将共同步数一次冻结到上述预算内。
+C4 不额外增加数据暴露或续训预算。C5 的 18 次上限按 episode attempts 计，失败占次数，
+不自动另补 root 或重跑；C6 只离线加载/指标重算/replay，不增加训练与 CARLA 预算。
 
-禁止使用系统 Python、`--break-system-packages`、Windows Anaconda 执行 WSL runtime，或在
-没有 torch 的历史 venv 中运行 VLA/World。
 
-## 4. 独占 workload profiles
+## 本次提高稳定性的预算安排
 
-| Profile | GPU/系统主任务 | 必须关闭或暂停 |
-|---|---|---|
-| `cora_data` | CARLA + nominal VLA branch collection | World optimizer、其他 CARLA client |
-| `cora_train` | CORA World/ensemble training | CARLA Server 渲染负载、VLA live eval |
-| `cora_calibrate` | frozen checkpoints + calibration | training optimizer、formal CARLA |
-| `cora_online` | CARLA + VLA + World + Safety | 所有训练、数据预处理大任务 |
-| `regression` | 专项 CARLA/单元测试 | formal collector |
-| `showcase` | 固定 checkpoint live/replay demo | training、实验 collector |
+C3/M1 与 C4/M2 共用短 head 预热、低 LoRA 学习率和同 T；预热包含在最多 200 updates 内。
+M2 增加残差 head 与同 accumulation window 的两类共享梯度计算，可能接近额外一次 backward，
+不承诺零算力开销。必须在正式 M1 前用真实 smoke 测出成本后冻结共同 T。
+固定 b 的 CPU 拟合/导出计入阶段 wall，M2 在线只增加小型 b+R 运算，不加载第二个 VLA。
+不增加 teacher 网络、SAM、ensemble、多 seed、完整消融或新 CARLA 臂；
+原 4h/4h 完整优化、10h GPU 总账与 18 attempts/4h CARLA 上限不变。
 
-总控应显式拒绝冲突 profile，不依赖 OOM 后恢复。
+## 论文资源指标
 
-### 4A. C2 dev baseline 实际资源口径（2026-09-07）
+执行 [PROJECT 论文量化合同](PROJECT.md#论文量化合同c3_c6_metrics_v1planned)：M1/M2
+分别记录实际 wall hours、updates、峰值 allocated/reserved 显存 GiB、可训练参数及 adapter MiB。
+在线记录全决策与 World 部分时延 P50/P95/P99、deadline miss n/N 和输出新鲜度。
+异步 GPU 的 enqueue 时间不能当计算完成时间；计时方法、warmup 和样本数进入 run config。
+仅复用已有 smoke/预测/trace 和预算，不新增计时训练或闭环；缺仪器数据填 N/A。
+20 Hz 仿真 tick 不等于 VLA 达到 50 ms 实时推理；不得宣称未实测的加速比或成本节省。
+所有原资源硬上限保持，论文中的百分比参数量是实验设置，不作为独立方法创新。
 
-本次收尾使用独立的离线 `cora_train` 子流程：不启动 CARLA、不加载 VLA、不占用 GPU，固定
-CPU 四线程和 30 分钟累计上限。实际三 seed MLP 与 ridge 对照均在该上限内完成；三个 checkpoint
-只保留在本机 release 目录，不上传原始数据或模型。对应 Evidence 明确写为
-`CARLA = 0`、`closed_loop = NOT_MEASURED`，不能把这个离线测量当作在线 scorer latency 或
-显存预算证明。
-
-新的 release 以 `cora_train` 作为训练配置入口，继续保留 `cora_calibrate`、`cora_online` 和
-`cora_data` 作为后续任务 profile。VLA 在本轮保持冻结；后续 VLA 微调要另建 profile、输入—
-示范合同和资源账本，不能与 World baseline 同一轮混用。
-
-## 5. 在线显存预算
-
-下表全部是 `budget`，不是既有测量：
-
-| 占用 | 目标 |
-|---|---:|
-| CARLA Low/No Rendering | 约 4–5 GiB，按 map/RHI 实测 |
-| nominal VLA | 约 5–6 GiB，按 checkpoint/precision 实测 |
-| CORA ensemble/scorer | 尽量 ≤1.5 GiB |
-| CUDA/context/cache 余量 | ≥2 GiB |
-| whole-GPU peak | ≤14–14.5 GiB |
-
-正式在线 Evidence 同时记录 whole-GPU peak 和 World incremental peak。不能把独立离线
-microbenchmark 的低显存/延迟直接写成完整在线结果。
-
-## 6. CORA 模型预算
-
-- 首版继续使用 object/vector context 和候选 trajectory；
-- 允许冻结视觉特征，但不在结题阶段训练视频生成器；
-- shared candidate encoder、outcome heads、pair head 和 3-seed ensemble；
-- mixed precision；
-- 单模型参数量/hidden size 由 C3 小样本过拟合与 latency smoke 冻结；
-- scorer P99、ensemble latency 和 online deadline 分开报告；
-- 资源不足先减 batch、history/token 数或冻结特征分辨率，不改 label/candidate/Safety 合同。
-
-VLA 在 H6-CORA 保持冻结 nominal proposal。任何 LoRA fine-tune 必须等 CORA 正式结题后作为
-新项目授权，避免同时改变 generator 与 selector 而无法归因。
-
-## 7. 数据与磁盘
-
-C2 dev baseline 实际引用 340 个 usable root anchors（原登记 351，11 个物理重复隔离），其中
-train 158、validation 53；每个训练样本保留既有 nominal Expert/VLA 配对和 29-head sidecar，
-intervention/repair 只作审计。后续正式 CORA 数据若重新采集，必须另行冻结 root/branch 预算，不能
-把这里的开发 release 数字当成 formal 覆盖承诺。
-
-存储原则：
-
-- 图像 content-addressed 去重；
-- timeline/events 分片压缩；
-- frozen dataset/Evidence 只读；
-- 同 ID 不同 hash 拒绝覆盖；
-- 可重建 cache 与不可变 Evidence 分开；
-- formal 前检查剩余磁盘和预估增长。
-
-统计与存储都按 root anchor 计数；两个 branch、50 个 tick 和同 anchor interventions 不能被
-写成独立样本放大数据量。C2 分 smoke、coverage pilot、frozen development 三段，每段达到
-磁盘/时间上限或事件覆盖失败都应停止。
-
-活动工作集软预算（规划包络，未做本轮磁盘实测）：
-
-| 资产池 | 范围 |
-|---|---:|
-| observation/split/evidence | 25–35GB |
-| VLA/model assets | 55–90GB |
-| World/data/checkpoints | 25–45GB |
-| 正常总量 | 105–170GB |
-| 软上限 | 200GB |
-
-达到上限先停止采集并审计；只清理可重建 cache，不删除 frozen Evidence、失败数据或用户文件。
-
-正式采集任务开始前必须把 `df`、预计每 anchor bytes、剩余空间、最大 anchor 数写入 run-lock；
-不能因为已经启动 CARLA 就无限追加数据。
-
-## 8. CPU 与实时性
-
-- DataLoader/编码 worker 初始总数 4–6；
-- 不占满 20 线程影响 CARLA tick、sensor barrier 或 ROS callback；
-- collector、spectator 和 writer 使用有界队列；
-- 每阶段记录 wall latency 与 simulation time；
-- online 目标为 20Hz，但具体 scorer/全链 deadline 在 C3/C5 前冻结；
-- P99 和 deadline miss 是 gate，平均延迟不能代替尾延迟。
-
-## 9. 任务前检查
-
-离线：
-
-```bash
-source /home/sdf/.venvs/sdf/bin/activate
-python scripts/sdf.py doctor
-```
-
-真实 CARLA：
-
-```bash
-python scripts/sdf.py sim preflight --json
-```
-
-只有该次执行返回 `READY` 才继续 live task。`RETRYABLE_FAILURE` 只允许一次 ensure 和一次
-复查；GUI/UAC、版本、tick owner、依赖或权限冲突立即停止并交给用户。
+本次研究后的适配检查复用原 smoke 预算：native cumsum/空间时间标签、输入一致性、
+干净 M0 重载和两组梯度裁剪。仍两次训练、两类共享梯度；不新增 teacher 前向、SVD 初始化、
+视频 World、RL 或候选模型搜索。纯读取源码/小型 CPU 数值检查不计为模型训练结果。

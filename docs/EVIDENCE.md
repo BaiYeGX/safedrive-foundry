@@ -53,7 +53,8 @@ cleanup and terminal status
 | H6-CORA C2 data | MEASURED | GATE_FAILED | 351 valid paired roots；真实覆盖不足，已冻结并停止 |
 | H6-CORA C2 repair v2/v3 | MEASURED | GATE_FAILED | v2 保留历史失败证据；v3 修通 recipe/trace/预算链，Town03 diagnostic 12 roots / 34 branches，repair-failure 1/2、offroad 5/1，正式批次被诊断门阻断 |
 | H6-CORA C2 dev baseline | MEASURED | DEV_BASELINE_GATE_PASSED | 现有数据 release 340 usable roots；World 三 seed 已跑完，`NO_DEMONSTRATED_GAIN`；原 coverage gate 仍失败 |
-| H6-CORA C3+ algorithm | PLANNED | NOT_AUTHORIZED | 无 checkpoint、calibrated router、formal 或闭环结果 |
+| H6-CORA C3 | VERIFIED | ENGINEERING_COMPLETED / ALGORITHM_MEASURED | 真实 SFT manifest、CUDA smoke、M0/M1 checkpoint、逐 root 评估和资源账本已绑定；详见下方 C3 VERIFIED |
+| H6-CORA C4–C6 | PLANNED | NOT_RUN | C4 联合微调、C5 闭环和 C6 交付尚未启动 |
 
 ## 3. 指标口径
 
@@ -262,9 +263,10 @@ archive/2026-08-27-cora-document-consolidation/historical-stage-docs/H6_VLA75_HA
 
 ## 10. H6-CORA Evidence 合同
 
-当前 program：`C0 COMPLETED / C1 COMPLETED / C2 COMPLETED / DATA MEASURED / GATE_FAILED /
-STOPPED`。C3 仍为 `NOT_AUTHORIZED / NOT_STARTED`。已有 CORA paired data，但没有项目
-checkpoint、calibrated router、formal 或闭环数字。
+当前 program：C0/C1 完成；C2 原覆盖门 GATE_FAILED，C2 dev baseline 的工程门
+DEV_BASELINE_GATE_PASSED、学习结果 NO_DEMONSTRATED_GAIN。C2 已有三 seed MLP checkpoint。
+C3 已于 2026-09-09 完成并验证；C4–C6 仍是待实施证据合同。C3 的权威记录见下方
+`C3 VERIFIED` 段落，旧计划合同保留用于追溯。
 
 ### C1 正确性
 
@@ -308,7 +310,7 @@ inventory、reset/identity/cleanup/cross-fallback 和资源审计均通过。冻
 locked-development offroad 正例 1（门为 2）；repair success 负例四个 split 均为 0；executable
 负例 train/validation/calibration/locked-development 为 9/1/0/2（门为 12/3/3/3）。三次外部
 collector/server failure 已保存且失败耗时计入资源，immutable resume 后完成矩阵。Formal 未采集，
-C3 未授权。
+C3 当时未授权；当前后续入口见 START_TASK。
 
 每个 dataset 至少保存：
 
@@ -329,33 +331,93 @@ artifact/self hashes
 Guard、risk、branch order 的 missingness。CORA outcome 只解释冻结 CARLA/Safety/controller 下
 的 proposal intervention，不升级为现实世界因果真值。
 
-### C3/C4 模型与 router
+### C3 — 常规 VLA 微调（原计划合同；已由下述 VERIFIED 记录实现）
 
-保存：
+保存 SFT root manifest、teacher 身份、原生 target 对齐、M0 离线预测、M1 adapter/heads、
+超参/seed/实际步数、梯度与 round-trip、逐 root 预测、wall/显存和全部失败。
+真实 batch smoke 不等于完整训练；未测字段为 NOT_MEASURED/null。
+不重扫旧模型/数据 Hash，新权重必须有新身份。
+
+### C3 — 常规 VLA 微调（VERIFIED，2026-09-09）
+
+权威 run：
 
 ```text
-three-seed checkpoints
-per-head metrics and valid masks
-pairwise/selective regret
-NLL/Brier/ECE/AUPRC/unsafe recall
-source/candidate/action/context probes
-worst-group report
-calibration-only artifact and assumptions
-risk-coverage/defer curves
-offline/live trace parity
-measured latency/VRAM when actually run
+generated/h6/cora/c3-vla-sft-20260909-final-v3/
 ```
 
-source-blind claim 只指 metadata schema；trajectory-to-source predictability 必须单独报告。
-coverage 必须说明 per-head/per-candidate marginal 还是 joint，不能把 marginal 指标包装成系统级
-同时覆盖。
+可提交的产物身份索引：
+[`docs/runtime-evidence/h6/h6-cora-c3-sft-20260909-final-v3/c3-sft-index.json`](runtime-evidence/h6/h6-cora-c3-sft-20260909-final-v3/c3-sft-index.json)。
+大型权重和逐 root 原始 JSON 仍按资源规则保留在上述本机目录。
 
-checkpoint summary 中未测量字段为 `NOT_MEASURED`，不能用 0 或 `pass=true` 占位。
+该 run 使用冻结 C2 dev release `h6-cora-c2-devbaseline-20260907-v1`，manifest SHA-256
+为 `e5116aedd2b79e1512f4f0567f1b740880623fce4f977e9470bf6786f21c1bb3`，release index SHA-256
+为 `0c867199d9b6682648471b21a2ab850c86bf8f1eb4d8eb99d73abe3e7c8789b8`。审计通过 211 个
+sample：train 158 roots、validation 53 roots；route 原生 20 点共有效 3160/1060 点，
+speed 执行时间线原生 10 点共有效 1550/530 点，3 个提前终止 train sample 的 speed 缺失
+mask 被保留。输入仅含部署时可用的图像、navigation、ego/history；World/future/source
+字段均未进入 SFT，重复 root 和 split 交叉污染检查通过。执行时间线行数为 1…50，dt 为
+0.05 s；没有执行补采，因为 C2 release 已含完整可信 expert timeline。
 
-### C5 closed loop
+真实 CUDA batch smoke 使用 RTX 4080、BF16，336 个 LoRA 与 10 个驾驶 head checkpoint
+key 均匹配，missing/unexpected 均为 0。LoRA/驾驶 head 共 18,417,664 个参数更新，
+视觉投影、基座和原生 query embeddings 保持冻结；forward/backward、保存和独立 fresh
+reload round-trip 最大绝对差 0（容差 `1e-5`），峰值 allocated/reserved 为
+`4.319/4.914 GiB`。C4 共享 hidden 梯度诊断为非零 auxiliary path（hidden 896，SFT
+norm 21.1636，aux norm 2.9575，cosine -0.3814，门控权重 0），未混入 C3 loss。
 
-pilot/full 每臂保存相同 candidate/Guard/Safety/controller/reset 条件下的 raw World、router、
-Safety、executed/applied chain。pilot 失败不运行 full；formal 无论正负都冻结并关闭。
+M1 按 seed 17、AdamW、LoRA `2e-5`、驾驶 head `1e-4`、weight decay `0.01`、microbatch 1、
+累积 4、200 更新和 10 步 head-only warmup 完成；LoRA 从第 11 步解冻，checkpoint 可独立
+重载且冻结指纹不变。训练耗时 267.697 s，峰值 allocated/reserved `4.259/4.398 GiB`，
+低于 14.5 GiB 限制。M0/M1 在相同 53 validation root 上 root 等权，bootstrap 1000 次、
+seed 71，`eps_ADE=1e-5 m`：
+
+| 指标 | M0 | M1 | Δ（M0−M1） | 相对改善 | 95% CI |
+|---|---:|---:|---:|---:|---:|
+| P-ADE route (m) | 5.032139 | 0.464337 | 4.567802 m | 90.7726% | [4.204761, 4.863890] m |
+| P-FDE route (m) | 5.576035 | 0.585869 | 4.990166 m | 89.4931% | [4.614955, 5.325819] m |
+| P-WP speed (m) | 1.984764 | 0.531818 | 1.452946 m | 73.2050% | [1.240386, 1.675059] m |
+
+M0/M1 root count 均为 53，prediction fail rate 均为 0%。P-SPEED 为 `N/A`，因为没有可信
+真实速度换算 ground truth。点估计是一次 seed 的 validation 开发结果，不能代替独立测试或
+稳定性结论；逐 root 明细、有效点数、mask、失败原因、预测和资源账本均已保存。`verify.json`
+状态为 `VERIFIED`，并绑定以下核心身份：代码 SHA-256
+`a41d4740993b3d3d67950940abb5b7c2ff4a1d9b0a42e66e57f912a4c862bf81`，运行时 Git HEAD
+`598308fd4cb57df94f02f784404635e942c3ff9c`，模型 SHA-256
+`ec8943723d266ee9f5f56f45d153a163b22616960bfccb741965ea5daa700d28`。大型 checkpoint 和
+原始运行数据保留在本机 ignored 目录；Git 提交只包含代码、测试、文档和可审阅的结果身份。
+
+实际验证命令：
+
+```text
+/home/sdf/.venvs/sdf/bin/python -m unittest discover -s tests -t . -v
+# Ran 506 tests in 73.859s; OK (skipped=1)
+/home/sdf/.venvs/sdf/bin/python -m compileall -q safedrive_foundry scripts
+git diff --check
+```
+
+C3 验收后入口已更新为 C4；本轮没有自动启动 C4，也没有启动 CARLA 补采。
+
+### C4 — 后果辅助联合微调（PLANNED）
+
+保存 M2 与 M1 同起点/同数据/同 seed/同更新预算的记录、四头 target/mask、
+World-only LoRA 梯度、候选交换检查、策略/World 开发误差及既有 ridge 对照。
+配对差分是已有方法，不作为新发明。无执行中介模型、无 ensemble/新风险头要求。
+
+### C5 — 小型开发闭环（PLANNED）
+
+A=M1 固定 eligible VLA→Expert；B=M2 相同规则；C=M2 World rank/defer。
+6 roots / 18 runs，每 run 最多 60 s 仿真。新 lineage/recipe/规则先登记；
+不用旧 seed 101、reserved 173/179 或旧保留集。shadow 同计算负载与真实部署成本分开记录。
+保存所有 raw/selected/repaired/executable/applied、事件、逐 root 进度、干预/defer、延迟与失败。
+无独立校准，明确 UNCALIBRATED；这是开发结果，不是 formal、安全非劣或全域保证。
+首个登记 root 检查工程链，失败停止；不新增独立 pilot/正式双矩阵。
+
+### C6 — 最小可复现交付（PLANNED）
+
+两份新权重、配置、结果表、典型 replay、架构图、方法/实验/限制草稿与真实复现入口。
+训练/闭环没做则 PARTIAL；负收益可冻结结题，不能制造正结果。
+三份研究备忘录是来源与说明，不再承担独立排期、预算或验收。
 
 ## 10A. C2 repair v2（2026-09-05）
 
@@ -491,3 +553,39 @@ archive/legacy_project_2024_2025/
 6. 是否把 CARLA SIL 错写成实车或量产安全？
 
 不满足任一项时，数字不得无保留公开。
+
+
+## 单阶段 goal 交付摘要
+
+C3/C4/C5/C6 都必须在自己的新 run-id 下保存 stage-summary.json，关联实际输入身份、
+产物路径、固定 config、真实命令、测试结果、资源与失败、剩余问题及下一阶段。
+不能把上游存在的文件列表当成本阶段真实产物；NOT_RUN/null 不得写为 0 或通过。
+摘要用于下一 goal 核对前置，PLANNED 文档不是前置验收证明。
+C3 配方见 VLA_FINETUNE_WEEK_PLAN；C4 见 WORLD_MODEL；C5 见 HYBRID_CANDIDATES；
+C6 见 SHOWCASE。负收益与工程完成分开，预算不匹配或缺 runs 必须明确限制。
+
+
+## 本轮固定配方与正向证据
+
+新 C3/C4 摘要额外绑定共同预热/学习率日程、b 拟合子集/系数、零残差等价检查、
+梯度余弦/门控/范数及激活比例。初始等于 b 不算学习收益，必须报告最终 b+R 对 b。
+主要比较、eps_ADE、root CI 与 C/B 事件/进度/延迟判断以 PROJECT 为准，正式训练前登记。
+小幅点估计优于对照不等于统计证实；辅助指标不能替换失败的主要指标。
+保留全部历史报告及失败，不修改旧阈值；没有新训练/闭环时所有新收益为 NOT_MEASURED。
+
+## C3–C6 论文指标证据合同（2026-09-08，PLANNED）
+
+新实验依据 [PROJECT 论文量化合同](PROJECT.md#论文量化合同c3_c6_metrics_v1planned)，
+在既有 run-id 目录保存 metrics-spec.json、逐 root 明细与 metrics-summary.json；名称是计划，
+当前不代表这些产物已经存在。记录公式/单位/mask/聚合/version/hash、模型身份、分母、
+失败/缺失、绝对/相对差、CI、目标和证据路径；null 必须附 reason。
+C6 从该明细复算表格；工程通过、规划达标与测得优势分别验收。
+保留旧 C2 数字及其旧权重/平局规则，不覆盖历史 Evidence，不把 NOT_MEASURED 填为 0。
+
+## C3/C4 原生适配与优化干扰审计（2026-09-08，PLANNED）
+
+计划记录原生空间/时间采样、cumsum、future 缺失 mask、部署输入一致性、
+smoke 后 M0 重载身份、参数白名单/query 冻结、root 暴露和驾驶/World 各自裁剪系数。
+来源为本地 SimLingo adaptor/dataset、运行器和旧 ridge 拟合源码检查；属于待实现合同，
+未修改运行代码、冻结模型或旧 release。简单 CPU 范数算例只验证裁剪耦合的代数，
+不是训练测试或模型收益。保留文献启发与本项目验证的区别，不向运行报告预填 2%–3%。

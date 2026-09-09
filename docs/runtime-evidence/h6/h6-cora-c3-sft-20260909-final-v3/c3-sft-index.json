@@ -1,0 +1,134 @@
+{
+  "schema_version": "safedrive.c3.tracked_evidence_index.v1",
+  "stage": "C3",
+  "status": "VERIFIED",
+  "run_id": "c3-vla-sft-20260909-final-v3",
+  "local_artifact_root": "generated/h6/cora/c3-vla-sft-20260909-final-v3",
+  "release": {
+    "id": "h6-cora-c2-devbaseline-20260907-v1",
+    "index_sha256": "0c867199d9b6682648471b21a2ab850c86bf8f1eb4d8eb99d73abe3e7c8789b8",
+    "manifest_sha256": "e5116aedd2b79e1512f4f0567f1b740880623fce4f977e9470bf6786f21c1bb3",
+    "split_roots": {
+      "train": 158,
+      "validation": 53
+    },
+    "sample_count": 211,
+    "route_valid_points": {
+      "train": 3160,
+      "validation": 1060
+    },
+    "speed_valid_points": {
+      "train": 1550,
+      "validation": 530
+    },
+    "masked_speed_samples": 3,
+    "future_labels_in_sft": false,
+    "world_labels_in_sft": false
+  },
+  "model": {
+    "path": "models/simlingo/simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt",
+    "sha256": "ec8943723d266ee9f5f56f45d153a163b22616960bfccb741965ea5daa700d28",
+    "size_bytes": 2569679322,
+    "dtype": "torch.bfloat16",
+    "matched_lora_keys": 336,
+    "matched_driving_head_keys": 10,
+    "missing_keys": 0,
+    "unexpected_keys": 0,
+    "trainable_parameters": 18417664,
+    "frozen_query_embeddings": true
+  },
+  "training": {
+    "seed": 17,
+    "optimizer": "AdamW",
+    "lora_learning_rate": 0.00002,
+    "driving_head_learning_rate": 0.0001,
+    "weight_decay": 0.01,
+    "microbatch": 1,
+    "gradient_accumulation": 4,
+    "target_updates": 200,
+    "actual_updates": 200,
+    "head_only_warmup_updates": 10,
+    "lora_unfreeze_update": 11,
+    "checkpoint_round_trip_max_abs": 0.0,
+    "round_trip_tolerance": 0.00001
+  },
+  "metrics": {
+    "aggregation": "root_equal",
+    "validation_roots": 53,
+    "bootstrap_rounds": 1000,
+    "bootstrap_seed": 71,
+    "eps_ADE_m": 0.00001,
+    "route_ade_m": {
+      "m0": 5.032138903744428,
+      "m1": 0.46433729534709917,
+      "delta_m0_minus_m1": 4.567801608397329,
+      "relative_improvement_percent": 90.77256601558464,
+      "ci95_m": [4.20476083108607, 4.863889974967416]
+    },
+    "route_fde_m": {
+      "m0": 5.576034578983236,
+      "m1": 0.5858688503299229,
+      "delta_m0_minus_m1": 4.990165728653314,
+      "relative_improvement_percent": 89.49309151456602,
+      "ci95_m": [4.614955397360647, 5.325819447365727]
+    },
+    "speed_wp_ade_m": {
+      "m0": 1.9847642695025238,
+      "m1": 0.5318180189997285,
+      "delta_m0_minus_m1": 1.4529462505027952,
+      "relative_improvement_percent": 73.204978184486,
+      "ci95_m": [1.2403855889493574, 1.675059215710023]
+    },
+    "prediction_fail_rate_percent": {
+      "m0": 0.0,
+      "m1": 0.0
+    },
+    "p_speed": "N/A_without_trusted_time_speed_ground_truth"
+  },
+  "resources": {
+    "device": "cuda",
+    "gpu": "RTX 4080",
+    "peak_allocated_gib": 4.259098529815674,
+    "peak_reserved_gib": 4.3984375,
+    "peak_limit_gib": 14.5,
+    "wall_time_s": 267.69739393300006,
+    "single_run_limit_hours": 4.0,
+    "gpu_optimization_budget_hours": 10.0,
+    "adapter_bytes": 72156073,
+    "checkpoint_bytes": 216521989
+  },
+  "artifact_hashes": {
+    "smoke": "484e3bd94f7959372af07efe042b3cf685c58f3acbe2b679fb07d238a7b40700",
+    "m0_predictions": "73e91452f2409d363e30b594874b064fe6d1a7948846b080e962dc98fe9154c7",
+    "m1_predictions": "6a5d6587c8c86831c988dea8693b68243c1564dc5bef5e387170c009d242994b",
+    "m1_training_summary": "09fc3d9d1da27ed81cb44c8ae8b56b4e0d646cd487f62a7f1480c7b7ac086aa7",
+    "resource_ledger": "8e3f01eaa12619d6536d63242edc06dda085f947ddfcedf5ebf1a544ddbfa493",
+    "metrics": "316555c89302ffb6b8440b8a5f4d9e4a2d42fb74a3fa5ab6ac7036498f20f4a2",
+    "evaluation_report": "d2e47174038700ca1fc5f0c8ea7bae65cdb1d1d1014675d97591d9a441ee94f3",
+    "verification": "76868f20c172a8bf728038ae17cf6f0d5bfd3ab9495ceee79a2a6ea63e3dae4b",
+    "stage_summary": "9377f0916ee31ce974c24bf3f41bbfd59a3e9785813cc60e314b290cea1fc0c0"
+  },
+  "code_identity": {
+    "script": "scripts/h6_cora_sft.py",
+    "script_sha256": "a41d4740993b3d3d67950940abb5b7c2ff4a1d9b0a42e66e57f912a4c862bf81",
+    "run_git_head": "598308fd4cb57df94f02f784404635e942c3ff9c"
+  },
+  "commands": [
+    "python scripts/h6_cora_sft.py audit --run-id c3-vla-sft-20260909-final-v3 --device cuda",
+    "python scripts/h6_cora_sft.py smoke --run-id c3-vla-sft-20260909-final-v3 --device cuda",
+    "python scripts/h6_cora_sft.py baseline --run-id c3-vla-sft-20260909-final-v3 --device cuda",
+    "python scripts/h6_cora_sft.py train --run-id c3-vla-sft-20260909-final-v3 --device cuda --updates 200 --accumulation 4 --max-hours 4",
+    "python scripts/h6_cora_sft.py evaluate --run-id c3-vla-sft-20260909-final-v3 --device cuda",
+    "python scripts/h6_cora_sft.py verify --run-id c3-vla-sft-20260909-final-v3 --device cpu",
+    "/home/sdf/.venvs/sdf/bin/python -m unittest discover -s tests -t . -v",
+    "/home/sdf/.venvs/sdf/bin/python -m compileall -q safedrive_foundry scripts",
+    "git diff --check"
+  ],
+  "validation": {
+    "full_unittest": "506 tests, 1 skipped, OK",
+    "compileall": "passed",
+    "git_diff_check": "passed",
+    "carla_supplemental_collection": "not_needed; C2 release timelines were complete"
+  },
+  "next_stage": "C4"
+}
