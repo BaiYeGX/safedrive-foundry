@@ -1,0 +1,66 @@
+{
+  "schema_version": "safedrive.c3.verify_attack_tests.v1",
+  "status": "PASSED",
+  "run_id": "c3-repair-20260910T100651Z",
+  "run_directory": "/mnt/e/autonomous driving/generated/h6/cora/c3-repair-20260910T100651Z",
+  "verify_sha256_before_attacks": "bd0324fbb516d4295a68d906baf0934b2331d5e24049a41e6bc350bd7acd35f5",
+  "code_sha256": "df095e2e1944fb6ccfb775af3c8a22946205d08694dcae41503a4cea7d7e8144",
+  "method": "Each case copied one artifact, applied one bounded mutation or deletion, ran the independent verify CLI, recorded rejection, and restored the original bytes before the next case.",
+  "cases": [
+    {
+      "case": "prediction_row_mutation",
+      "mutation": "change one saved M1 route prediction value",
+      "observed": "FAILED",
+      "accepted": false
+    },
+    {
+      "case": "duplicate_root",
+      "mutation": "duplicate one validation root row",
+      "observed": "FAILED",
+      "accepted": false
+    },
+    {
+      "case": "manifest_identity_mutation",
+      "mutation": "change the manifest identity or split field",
+      "observed": "CLI_REJECTED",
+      "return_code": 1,
+      "accepted": false
+    },
+    {
+      "case": "metrics_value_mutation",
+      "mutation": "change one aggregate metric value",
+      "observed": "FAILED",
+      "accepted": false
+    },
+    {
+      "case": "checkpoint_identity_mutation",
+      "mutation": "change the saved adapter/checkpoint identity",
+      "observed": "FAILED",
+      "accepted": false
+    },
+    {
+      "case": "training_log_tail_deletion",
+      "mutation": "delete the final JSONL training log row",
+      "observed": "FAILED",
+      "accepted": false
+    },
+    {
+      "case": "resource_monitoring_removal",
+      "mutation": "remove the GPU monitoring evidence field",
+      "observed": "FAILED",
+      "accepted": false
+    },
+    {
+      "case": "prediction_failure_sidecar_deletion",
+      "mutation": "delete m1_prediction_failures.json",
+      "observed": "CLI_REJECTED",
+      "return_code": 1,
+      "accepted": false
+    }
+  ],
+  "restoration_check": {
+    "observed": "VERIFIED",
+    "errors": [],
+    "accepted": true
+  }
+}

@@ -2,9 +2,11 @@
 
 ## 唯一模型与研究问题
 
-状态：C3 M1 常规保守 SFT 已于 2026-09-09 `VERIFIED`；C4 M2 后果辅助联合微调仍
-`PLANNED / NOT_RUN`。C3 权威 run 为 `generated/h6/cora/c3-vla-sft-20260909-final-v3/`。
-两者从 M0 同一起点训练，使用同 SFT 数据、seed、步数、LoRA 范围和预热/学习率日程。
+状态：C3 修复版 M1 常规保守 SFT 已于 2026-09-10 `VERIFIED`；C4 M2 后果辅助联合微调仍
+`PLANNED / NOT_RUN`。C3 修复版权威 run 为
+`generated/h6/cora/c3-repair-20260910T100651Z/`；初版监督错误和 90.77% 结果已撤回，
+详见 [C3 SFT 勘误](runtime-evidence/h6/c3-sft-repair-erratum.md)。M1 与 M2 都必须从原始
+M0 同一起点训练，M2 禁止从 M1 续训，使用同 SFT 数据、seed、步数、LoRA 范围和预热/学习率日程。
 本周只有这两份新训练模型，不做执行中介、ensemble、视频 World、RL 或多配置搜索。
 
 当前改进是：**保留简单候选基线，学习它的后果残差；限制辅助梯度干扰驾驶主任务。**

@@ -53,7 +53,7 @@ cleanup and terminal status
 | H6-CORA C2 data | MEASURED | GATE_FAILED | 351 valid paired roots；真实覆盖不足，已冻结并停止 |
 | H6-CORA C2 repair v2/v3 | MEASURED | GATE_FAILED | v2 保留历史失败证据；v3 修通 recipe/trace/预算链，Town03 diagnostic 12 roots / 34 branches，repair-failure 1/2、offroad 5/1，正式批次被诊断门阻断 |
 | H6-CORA C2 dev baseline | MEASURED | DEV_BASELINE_GATE_PASSED | 现有数据 release 340 usable roots；World 三 seed 已跑完，`NO_DEMONSTRATED_GAIN`；原 coverage gate 仍失败 |
-| H6-CORA C3 | VERIFIED | ENGINEERING_COMPLETED / ALGORITHM_MEASURED | 真实 SFT manifest、CUDA smoke、M0/M1 checkpoint、逐 root 评估和资源账本已绑定；详见下方 C3 VERIFIED |
+| H6-CORA C3 repair | VERIFIED | ENGINEERING_COMPLETED / ALGORITHM_MEASURED | 修复版监督语义、CUDA smoke、M0/M1 checkpoint、逐 root 评估、独立重算和资源账本已绑定；详见下方 C3 repair VERIFIED |
 | H6-CORA C4–C6 | PLANNED | NOT_RUN | C4 联合微调、C5 闭环和 C6 交付尚未启动 |
 
 ## 3. 指标口径
@@ -265,8 +265,8 @@ archive/2026-08-27-cora-document-consolidation/historical-stage-docs/H6_VLA75_HA
 
 当前 program：C0/C1 完成；C2 原覆盖门 GATE_FAILED，C2 dev baseline 的工程门
 DEV_BASELINE_GATE_PASSED、学习结果 NO_DEMONSTRATED_GAIN。C2 已有三 seed MLP checkpoint。
-C3 已于 2026-09-09 完成并验证；C4–C6 仍是待实施证据合同。C3 的权威记录见下方
-`C3 VERIFIED` 段落，旧计划合同保留用于追溯。
+C3 修复版已于 2026-09-10 完成并验证；C4–C6 仍是待实施证据合同。C3 的权威记录见下方
+`C3 修复版 VERIFIED` 段落，初版和修复尝试的旧记录保留但已明确撤回。
 
 ### C1 正确性
 
@@ -338,7 +338,58 @@ Guard、risk、branch order 的 missingness。CORA outcome 只解释冻结 CARLA
 真实 batch smoke 不等于完整训练；未测字段为 NOT_MEASURED/null。
 不重扫旧模型/数据 Hash，新权重必须有新身份。
 
-### C3 — 常规 VLA 微调（VERIFIED，2026-09-09）
+### C3 — 常规 VLA 微调（修复版 VERIFIED，2026-09-10）
+
+权威 run：
+
+```text
+generated/h6/cora/c3-repair-20260910T100651Z/
+```
+
+修复版撤回初版 `c3-vla-sft-20260909-final-v3` 的监督、验收和 90.77% 路线结论；完整
+原因与历史路径见 [C3 SFT 勘误](runtime-evidence/h6/c3-sft-repair-erratum.md)，可提交的
+身份索引为 [`c3-repair-20260910T100651Z-index.json`](runtime-evidence/h6/c3-repair-20260910T100651Z-index.json)。
+初版和此前 repair attempts 继续保留，但不能用于模型选择或活动比较。
+
+修复版读取冻结 C2 dev release，保留 train 158 / validation 53 和 211 个 root，manifest
+SHA-256 为 `54281a1de6207b4e0c553ee8456de40f43131a6ef30b434e7bd1064da776c2fd`。route 先按
+当前位置投影到有序 native expert reference path、裁去已通过前缀，再按 1 m 采样 20 点
+(0…19 m)；speed 独立使用 canonical expert proposal 的 10 点、0.25 s 合同。导航仅作输入/
+诊断，不能冒充专家标签。缺失、碰撞终止和未对齐 timeline 按逐头 mask 保留，3 个碰撞终止
+train root 的 speed 监督无效；anchor speed 的 211 个零值和 history disagreement 全部披露。
+无补采、无 future/World label 泄漏，validation 输入与 mask 在预测前冻结。
+
+真实 RTX 4080 CUDA/BF16 smoke 通过，LoRA/驾驶 head 共 18,417,664 参数更新，冻结视觉、
+基座和 query 指纹不变；原生 forward/backward、adapter 和独立 checkpoint reload 通过。
+正式 M1 从原始 M0 开始，seed 17、AdamW、LoRA `2e-5`、驾驶 head `1e-4`、weight decay
+`0.01`、microbatch 1、累积 4，完成 200/200 updates；5 轮共 790 个样本暴露，root exposure
+均为 5，尾部窗口按 39×4 + 1×2 保留。C4 成本 smoke 的 zero residual 为 0、shared LoRA
+gradient 非零、两组 clip 后范数均 ≤1.0；C4 尚未训练，M2 不能从 M1 续训。
+
+固定 53 个 validation root 的 root-equal 指标（bootstrap 1000、seed 71，`eps_ADE=1e-5 m`）为：
+
+| 指标 | M0 | M1 | Δ（M0−M1） | 相对改善 | 95% 配对 CI |
+|---|---:|---:|---:|---:|---:|
+| P-ADE route (m) | 0.210514 | 0.232211 | -0.021698 m | -10.3069% | [-0.159394, 0.103600] |
+| P-FDE route (m) | 0.735295 | 0.806690 | -0.071395 m | -9.7097% | [-0.625551, 0.471091] |
+| P-WP speed (m) | 2.178557 | 0.336781 | 1.841776 m | 84.5411% | [1.570158, 2.128422] |
+| P-VALID | 100.0% (53/53) | 100.0% (53/53) | — | — | — |
+| P-FAIL | 0.0% (0/53) | 0.0% (0/53) | — | — | — |
+
+P-SPEED 为 `N/A_without_trusted_time_speed_ground_truth`。route 为负、speed waypoint 为正，
+不称全面改善；工程状态与算法收益分开。优化总账（含历史失败/撤回运行的保守上界）为
+`8.622365 h`，观测整卡 allocated/reserved 峰值为 `9.889132/10.845703 GiB`，低于既定
+10 h / 14.5 GiB 限制。`verify.json` 为 `VERIFIED`、`errors=[]`，独立重算和篡改拦截证据已
+留在该 run。实际验证命令为
+`/home/sdf/.venvs/sdf/bin/python -m unittest discover -s tests -t . -v`（509 tests、1 skipped、
+`OK`，75.094 s）、`/home/sdf/.venvs/sdf/bin/python -m compileall -q safedrive_foundry
+scripts/h6_cora_sft.py` 和 `git diff --check`；篡改案例摘要见
+[`c3-repair-20260910T100651Z-verify-attacks.json`](runtime-evidence/h6/c3-repair-20260910T100651Z-verify-attacks.json)。
+
+### C3 — 常规 VLA 微调（初版 VERIFIED，已撤回）
+
+> 以下段落是 2026-09-09 的历史记录。其监督、manifest、指标和 `VERIFIED` 状态均已被上方
+> 修复版取代；其中的 90.77% 路线改善不能引用。
 
 权威 run：
 

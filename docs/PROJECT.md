@@ -7,8 +7,10 @@
 硬件写实验设置；不声称实车部署或从头训练基础模型。
 
 本周完整范围固定为 [ROADMAP](../ROADMAP.md) 的 C3、C4、C5、C6。
-C3 已于 2026-09-09 `VERIFIED`（真实数据适配、M0/M1 离线评估和 200 更新 LoRA SFT）；
-当前下一入口为 C4，旧 C2 基线未证明学习增益。
+C3 修复版已于 2026-09-10 `VERIFIED`（监督语义审计、M0/M1 离线评估和 200 更新 LoRA SFT）；
+当前下一入口为 C4，旧 C3 route 监督与 90.77% 结论已撤回，旧 C2 基线仍未证明学习增益。
+修复版权威 run 为 `generated/h6/cora/c3-repair-20260910T100651Z/`，勘误见
+[C3 SFT 修复记录](runtime-evidence/h6/c3-sft-repair-erratum.md)。
 
 ## 方法与工作量
 
@@ -19,7 +21,7 @@ M0 为原始 VLA；M1 为一次常规 LoRA SFT；M2 从同一起始权重训练�
 
 面向 2%–3% 目标先修正原生监督/输入与优化实现：空间 route 与时间 speed 分离，
 增量 head 正确累加，smoke 后恢复原始起点，root 无放回采样，驾驶/World 分组裁剪。
-具体合同见 C3 执行文档与 WORLD_MODEL；C3 的适配、冻结和测量已由权威 run 验证，C4 的
+具体合同见 C3 执行文档与 WORLD_MODEL；C3 修复版的适配、冻结和测量已由权威 run 验证，C4 的
 联合学习质量控制仍待实现，不能把 C3 的适配收益冒充 C4 方法收益。
 
 SFT 标签来自可信 expert；World 标签来自候选各自的真实分支。

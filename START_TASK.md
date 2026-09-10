@@ -1,8 +1,10 @@
 # 当前任务：C4 — 加一个 World 辅助任务，完成联合微调
 
-状态：C3 `VERIFIED / ENGINEERING_COMPLETED / ALGORITHM_MEASURED`；当前入口已切到 C4，
-C4 尚未启动。本轮 C3 的权威 run 是
-`generated/h6/cora/c3-vla-sft-20260909-final-v3/`；本任务在 C3 验收后停止，不自动执行 C4。
+状态：C3 修复版 `VERIFIED / ENGINEERING_COMPLETED / ALGORITHM_MEASURED`；当前入口已切到
+C4，C4 尚未启动。本轮 C3 的唯一权威 run 是
+`generated/h6/cora/c3-repair-20260910T100651Z/`。旧
+`c3-vla-sft-20260909-final-v3` 及此前 repair attempts 保留作勘误追溯，不能作为 C3 验收或
+收益依据；其旧路线监督和 90.77% 结论已撤回。本任务在 C3 修复验收后停止，不自动执行 C4。
 后续阶段仅 C5 小型闭环、C6 交付，见 [ROADMAP](ROADMAP.md)。
 
 下一阶段完整合同见 [C4 执行合同](docs/WORLD_MODEL.md)。开始 C4 前核对 C3 的
@@ -10,12 +12,12 @@ C4 尚未启动。本轮 C3 的权威 run 是
 
 ## C4 下一入口（尚未执行）
 
-从 C3 M1 的干净、可重载起点启动一次 M2 联合微调，复用同一 train/validation split、seed、
-输入处理和更新预算，增加 C2 已有四个连续后果目标（进度、加速度 RMS、jerk RMS、横向
-加速度 RMS）。World 输入只能是当前共享表示与候选，真实未来、source/slot/order 元数据和
-安全真值不进入在线特征；候选交换、驾驶梯度相容门控、分组裁剪与 zero-residual 对照均需有
-直接验证。输出 M2 与 M1 的配对离线指标、四头 mask/误差、梯度和资源证据；未超过基线时照实
-记录。C4 验收后再把入口切到 C5。
+从原始 M0 checkpoint 分别启动 M2 联合微调，不能从 M1 续训；复用同一 train/validation
+split、seed、输入处理和更新预算，增加 C2 已有四个连续后果目标（进度、加速度 RMS、jerk
+RMS、横向加速度 RMS）。World 输入只能是当前共享表示与候选，真实未来、source/slot/order
+元数据和安全真值不进入在线特征；候选交换、驾驶梯度相容门控、分组裁剪与 zero-residual
+对照均需有直接验证。输出 M2 与 M1 的配对离线指标、四头 mask/误差、梯度和资源证据；未超过
+基线时照实记录。C4 验收后再把入口切到 C5。
 
 ## 上一阶段 C3 交付合同（已完成，保留追溯）
 
@@ -63,9 +65,10 @@ git diff --check
 
 已实现并实际运行的入口为 [`scripts/h6_cora_sft.py`](scripts/h6_cora_sft.py)，提供
 `audit`、`smoke`、`baseline`、`train --resume`、`evaluate` 和 `verify` 子命令；权威命令与
-结果保存在 C3 run 的 `run_config.json` 和 `stage-summary.json`。C3 已执行最小适配测试、
-真实 CUDA round-trip、独立 M0/M1 评估、全量 506 tests（1 skipped，OK）、compileall 与
-`git diff --check`。数据泄漏、未知重叠修改、环境或安全接口异常仍按 AGENTS 停止。
+结果保存在 C3 run 的 `run_config.json` 和 `stage-summary.json`。C3 修复版已执行最小适配测试、
+真实 CUDA round-trip、独立 M0/M1 评估、验收篡改拦截、全量 unittest、compileall 与
+`git diff --check`；全量 unittest 实际为 509 tests、1 skipped、`OK`（75.094 s）。数据泄漏、
+未知重叠修改、环境或安全接口异常仍按 AGENTS 停止。
 
 ## 本阶段的论文量化要求
 

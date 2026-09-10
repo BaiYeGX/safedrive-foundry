@@ -20,9 +20,10 @@ CARLA–ROS 2 软件在环驾驶研究：**真实 VLA 微调 → 短时后果 Wo
 
 C0/C1 已完成；C2 有 340 usable roots，其中 train 158 / validation 53。
 C2 World 基线未超过 candidate-only ridge，原稀有事件门仍失败；历史结果完整保留。
-C3 已于 2026-09-09 完成并验证：真实数据适配、CUDA batch smoke、M0 离线基线和 200 更新
-M1 LoRA SFT 均有可重载证据。权威产物位于
-`generated/h6/cora/c3-vla-sft-20260909-final-v3/`；当前入口已切到 C4，详见
+C3 修复版已于 2026-09-10 完成并独立验证：监督语义、CUDA batch smoke、M0 离线基线和 200
+更新 M1 LoRA SFT 均有可重载证据。权威产物位于
+`generated/h6/cora/c3-repair-20260910T100651Z/`；初版 C3 的旧路线监督与 90.77% 结论已撤回，
+详见 [C3 勘误](docs/runtime-evidence/h6/c3-sft-repair-erratum.md)。当前入口已切到 C4，详见
 [START_TASK](START_TASK.md)、[PROGRESS](PROGRESS.md) 和 [ROADMAP](ROADMAP.md)。
 
 ## 文档入口
@@ -49,12 +50,12 @@ Safety 与 MPC/PID 保持最终执行权限；World 无轨迹生成、底盘或 
 
 直接复制 [ROADMAP 的阶段索引](ROADMAP.md) 所链接文档中的 goal 文本即可。
 C3 数据/常规微调、C4 联合微调、C5 开发闭环、C6 交付各自有完整验收与停止条件。
-C3 已完成；C4 尚未启动。本地复现实验入口：
+C3 修复已完成；C4 尚未启动。本地复现实验入口：
 
 ```bash
-python scripts/h6_cora_sft.py audit --run-id c3-vla-sft-20260909-final-v3 --device cuda
-python scripts/h6_cora_sft.py evaluate --run-id c3-vla-sft-20260909-final-v3 --device cuda
-python scripts/h6_cora_sft.py verify --run-id c3-vla-sft-20260909-final-v3 --device cpu
+python scripts/h6_cora_sft.py audit --run-id c3-repair-20260910T100651Z --device cuda
+python scripts/h6_cora_sft.py evaluate --run-id c3-repair-20260910T100651Z --device cuda
+python scripts/h6_cora_sft.py verify --run-id c3-repair-20260910T100651Z --device cpu
 ```
 
 
@@ -63,10 +64,11 @@ python scripts/h6_cora_sft.py verify --run-id c3-vla-sft-20260909-final-v3 --dev
 四阶段不变；C3 已按保守微调配方完成，C4 采用固定候选基线的后果残差与
 驾驶梯度相容门控，C5/C6 按预登记比较呈现微弱收益与代价。
 主要方法目标是 M2 对 M1 的 route ADE 改善，不要求超过已饱和的旧 ridge 排序。
-当前已有 C3 新训练结果，尚无 C4 联合训练或 C5 闭环结果；完整口径见 [PROJECT](docs/PROJECT.md)。
+当前已有 C3 修复版新训练结果，尚无 C4 联合训练或 C5 闭环结果；完整口径见 [PROJECT](docs/PROJECT.md)。
 
 ## 论文指标与优势证据
 
 统一定义见 [论文量化合同](docs/PROJECT.md#论文量化合同c3_c6_metrics_v1planned)。
 主要方法比较是 M2/M1 的原生 route ADE；适配、后果预测、闭环进度和运行代价分别报告。
-规划目标与实测收益分开；C3 的新训练指标已测，C4/C5/C6 仍按路线执行。
+规划目标与实测收益分开；C3 修复版 route 指标为负、speed-waypoint 指标为正，C4/C5/C6
+仍按路线执行。

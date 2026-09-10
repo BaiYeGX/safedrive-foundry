@@ -55,11 +55,12 @@ C2 CPU baseline 为当时四线程/30 分钟预算，三 seed MLP 已完成；�
 记录 wall time、优化步数、allocated/reserved/整卡峰值、P50/P95/P99 与 deadline miss。
 清理只针对可重建缓存，不删除旧模型、冻结 Evidence 或失败数据；不重扫旧 Hash。
 
-C3 实测资源账本已写入
-`generated/h6/cora/c3-vla-sft-20260909-final-v3/resource-ledger.json`：RTX 4080 CUDA/BF16
-正式 M1 共 200 updates，wall `267.697 s`，峰值 allocated/reserved 为 `4.259/4.398 GiB`，
-adapter `72,156,073 bytes`，完整恢复 checkpoint `216,521,989 bytes`。本次低于 4 h 单次
-训练和 14.5 GiB 峰值上限；C3/C4 合计 10 h 优化总账仍按合同保留，C4 尚未消耗新预算。
+C3 修复版实测资源账本已写入
+`generated/h6/cora/c3-repair-20260910T100651Z/resource-ledger.json`：RTX 4080 CUDA/BF16
+正式 M1 共 200 updates，训练 wall `285.198 s`，峰值 allocated/reserved 为
+`4.259/4.398 GiB`；含历史失败和已撤回运行的优化总账保守上界为 `8.622365 h`，整卡观测
+峰值 allocated/reserved 为 `9.889132/10.845703 GiB`，低于 10 h 与 14.5 GiB 上限。
+旧账本保留作追溯，C4 尚未消耗新预算。初版 C3 的资源数字不再作为活动验收依据。
 
 ## 固定训练与运行口径
 

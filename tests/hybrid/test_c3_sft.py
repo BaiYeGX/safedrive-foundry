@@ -20,6 +20,7 @@ from driving_vla.model.sft import (  # noqa: E402
     map_to_ego,
     masked_smooth_l1,
     native_route_target,
+    native_route_target_with_report,
     native_speed_target,
     native_speed_target_from_timeline,
     root_metrics,
@@ -85,10 +86,26 @@ class C3SamplingTests(unittest.TestCase):
             ego_yaw=0.0,
             steps=3,
         )
-        # The inserted ego origin is the first native point even when the
-        # recorded route begins behind the car.
-        np.testing.assert_allclose(behind, [[0.0, 0.0], [-1.0, 0.0], [-2.0, 0.0]], atol=1e-8)
+        # Projection removes the already-traversed prefix; all retained
+        # targets are forward along the ordered route.
+        np.testing.assert_allclose(behind, [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]], atol=1e-8)
         np.testing.assert_array_equal(behind_mask, [True, True, True])
+
+    def test_route_projection_keeps_turns_and_reports_support(self) -> None:
+        target, mask, report = native_route_target_with_report(
+            [[-10.0, 0.0], [0.0, 0.0], [0.0, 10.0], [10.0, 10.0]],
+            ego_x=0.0,
+            ego_y=1.0,
+            ego_yaw=math.pi / 2.0,
+            steps=20,
+        )
+        self.assertTrue(mask.all())
+        self.assertAlmostEqual(report["projection_distance_m"], 0.0, places=8)
+        self.assertGreaterEqual(report["support_m"], 19.0)
+        # The turn is retained; negative map coordinates are not used as a
+        # heuristic for dropping a legal route prefix.
+        self.assertGreater(float(target[1, 0]), 0.0)
+        self.assertLess(float(target[10, 1]), 0.0)
 
     def test_speed_sampling_requires_native_time_grid_and_keeps_missing(self) -> None:
         trajectory = [
@@ -145,8 +162,21 @@ class C3MetricTests(unittest.TestCase):
         self.assertEqual(row["route_valid_points"], 19)
         self.assertEqual(row["speed_valid_points"], 10)
         self.assertFalse(row["route_finite"])
-        self.assertTrue(row["prediction_valid"])
+        self.assertFalse(row["prediction_valid"])
+        self.assertIn("route_non_finite", row["failure_reasons"])
         self.assertIsNotNone(row["route_ade_m"])
+
+    def test_route_fde_is_fixed_point_twenty_only(self) -> None:
+        sample = _sample("root")
+        route = np.asarray(sample.route_target, dtype=float)
+        route[-1] += 2.0
+        route[-2] += 10.0
+        row = root_metrics({"route": route, "speed": np.asarray(sample.speed_target)}, sample)
+        self.assertAlmostEqual(row["route_fde_m"], math.sqrt(8.0))
+        sample_short = SFTSample(**{**sample.to_dict(), "route_mask": (True,) * 19 + (False,)})
+        short_row = root_metrics({"route": route, "speed": np.asarray(sample.speed_target)}, sample_short)
+        self.assertIsNone(short_row["route_fde_m"])
+        self.assertFalse(short_row["route_fde_target_valid"])
 
     def test_aggregate_is_root_equal_and_bootstrap_is_seeded(self) -> None:
         rows = [
@@ -163,6 +193,15 @@ class C3MetricTests(unittest.TestCase):
         self.assertEqual(route["paired_root_count"], 2)
         self.assertIsNotNone(route["bootstrap_ci95"])
         self.assertEqual(result["metrics"]["root_count"], {"m0": 2, "m1": 2})
+
+
+class C3VerifierTests(unittest.TestCase):
+    def test_training_log_is_bound_to_redundant_summary(self) -> None:
+        rows = [{"update": 1, "epoch": 0}, {"update": 2, "epoch": 0}]
+        summary = {"logs": rows}
+        self.assertTrue(c3_sft._training_log_matches_summary(rows, summary))
+        self.assertFalse(c3_sft._training_log_matches_summary(rows[:-1], summary))
+        self.assertFalse(c3_sft._training_log_matches_summary(rows, {"logs": rows[:-1]}))
 
 
 class C3TorchHelperTests(unittest.TestCase):

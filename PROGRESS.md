@@ -4,7 +4,74 @@
 [`archive/2026-08-27-cora-document-consolidation/`](archive/2026-08-27-cora-document-consolidation/README.md)
 的原始快照和阶段文档中，不能作为活动任务或阈值来源。
 
-## 2026-09-09 — C3 完成：真实数据适配、M0 基线与 M1 LoRA SFT（VERIFIED）
+## 2026-09-10 — C3 修复完成：监督、训练与验收重新验证（VERIFIED）
+
+状态：
+
+```text
+H6-CORA C3 repair = VERIFIED / ENGINEERING_COMPLETED / ALGORITHM_MEASURED / STOPPED
+authoritative run = c3-repair-20260910T100651Z
+next entry = C4（本轮不自动执行）
+```
+
+本次修复撤回旧 `c3-vla-sft-20260909-final-v3` 及此前 repair attempts 的验收和 90.77%
+路线改善结论。旧适配曾把未按当前位置投影裁切的导航/路线前缀带入监督；旧产物和 hash 仍
+保留作不可覆盖的勘误历史，但不再用于模型选择、比较或 C3 完成判定。修复代码将当前
+输入、专家监督、离线后果和审计元数据分开，按有序路线投影去除已通过前缀（保留合法转弯），
+不以负 x 删除点，不以导航替代专家标签；原生 20 点 route 使用 0…19 m，canonical speed
+使用 10 点、0.25 s 间隔，缺失和提前终止按逐头 mask 保留。
+
+修复版复用冻结 C2 release `h6-cora-c2-devbaseline-20260907-v1`，保持 train 158 /
+validation 53 和 211 个 root 身份。manifest SHA-256 为
+`54281a1de6207b4e0c553ee8456de40f43131a6ef30b434e7bd1064da776c2fd`；route 有效点为
+3160/1060，speed 有效点为 1550/530，3 个碰撞终止 train root 的 speed 全部 mask，route
+标签仍绑定独立的 audited native expert reference path。全部 timeline 的原生 dt 为 0.05 s，
+但相对 anchor 均为 branch preroll，故 P-SPEED 为 N/A；anchor observable speed 的 211 个
+零值及其与 history 的 211 个差异均披露，未用未来执行速度替换输入。无须补采或启动 CARLA。
+
+真实 RTX 4080 CUDA/BF16 smoke 完成 forward/backward、小步更新、adapter 保存和独立重载；
+336 个 LoRA key、10 个驾驶 head key 无 missing/unexpected，18,417,664 个可训练参数有限
+变化，视觉投影、基座和原生 query embeddings 指纹不变。C4 成本 smoke 的四输出 residual
+起点误差为 0，shared LoRA gradient 非零，分组 clip 后范数均不超过 1.0。正式 M1 从原始
+M0 重新开始，以 seed 17、AdamW、LoRA `2e-5`、驾驶头 `1e-4`、weight decay `0.01`、
+microbatch 1、累积 4 完成 200/200 updates；前 10 步 head-only，第 11 步解冻 LoRA。训练
+保留 158 roots 每轮的 39 个四样本窗口和一个两样本尾窗口，5 轮共 790 个样本暴露，root
+exposure 全部为 5；checkpoint 保存 optimizer、RNG、游标、日志边界和完整冻结指纹。
+
+修复版在固定 53 个 validation root 上运行同输入的 M0、重复/reload M0 和 M1；root 内聚合
+后 root 等权，配对 bootstrap 1000 次、seed 71，`eps_ADE=1e-5 m`：
+
+| 指标 | M0 | M1 | Δ（M0−M1） | 相对改善 | 95% 配对 bootstrap CI |
+|---|---:|---:|---:|---:|---:|
+| P-ADE route (m) | 0.210514 | 0.232211 | -0.021698 m | -10.3069% | [-0.159394, 0.103600] m |
+| P-FDE route (m) | 0.735295 | 0.806690 | -0.071395 m | -9.7097% | [-0.625551, 0.471091] m |
+| P-WP speed (m) | 2.178557 | 0.336781 | 1.841776 m | 84.5411% | [1.570158, 2.128422] m |
+| P-VALID | 100.0% (53/53) | 100.0% (53/53) | — | — | — |
+| P-FAIL | 0.0% (0/53) | 0.0% (0/53) | — | — | — |
+
+P-SPEED 为 `N/A_without_trusted_time_speed_ground_truth`。route ADE/FDE 在本次单 seed 开发
+集上变差，speed-waypoint 位置误差下降；这不是“全面改善”，也不把旧 90.77% 作为可比结果。
+工程验收与算法收益分开，负 route 结果、所有逐 root 数值、mask、失败原因和独立重算均保留。
+
+权威修复产物在本机唯一目录
+`generated/h6/cora/c3-repair-20260910T100651Z/`，verify content SHA-256 为
+`29f9c56e4bfff8780c1a6a3f902872f0f81b4b56e271bdaa4ff5d521341f8af3`，stage summary 为
+`VERIFIED`。resource ledger 的优化总账保守上界为 `8.622364703124443 h`，观测峰值 allocated /
+reserved 为 `9.889132/10.845703 GiB`；历史失败和已撤回运行保留在账本，未知失败按四小时上界
+计入。C3 不执行 C4；C4 的 M2 必须从原始 M0 起点开始，不能从 M1 续训。
+
+验收器篡改回归已实际执行：预测、重复 root、manifest、metrics、checkpoint identity、训练
+日志删尾和资源监测字段篡改均被拒绝；删除 prediction-failure sidecar 也被 CLI 拒绝。恢复原件
+后再次 `verify` 返回 `VERIFIED` 且 `errors=[]`。验证命令
+`/home/sdf/.venvs/sdf/bin/python -m unittest discover -s tests -t . -v` 实际运行 509 tests、
+1 skipped、`OK`（75.094 s）；`compileall -q safedrive_foundry scripts/h6_cora_sft.py` 与
+`git diff --check` 均通过。
+
+## 2026-09-09 — C3 初版结果（SUPERSEDED：监督错误，验收与 90.77% 结论撤回）
+
+> 本节仅作历史勘误。其 manifest、指标和 `VERIFIED` 状态均不再是活动证据；请以 2026-09-10
+> 的 `c3-repair-20260910T100651Z` 及 [C3 修复勘误](docs/runtime-evidence/h6/c3-sft-repair-erratum.md)
+> 为准。
 
 状态：
 

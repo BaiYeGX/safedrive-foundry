@@ -30,8 +30,10 @@ C5 是 6 roots 的开发证据，不称 formal、安全非劣或全域安全证�
 方法没有增益如实写，缺训练/闭环则标 PARTIAL，不能把未完成包装成成功。
 历史 C2/ridge 负结果与 H5 失败保留，不能用它们或旧成功数冒充新模型成绩。
 
-状态：C3 已 `VERIFIED`，C4/C5/C6 仍 `PLANNED`；实际引用以 [EVIDENCE](EVIDENCE.md) 为准。
-C3 的训练、评估与复现记录位于 `generated/h6/cora/c3-vla-sft-20260909-final-v3/`。
+状态：C3 修复版已 `VERIFIED`，C4/C5/C6 仍 `PLANNED`；实际引用以 [EVIDENCE](EVIDENCE.md) 为准。
+C3 修复版训练、评估与复现记录位于
+`generated/h6/cora/c3-repair-20260910T100651Z/`。初版 route 监督和 90.77% 结果已撤回，
+不能放入展示结果；修复版 route ADE 退化、speed-waypoint ADE 改善，必须同时展示。
 后续阶段完成后继续更新 [PROGRESS](../PROGRESS.md) 与当前任务入口并停止。
 
 

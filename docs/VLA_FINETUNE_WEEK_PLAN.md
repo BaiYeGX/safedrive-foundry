@@ -1,8 +1,11 @@
 # C3 — 数据接好，完成 VLA 微调
 
-状态 `VERIFIED / ENGINEERING_COMPLETED / ALGORITHM_MEASURED`（2026-09-09）。本文件是完整
-C3 执行合同；权威实测记录位于 `generated/h6/cora/c3-vla-sft-20260909-final-v3/`，普通检查
-均在同一阶段内完成。目标已交付 M0 离线基线、M1 常规微调，范围与预算服从 ROADMAP/RESOURCES。
+状态 `VERIFIED / ENGINEERING_COMPLETED / ALGORITHM_MEASURED`（修复版，2026-09-10）。本文件是完整
+C3 执行合同；权威实测记录位于
+`generated/h6/cora/c3-repair-20260910T100651Z/`，普通检查均在同一阶段内完成。初版 C3 的
+监督错误、旧 manifest 和 90.77% 路线结果已撤回，勘误见
+[C3 SFT 修复记录](runtime-evidence/h6/c3-sft-repair-erratum.md)。修复版已交付 M0 离线基线、
+M1 常规微调，范围与预算服从 ROADMAP/RESOURCES。
 本文件只保留项目实施决定，不要求执行时重新检索论文。
 
 ## 可直接设置的 goal
@@ -22,7 +25,8 @@ C3 执行合同；权威实测记录位于 `generated/h6/cora/c3-vla-sft-2026090
 canonicalizer 位于同目录；上游 simlingo-main/simlingo_training 仅作为适配参考。
 scripts/h6_cora_devbaseline.py 是旧 C2 工具，不能重跑其 prepare/finalize 来覆盖冻结 release。
 新 SFT 命令已实现为 [`scripts/h6_cora_sft.py`](../scripts/h6_cora_sft.py)，并已按下方合同
-完成 audit、smoke、baseline、train、evaluate、verify；不能拿旧 World 训练命令冒充。
+完成 audit、smoke、baseline、train、evaluate、verify；不能拿旧 World 训练命令冒充。修复版
+入口同时要求日志与训练摘要逐行一致，缺失 failure sidecar 或配置/manifest 身份不匹配会拒绝。
 
 ## 执行方法
 
