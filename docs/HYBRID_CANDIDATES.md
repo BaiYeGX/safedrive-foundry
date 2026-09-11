@@ -1,5 +1,10 @@
 # Hybrid VLA–Expert 候选与 Guard 合同
 
+2026-09-11 学校项目范围：按 [C4 执行单](C4_EXECUTION_PLAN.md) 交接当前 M1/M2 与 World。
+实时闭环必做，C5 可预登记 1–2 roots 的完整三臂功能对照；下文 6-root/18-run 为扩展矩阵。
+按实际清单验收并标注范围，所有现场准备、试跑和失败仍计入最多 18 attempts / 4 小时
+CARLA 预算。候选、Guard、Safety、控制身份与配对初态合同不变。
+
 ## 1. 目标
 
 同一 observable anchor 上只允许两个在线规划来源：

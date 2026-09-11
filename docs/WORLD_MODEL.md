@@ -1,14 +1,26 @@
 # 本周 World–VLA 模型合同
 
+当前执行入口：[C4 执行单](C4_EXECUTION_PLAN.md)。该文件负责日期、实现顺序、固定配方和
+交付节点；本文保留模型与梯度公式。当前任务为一次真实 M2 联合训练及 C5 接入准备。
+
 ## 唯一模型与研究问题
 
-状态：C3 为 `VERIFIED / ENGINEERING_COMPLETED / ALGORITHM_MEASURED`；C4 M2 后果辅助联合微调仍
-`PLANNED / NOT_RUN`。当前 C3 run 为 `generated/h6/cora/c3-repair-20260910T165902Z/`；
-`generated/h6/cora/c3-repair-20260910T100651Z/` 保留作诊断，
-其完整验收结论已撤回，详见 [C3 再复核勘误](runtime-evidence/h6/c3-second-review-erratum.md)。
-初版监督错误和 90.77% 结果的撤回继续有效。M1 与 M2 都必须从原始
+状态：C3 按学校项目的离线基线范围收尾，保留当前 M1。C4 M2 后果辅助联合微调为
+`PLANNED / NOT_RUN`。基线 run 为 `generated/h6/cora/c3-repair-20260910T165902Z/`，
+阶段记录见 [EVIDENCE](EVIDENCE.md)。M1 与 M2 都必须从原始
 M0 同一起点训练，M2 禁止从 M1 续训，使用同 SFT 数据、seed、步数、LoRA 范围和预热/学习率日程。
 本周只有这两份新训练模型，不做执行中介、ensemble、视频 World、RL 或多配置搜索。
+
+项目截止为周日 2026-09-13，且必须现场 CARLA 闭环。C4 集中在周六 09-12 完成一次
+真实 M2 训练/重载及接入；周五先验证 CARLA/M1 链路，同时完成不占 GPU 的 C4 准备。
+仅保留直接影响正确性的联合 batch、候选绑定、梯度和评估检查；不追加多 seed 或大规模
+消融。若检查未通过或预算不足，保留具体缺项，不能以截止时间替代有效训练。
+
+2026-09-11 起按 [PROJECT](PROJECT.md) 的 school_delivery_v2 优先学校项目交付。C4 正式
+M2 前锁定 P-WP 为策略主指标，P-ADE/有效率/失败率同表，四头后果分别与 b 比较；旧 v1
+主次留档。本次改变未来实验主次，不修改 C3 已冻结结果。不要求每头或每个 root 都胜出。
+当前 C3 的成本 smoke 仅证明部分反向通路，不能替代本节的真实 b+R、配对损失、候选绑定
+和联合更新检查；将这些检查与资源核对放在 C4 正式运行前，复用已有独立评估，其他非关键扩展后置。
 
 当前改进是：**保留简单候选基线，学习它的后果残差；限制辅助梯度干扰驾驶主任务。**
 这是降低退化风险的待验证组合，既有残差和梯度门控并非新发明，不保证正收益。
@@ -82,14 +94,15 @@ shared_LoRA.grad = g_s + w * q * g_a
 这是训练梯度层面的干扰控制。AdamW 动量/预条件、非线性和数据外推下没有保证，
 不能称为泛化提升证明或保证每步主 loss 不增。门控与残差是一个组合配方；
 本周没有单独训练完整消融，不能据结果拆分两者各自贡献。
-M2 的额外 backward/门控成本在 C3 smoke 实测后用于共同 T 冻结，不能偷偷减少 M1 更新。
+M1 已完成 200 次更新；M2 的实际 backward/门控成本在本轮真实联合 smoke 测量后用于
+检查 T=200 的预算可行性。共同 SFT 日程沿用 C3，不减少已完成的 M1 更新或混称不同预算。
 
 ## C4 可直接设置的 goal
 
-> 完成 C4：按 docs/WORLD_MODEL.md，读取 C3 的原始起点、数据和共同预算，完成
+> 完成 C4：按 docs/C4_EXECUTION_PLAN.md 和 docs/WORLD_MODEL.md，读取 C3 的原始起点、数据和共同预算，完成
 > 固定基线残差 World 与驾驶梯度门控的 M2 联合微调；验证真实辅助梯度、候选交换、
 > 无泄漏与重载，交付预登记指标、完整逐 root 对照和资源记录。达到验收后更新
-> PROGRESS、将入口指向 C5 并停止，不追加模型、搜索或 CARLA 实验。
+> PROGRESS、将入口指向 C5；现场链路前置检查复用 C5 预算，正式三臂对照在 C5 执行。
 
 ## C4 执行与验收
 
@@ -97,11 +110,11 @@ M2 的额外 backward/门控成本在 C3 smoke 实测后用于共同 T 冻结，
 不隐式重跑 C3。允许改 h 暴露、b/R、联合 loader/梯度更新、配置与直接测试。
 先在 train smoke 验证 b 的 Torch/离线实现等价、零残差等于 b、非零残差可学习、
 预热后辅助能到 LoRA、无效 mask、候选交换与 checkpoint round-trip。
-实现错误在正式训练前解决，最多两次实质修复，不用重跑挑正结果。
+实现错误在正式训练前定位并修复，只重跑直接受影响的检查；普通报错不触发整轮重训。
 
 正式仅一份配方、一个 seed、共同 T；采用最后有效 checkpoint，保存恢复状态。
-M0/M1/M2 用同一 validation root 子集与 evaluator。保留全部分母、缺失与失败；
-子集上的 b/ridge 指标重算，不能混用 C2 全 53 roots 数字。
+M0/M1/M2 用同一完整冻结 validation 清单与 evaluator。保留全部分母、缺失与失败；
+World 按各头共同有效的支持比较，新 b/ridge 指标重新计算，不混用旧聚合数字。
 主要研究指标以 PROJECT 为准；额外报告四头 MAE、b 与 b+R、残差大小、
 no-action/context masking、swap 和梯度门控分布。这些诊断不增加新训练。
 
@@ -141,8 +154,8 @@ candidate ridge progress MAE 约 0.302 m，MLP 约 0.555/0.617/0.555 m，
 
 ## C4 量化交付
 
-执行 [PROJECT 论文量化合同](PROJECT.md#论文量化合同c3_c6_metrics_v1planned)。M2/M1 的
-P-ADE 是主要方法指标，连同 P-FDE/P-WP/有效率/失败率和训练成本完整比较。
+执行 [PROJECT 当前实验口径](PROJECT.md) 与 [C4 执行单](C4_EXECUTION_PLAN.md)。M2/M1 的
+P-WP 是当前主要方法指标，连同 P-ADE/P-FDE/有效率/失败率和训练成本完整比较。
 b+R/b 必交四头 W-MAE、W-RMSE、W-NMAE、W-PAIR、进度 W-RANK/W-REGRET 及全部有效分母。
 新 b 与 normalizer 按每头有效 train label 拟合；不得用缺失值填零训练。
 原始数据、Guard eligible 子集及旧 C2 聚合口径分别标明，不跨版本相减。

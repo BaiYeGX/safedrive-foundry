@@ -1,5 +1,12 @@
 # SafeDrive Foundry Evidence 与归档索引
 
+2026-09-11 复核说明：C3 已有可用的 200-step M1 和全部 53-root 离线结果。本轮修正
+独立有效率、P-WP 单位及导航共同支持，新增 10 项直接回归通过，完整预测复算一致。
+见 [C3 学校项目结果页](C3_SCHOOL_RESULTS.md) 与 [周日交付安排](C3_C4_FINISH_PLAN.md)。
+历史完整验收措辞由此收窄：smoke/失败资源总账和真实 C4 联合 smoke 尚未完成，旧报告
+保留原样；不能用旧 verify 的通过字符串代替这些检查。当前可引用范围是已有开发数据上的
+离线适配效果；实时 CARLA 与 C4/C5 的效果须由后续实际运行证明。
+
 ## 1. 状态与引用规则
 
 Evidence 状态只允许：
@@ -53,7 +60,7 @@ cleanup and terminal status
 | H6-CORA C2 data | MEASURED | GATE_FAILED | 351 valid paired roots；真实覆盖不足，已冻结并停止 |
 | H6-CORA C2 repair v2/v3 | MEASURED | GATE_FAILED | v2 保留历史失败证据；v3 修通 recipe/trace/预算链，Town03 diagnostic 12 roots / 34 branches，repair-failure 1/2、offroad 5/1，正式批次被诊断门阻断 |
 | H6-CORA C2 dev baseline | MEASURED | DEV_BASELINE_GATE_PASSED | 现有数据 release 340 usable roots；World 三 seed 已跑完，`NO_DEMONSTRATED_GAIN`；原 coverage gate 仍失败 |
-| H6-CORA C3 repair | VERIFIED | ENGINEERING_COMPLETED / ALGORITHM_MEASURED | 修复版真实训练、逐 root 评估、独立重算、资源与篡改拦截完成；范围为 `partial_native_support`，C4 未执行 |
+| H6-CORA C3 repair | MEASURED | OFFLINE_BASELINE_USABLE / RESOURCE_REVIEW_PENDING | 200-step M1、53-root 主误差与实际 canonical 有效率复算一致；范围为 `partial_native_support`；历史资源与完整联合 smoke 仍有缺口，C4 未执行 |
 | H6-CORA C4–C6 | PLANNED | NOT_RUN | C4 联合微调、C5 闭环和 C6 交付尚未启动 |
 
 ## 3. 指标口径

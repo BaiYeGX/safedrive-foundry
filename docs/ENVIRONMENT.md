@@ -5,6 +5,10 @@
 
 ## 1. 基线
 
+2026-09-11 用户确认学校硬性要求实时 CARLA 闭环演示。下一执行优先恢复 server、取得
+本次 READY 并验证 M1 实际闭环；离线 replay 不能替代此项。现有 live demo 使用旧 H5
+scorer，需显式接入本次 M1/M2 权重；当前尚未完成现场验证。
+
 ```text
 Windows 11 Pro 25H2（`versions.lock` 冻结 observed build 26200.8655；live task 仍需复查）
 WSL2 Ubuntu 24.04

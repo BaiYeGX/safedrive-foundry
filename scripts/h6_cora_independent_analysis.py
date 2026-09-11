@@ -13,10 +13,18 @@ import argparse
 import hashlib
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
 import numpy as np
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "safedrive_foundry"))
+from driving_vla.model.canonicalizer import (  # noqa: E402
+    CanonicalizationError, TrajectoryCanonicalizer, UpstreamPathSpeed,
+)
+from driving_vla.model.speed_convert import speed_wps_to_planner_samples  # noqa: E402
 
 
 ROUTE_STEPS = 20
@@ -38,10 +46,15 @@ def _read(path: Path) -> Any:
 
 
 def _finite_vector_errors(values: Any, target: Any, mask: Iterable[bool], steps: int) -> tuple[np.ndarray, np.ndarray, bool]:
-    prediction = np.asarray(values, dtype=np.float64)
     truth = np.asarray(target, dtype=np.float64)
     valid_mask = np.asarray(tuple(mask), dtype=bool)
-    shape_valid = prediction.shape == (steps, 2) and truth.shape == (steps, 2) and valid_mask.shape == (steps,)
+    if truth.shape != (steps, 2) or valid_mask.shape != (steps,) or not np.isfinite(truth[valid_mask]).all():
+        raise ValueError("independent_analysis_invalid_frozen_truth")
+    try:
+        prediction = np.asarray(values, dtype=np.float64)
+    except (ValueError, TypeError):
+        return np.empty(0, dtype=np.float64), np.zeros(steps, dtype=bool), False
+    shape_valid = prediction.shape == (steps, 2)
     if not shape_valid:
         return np.empty(0, dtype=np.float64), np.zeros(steps, dtype=bool), False
     finite = np.isfinite(prediction).all(axis=1)
@@ -58,11 +71,41 @@ def _score(row: dict[str, Any], sample: dict[str, Any]) -> dict[str, Any]:
     )
     route_mask = np.asarray(sample.get("route_mask", []), dtype=bool)
     speed_mask = np.asarray(sample.get("speed_mask", []), dtype=bool)
-    canonical_valid = bool(route_shape and speed_shape and route_valid.all() and speed_valid.all())
+    # Target coverage is unrelated to whether the model's full output is valid.
+    native_finite = bool(
+        route_shape and speed_shape
+        and np.isfinite(np.asarray(row["route"], dtype=float)).all()
+        and np.isfinite(np.asarray(row["speed"], dtype=float)).all()
+    )
+    reasons = list(row.get("failure_reasons", []))
+    canonical_valid = False
+    if native_finite:
+        route = np.asarray(row["route"], dtype=float)
+        yaw = float(sample.get("ego_yaw", 0.0))
+        c, s = math.cos(yaw), math.sin(yaw)
+        path_map = tuple((float(sample.get("ego_x", 0.0)) + c*x - s*y,
+                          float(sample.get("ego_y", 0.0)) + s*x + c*y) for x, y in route)
+        try:
+            converted = TrajectoryCanonicalizer().canonicalize_with_report(
+                UpstreamPathSpeed(path_xy=path_map,
+                                  speed_mps=speed_wps_to_planner_samples(row["speed"], use_official_scalar=True),
+                                  frame="map"), to_map=False,
+            )
+            canonical_valid = bool(
+                len(converted.trajectory.points_xy_yaw_v_a_kappa) == SPEED_STEPS
+                and np.isfinite(converted.trajectory.points_xy_yaw_v_a_kappa).all()
+            )
+        except CanonicalizationError as exc:
+            reasons.append(f"canonical_rejected:{exc}")
+    else:
+        reasons.append("native_shape_or_nonfinite")
+    if row.get("prediction_exception"):
+        canonical_valid = False
+        reasons.append(str(row["prediction_exception"]))
     route_target_available = bool(route_mask.shape == (ROUTE_STEPS,) and route_mask.any())
     speed_target_available = bool(speed_mask.shape == (SPEED_STEPS,) and speed_mask.any())
-    route_ade = float(route_errors[route_mask].mean()) if route_target_available and route_valid[route_mask].all() else None
-    speed_ade = float(speed_errors[speed_mask].mean()) if speed_target_available and speed_valid[speed_mask].all() else None
+    route_ade = float(route_errors[route_mask].mean()) if route_shape and route_target_available and route_valid[route_mask].all() else None
+    speed_ade = float(speed_errors[speed_mask].mean()) if speed_shape and speed_target_available and speed_valid[speed_mask].all() else None
     fde_available = bool(route_mask.shape == (ROUTE_STEPS,) and route_mask[-1])
     fde = float(route_errors[-1]) if fde_available and route_valid.shape == (ROUTE_STEPS,) and route_valid[-1] else None
     return {
@@ -74,9 +117,12 @@ def _score(row: dict[str, Any], sample: dict[str, Any]) -> dict[str, Any]:
         "route_fde_target_available": fde_available,
         "speed_target_available": speed_target_available,
         "prediction_valid": canonical_valid,
+        "native_finite": native_finite,
+        "route_valid_points": int(route_mask.sum()),
+        "speed_valid_points": int(speed_mask.sum()),
         "route_full_valid": bool(route_target_available and route_mask.all() and route_valid.all()),
         "speed_full_valid": bool(speed_target_available and speed_mask.all() and speed_valid.all()),
-        "failure_reasons": list(row.get("failure_reasons", [])),
+        "failure_reasons": sorted(set(reasons)),
     }
 
 
@@ -96,6 +142,9 @@ def _bootstrap(differences: list[float], rng: np.random.Generator) -> list[float
 
 
 def _paired_summary(scores: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+    for model, rows in scores.items():
+        _unique_rows(rows, label=model)
+    scores = {model: sorted(rows, key=lambda row: row["root_id"]) for model, rows in scores.items()}
     rng = np.random.default_rng(BOOTSTRAP_SEED)
     by_root: dict[str, dict[str, dict[str, Any]]] = {}
     for model, rows in scores.items():
@@ -123,6 +172,8 @@ def _paired_summary(scores: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
             "relative_improvement_percent": None if delta is None or not base else 100.0 * delta / abs(base),
             "paired_root_count": len(differences),
             "bootstrap_ci95": _bootstrap(differences, rng) if base is not None and method is not None else None,
+            "improved_root_count": sum(value > 1e-5 for value in differences),
+            "degraded_root_count": sum(value < -1e-5 for value in differences),
             "target_root_count": {
                 "m0": sum(bool(row.get(availability)) for row in scores.get("m0", [])),
                 "m1": sum(bool(row.get(availability)) for row in scores.get("m1", [])),
@@ -136,6 +187,10 @@ def _paired_summary(scores: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
     }
     metrics["prediction_fail_rate_percent"] = {
         model: (100.0 * sum(not bool(row.get("prediction_valid")) for row in rows) / len(rows) if rows else None)
+        for model, rows in all_rows.items()
+    }
+    metrics["native_finite_rate_percent"] = {
+        model: 100.0 * sum(bool(row.get("native_finite")) for row in rows) / len(rows) if rows else None
         for model, rows in all_rows.items()
     }
     metrics["route_full_valid_rate_percent"] = {
@@ -202,13 +257,14 @@ def _group_summary(
 
 def _simple_baseline(rows: list[dict[str, Any]]) -> dict[str, Any]:
     def mean(key: str) -> float | None:
-        values = [float(row[key]) for row in rows if row.get(key) is not None and math.isfinite(float(row[key]))]
-        return float(np.mean(values)) if values else None
+        availability = "route_target_available" if key == "route_ade_m" else "speed_target_available"
+        return _mean(rows, key, availability)
 
     return {
         "root_count": len(rows),
         "route_ade_root_equal_m": mean("route_ade_m"),
-        "speed_wp_ade_root_equal_mps": mean("speed_wp_ade_m"),
+        "speed_wp_ade_root_equal_m": mean("speed_wp_ade_m"),
+        "route_valid_points": sum(int(row.get("route_valid_points", 0)) for row in rows),
         "route_fde_supported_roots": sum(row.get("route_fde_m") is not None for row in rows),
         "prediction_valid_rate_percent": 100.0 * sum(bool(row.get("prediction_valid")) for row in rows) / len(rows) if rows else None,
         "route_full_valid_rate_percent": 100.0 * sum(bool(row.get("route_full_valid")) for row in rows) / len(rows) if rows else None,
@@ -223,19 +279,59 @@ def _close(left: Any, right: Any, tolerance: float = 1e-9) -> bool:
     return left == right
 
 
+def _unique_rows(rows: list[dict[str, Any]], *, label: str) -> dict[str, dict[str, Any]]:
+    """The frozen C3 release has one anchor per root; reject ambiguous repeats."""
+    result = {}
+    for row in rows:
+        root = str(row.get("root_id", ""))
+        if not root or root in result:
+            raise ValueError(f"independent_analysis_duplicate_or_empty_root:{label}:{root}")
+        result[root] = row
+    return result
+
+
+def _recompute_diagnostics(diagnostics, samples, predictions):
+    summaries, shared_scores = {}, {name: [] for name in ("navigation_geometry", "m0", "m1")}
+    for model, rows in diagnostics.get("rows", {}).items():
+        indexed = _unique_rows(rows, label=model)
+        if set(indexed) != set(samples):
+            raise ValueError(f"independent_analysis_diagnostic_root_set:{model}")
+        scores = []
+        for root, sample in samples.items():
+            row = indexed[root]
+            if model == "navigation_geometry":
+                geometry_mask = np.asarray(row.get("geometry_route_mask", []), dtype=bool)
+                if geometry_mask.shape != (ROUTE_STEPS,):
+                    raise ValueError("independent_analysis_navigation_mask_shape")
+                sample = {**sample, "route_mask": (np.asarray(sample["route_mask"], dtype=bool) & geometry_mask).tolist()}
+                shared_scores[model].append(_score(row, sample))
+                for name in ("m0", "m1"):
+                    shared_scores[name].append(_score(predictions[name][root], sample))
+            scores.append(_score(row, sample))
+        summaries[model] = _simple_baseline(scores)
+    return summaries, {name: _simple_baseline(rows) for name, rows in shared_scores.items()}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=Path, required=True)
+    parser.add_argument("--output", type=Path, help="New report path; existing reports are never overwritten.")
     args = parser.parse_args(argv)
     run_dir = args.run_dir.expanduser().resolve()
+    output = (args.output or run_dir / "independent-analysis.json").expanduser().resolve()
+    if output.exists():
+        raise FileExistsError(f"independent_analysis_output_exists:{output}")
     manifest = _read(run_dir / "manifest.json")
     m0 = _read(run_dir / "m0_predictions.json")
     m1 = _read(run_dir / "m1_predictions.json")
     published = _read(run_dir / "metrics.json")
     diagnostics = _read(run_dir / "diagnostic-baselines.json")
-    samples = {str(sample["root_id"]): sample for sample in manifest["samples"] if sample.get("split") == "validation"}
+    samples = _unique_rows([sample for sample in manifest["samples"] if sample.get("split") == "validation"], label="manifest")
+    if not samples:
+        raise ValueError("independent_analysis_empty_validation")
     m0_rows = list(m0.get("rows", []))
     m1_rows = list(m1.get("rows", []))
+    predictions = {"m0": _unique_rows(m0_rows, label="m0"), "m1": _unique_rows(m1_rows, label="m1")}
     if set(row.get("root_id") for row in m0_rows) != set(samples) or set(row.get("root_id") for row in m1_rows) != set(samples):
         raise ValueError("independent_analysis_validation_root_set")
     scores = {
@@ -248,6 +344,9 @@ def main(argv: list[str] | None = None) -> int:
         for field in ("m0", "m1", "delta_m0_minus_m1", "paired_root_count", "bootstrap_ci95"):
             if not _close(independent_metrics[key].get(field), published.get("metrics", {}).get(key, {}).get(field)):
                 errors.append(f"published_metric_mismatch:{key}:{field}")
+    for key in ("root_count", "prediction_valid_rate_percent", "prediction_fail_rate_percent"):
+        if independent_metrics[key] != published.get("metrics", {}).get(key):
+            errors.append(f"published_metric_mismatch:{key}")
     dimensions = ("cohort", "label_source", "map", "scene", "weather", "support_bin", "speed_input")
     groups = {
         dimension: _group_summary(samples, scores["m0"], scores["m1"], dimension)
@@ -263,18 +362,21 @@ def main(argv: list[str] | None = None) -> int:
         per_root.append({
             "root_id": root_id,
             "route_delta_m0_minus_m1_m": None if left["route_ade_m"] is None or right["route_ade_m"] is None else left["route_ade_m"] - right["route_ade_m"],
-            "speed_delta_m0_minus_m1_mps": None if left["speed_wp_ade_m"] is None or right["speed_wp_ade_m"] is None else left["speed_wp_ade_m"] - right["speed_wp_ade_m"],
+            "speed_delta_m0_minus_m1_m": None if left["speed_wp_ade_m"] is None or right["speed_wp_ade_m"] is None else left["speed_wp_ade_m"] - right["speed_wp_ade_m"],
             "route_support_m": float(samples[root_id].get("route_support_m", 0.0)),
             "family": samples[root_id].get("family"),
             "map": samples[root_id].get("map_name"),
         })
     per_root.sort(key=lambda row: (float("inf") if row["route_delta_m0_minus_m1_m"] is None else row["route_delta_m0_minus_m1_m"], row["root_id"]))
-    baseline_summary = {
-        model: _simple_baseline(rows)
-        for model, rows in diagnostics.get("rows", {}).items()
-    }
+    baseline_summary, matched_navigation = _recompute_diagnostics(diagnostics, samples, predictions)
     payload: dict[str, Any] = {
-        "schema_version": "safedrive.c3.independent_analysis.v1",
+        "schema_version": "safedrive.c3.independent_analysis.v2",
+        "analysis_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "source_artifact_sha256": {name: hashlib.sha256((run_dir/name).read_bytes()).hexdigest()
+                                   for name in ("manifest.json", "m0_predictions.json", "m1_predictions.json", "metrics.json", "diagnostic-baselines.json")},
+        "canonical_contract": "deployment_official_scalar_speed_and_T10_dt025_canonicalizer",
+        "performance_based_exclusions": [],
+        "comparison_scope": "frozen_C3_development_set; one_anchor_per_root; partial_native_support",
         "run_id": run_dir.name,
         "manifest_sha256": manifest.get("manifest_sha256"),
         "m0_content_sha256": m0.get("content_sha256"),
@@ -285,6 +387,7 @@ def main(argv: list[str] | None = None) -> int:
         "published_metric_match_errors": errors,
         "group_metrics": groups,
         "simple_baselines": baseline_summary,
+        "navigation_matched_support": matched_navigation,
         "per_root_deltas_sorted_worst_first": per_root,
         "prediction_failures": {
             model: sum(not bool(row.get("prediction_valid")) for row in rows)
@@ -293,8 +396,9 @@ def main(argv: list[str] | None = None) -> int:
     }
     payload["status"] = "PASSED" if not errors else "FAILED"
     payload["content_sha256"] = _sha(payload)
-    output = run_dir / "independent-analysis.json"
-    output.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("x", encoding="utf-8") as stream:
+        stream.write(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n")
     print(json.dumps({
         "status": payload["status"],
         "output": str(output),
