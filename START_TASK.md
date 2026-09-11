@@ -1,16 +1,27 @@
-# 当前任务：C4 — 加一个 World 辅助任务，完成联合微调
+# 当前任务：C4 — World 辅助任务（C3 已完成）
 
-状态：C3 修复版 `VERIFIED / ENGINEERING_COMPLETED / ALGORITHM_MEASURED`；当前入口已切到
-C4，C4 尚未启动。本轮 C3 的唯一权威 run 是
-`generated/h6/cora/c3-repair-20260910T100651Z/`。旧
-`c3-vla-sft-20260909-final-v3` 及此前 repair attempts 保留作勘误追溯，不能作为 C3 验收或
-收益依据；其旧路线监督和 90.77% 结论已撤回。本任务在 C3 修复验收后停止，不自动执行 C4。
-后续阶段仅 C5 小型闭环、C6 交付，见 [ROADMAP](ROADMAP.md)。
+状态：C3 `VERIFIED / ENGINEERING_COMPLETED / ALGORITHM_MEASURED`，C4 当前为 `NOT_RUN`。
+权威 C3 run 为 `generated/h6/cora/c3-repair-20260910T165902Z/`，最终记录见
+[C3 修复最终验收](docs/runtime-evidence/h6/c3-final-repair-20260910T165902Z.md)，旧运行和
+`90.77%` 结论继续作为已撤回历史保留。C3 已完成，本轮停止在 C3，不自动执行 C4；本文件
+现在只登记下一阶段入口。
 
-下一阶段完整合同见 [C4 执行合同](docs/WORLD_MODEL.md)。开始 C4 前核对 C3 的
-`stage-summary.json`、模型/数据身份和本机资源，再按合同登记新的唯一 run-id。
+当前分支为 `codex/c3-repair`，最终提交前保留 `.codex/` 和 `test_registry.sqlite3` 为本机文件。
+修复版产物根目录为 `generated/h6/cora/c3-repair-20260910T165902Z/`，诊断、smoke、正式训练
+分目录，未覆盖旧运行。C4 只能从原始 M0 重新开始，不能使用 M1 或 smoke checkpoint 续训。
 
-## C4 下一入口（尚未执行）
+## C3 修复已交付的验收摘要
+
+- 旧 C2 release 的 211/211 个原生规划身份恢复，train/validation 保持 158/53；route 和
+  speed 逐头 mask，未用导航拼接、未来速度回填或外推路线。
+- 真实 CUDA/BF16 batch、可微 forward/backward、LoRA/head 更新、冻结参数指纹、独立重载、
+  200/200 正式 M1、尾窗口和资源账本均通过验收。
+- 48-root/96-attempt/4-hour 补采清单完成预登记，但 CARLA 在 READY 前外部崩溃，接受 0 个；
+  未生成伪造数据。C3 当前评估范围为 `partial_native_support`。
+- `verify`、独立指标重算和 6 类篡改攻击均通过；route 结果有 29/53 个 root 退化，不能写成
+  普遍驾驶能力提升。C4 的 M2 仍必须从原始 M0 起点开始。
+
+## C4 当前入口（C3 已验收，本轮未执行）
 
 从原始 M0 checkpoint 分别启动 M2 联合微调，不能从 M1 续训；复用同一 train/validation
 split、seed、输入处理和更新预算，增加 C2 已有四个连续后果目标（进度、加速度 RMS、jerk
@@ -19,13 +30,13 @@ RMS、横向加速度 RMS）。World 输入只能是当前共享表示与候选�
 对照均需有直接验证。输出 M2 与 M1 的配对离线指标、四头 mask/误差、梯度和资源证据；未超过
 基线时照实记录。C4 验收后再把入口切到 C5。
 
-## 上一阶段 C3 交付合同（已完成，保留追溯）
+## C3 交付合同（已完成）
 
 在一个 C3 内完成数据适配、真实 batch 检查和常规 LoRA SFT，交付 M0 原始离线基线、
 M1 新 adapter/驾驶头、逐 root 开发预测及可重载训练记录。目标两天，不再拆子阶段。
 
 允许修改必要的非冻结 loader、训练适配、配置、测试和活动文档；复用本地 SimLingo。
-不改旧模型、数据、阈值、保留集或 Evidence，不重扫旧 Hash，不新开任务/分支。
+不改旧模型、数据、阈值、保留集或 Evidence，不重扫旧 Hash；在已有修复分支工作。
 依据：[数据](docs/COUNTERFACTUAL_DATA.md)、[模型](docs/WORLD_MODEL.md)、
 [候选](docs/HYBRID_CANDIDATES.md)、[资源](docs/RESOURCES.md)、
 [环境](docs/ENVIRONMENT.md)、[证据](docs/EVIDENCE.md)。
@@ -65,9 +76,10 @@ git diff --check
 
 已实现并实际运行的入口为 [`scripts/h6_cora_sft.py`](scripts/h6_cora_sft.py)，提供
 `audit`、`smoke`、`baseline`、`train --resume`、`evaluate` 和 `verify` 子命令；权威命令与
-结果保存在 C3 run 的 `run_config.json` 和 `stage-summary.json`。C3 修复版已执行最小适配测试、
+结果保存在旧 C3 run 的 `run_config.json` 和 `stage-summary.json`。旧修复版执行过最小适配测试、
 真实 CUDA round-trip、独立 M0/M1 评估、验收篡改拦截、全量 unittest、compileall 与
-`git diff --check`；全量 unittest 实际为 509 tests、1 skipped、`OK`（75.094 s）。数据泄漏、
+`git diff --check`；历史全量 unittest 为 509 tests、1 skipped、`OK`（75.094 s）。这些不足以
+覆盖再复核反例，不能替代本次重新验证。数据泄漏、
 未知重叠修改、环境或安全接口异常仍按 AGENTS 停止。
 
 ## 本阶段的论文量化要求

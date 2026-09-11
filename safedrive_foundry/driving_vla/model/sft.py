@@ -52,6 +52,14 @@ def object_sha256(value: Any) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def _frozen_digest(value: Any, *, kind: str) -> str:
+    """Reuse a C2 identity; semantic audit does not bulk re-hash frozen assets."""
+    digest = str(value)
+    if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+        raise ValueError(f"c3_frozen_identity_missing:{kind}")
+    return digest
+
+
 def map_to_ego(
     points: Sequence[Sequence[float]],
     *,
@@ -137,7 +145,7 @@ def native_route_target_with_report(
     steps: int = ROUTE_STEPS,
     max_projection_distance_m: float = ROUTE_PROJECTION_MAX_DISTANCE_M,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
-    """Project the anchor onto the ordered native expert reference path.
+    """Project the anchor onto an ordered polyline, without assigning provenance.
 
     C2 stores a complete route from the scenario start.  An anchor may be in
     the middle of that route, and the first stored vertices can consequently be
@@ -170,16 +178,15 @@ def native_route_target_with_report(
         raise ValueError("route_has_no_nonzero_segment")
     candidates.sort(key=lambda item: (item[0], item[1], item[2]))
     best_distance, best_progress, best_index, best_fraction, projected = candidates[0]
-    ambiguous = False
-    if len(candidates) > 1:
-        second = candidates[1]
-        ambiguous = bool(
-            second[0] - best_distance <= ROUTE_PROJECTION_TIE_DISTANCE_M
-            and abs(second[1] - best_progress) >= ROUTE_PROJECTION_TIE_PROGRESS_M
-        )
-    if ambiguous:
+    # Adjacent segments can tie at one vertex and hide another visit to the
+    # same position later on a self-intersecting route. Inspect every tie.
+    conflicting = [item for item in candidates[1:]
+                   if item[0] - best_distance <= ROUTE_PROJECTION_TIE_DISTANCE_M
+                   and abs(item[1] - best_progress) >= ROUTE_PROJECTION_TIE_PROGRESS_M]
+    ambiguous = bool(conflicting)
+    if conflicting:
         raise ValueError(
-            f"route_projection_ambiguous:{best_distance:.6f}:{candidates[1][0]:.6f}"
+            f"route_projection_ambiguous:{best_progress:.6f}:{conflicting[0][1]:.6f}"
         )
     if best_distance > float(max_projection_distance_m):
         raise ValueError(f"route_projection_too_far:{best_distance:.6f}>{float(max_projection_distance_m):.6f}")
@@ -193,7 +200,7 @@ def native_route_target_with_report(
     support_arc = cumulative_arclength(suffix_array)
     sampled_map, mask = sample_polyline(suffix_array, np.arange(steps, dtype=np.float64))
     report = {
-        "source": "native_expert_reference_path",
+        "source": "ordered_polyline_geometry_only",
         "projection_segment": int(best_index),
         "projection_fraction": float(best_fraction),
         "projection_s_m": float(best_progress),
@@ -366,8 +373,8 @@ class SFTSample:
     route_mask: tuple[bool, ...]
     speed_target: tuple[tuple[float, float], ...]
     speed_mask: tuple[bool, ...]
-    route_source: str = "native_expert_reference_path_projected"
-    speed_source: str = "expert_nominal_canonical_proposal"
+    route_source: str = "unknown"
+    speed_source: str = "unknown"
     execution_timeline_path: str = ""
     execution_timeline_sha256: str = ""
     execution_timeline_rows: int = 0
@@ -384,8 +391,8 @@ class SFTSample:
     route_projection_segment: int = -1
     route_projection_ambiguous: bool = False
     route_reference_revision: str = ""
-    route_validity_basis: str = "native_expert_reference_path_audited"
-    execution_quality: str = "audited"
+    route_validity_basis: str = "unknown"
+    execution_quality: str = "unknown"
     execution_failure_reasons: tuple[str, ...] = ()
     outcome_label_path: str = ""
     outcome_label_sha256: str = ""
@@ -396,6 +403,19 @@ class SFTSample:
     speed_input_source: str = "anchor.observable_snapshot.ego_v"
     anchor_history_speed_mps: float | None = None
     anchor_history_speed_disagreement_mps: float | None = None
+    native_reconstruction_status: str = "unavailable"
+    native_reconstruction_hash: str = ""
+    native_raw_plan_sha256: str = ""
+    native_canonical_sha256: str = ""
+    supervision_usage: str = "diagnostic_only"
+    # These fields are optional for the frozen C2 replay rows.  They become
+    # mandatory for any newly collected row and let the verifier distinguish
+    # a physical identity from a logical root id.
+    cohort: str = "c2_release"
+    case_group: str = "legacy"
+    physical_sha256: str = ""
+    input_identity_sha256: str = ""
+    supervision_version: str = "c3.native-replay.v1"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -412,7 +432,17 @@ def _resolve_base_root(release_root: Path, release: Mapping[str, Any]) -> Path:
     raw = release.get("raw_data_references", {}).get("base")
     if not raw:
         raise ValueError("c3_release_base_reference_missing")
-    base = Path(str(raw))
+    value = str(raw)
+    base = Path(value)
+    if base.exists():
+        return base
+    # C2 records were produced inside WSL and store /mnt/<drive>/... paths.
+    # The same release is also consumed from Windows for CARLA collection and
+    # review, so resolve the equivalent drive path when it exists.
+    if value.startswith("/mnt/") and len(value) > 6:
+        converted = Path(f"{value[5].upper()}:/" + value[7:])
+        if converted.exists():
+            return converted
     return base if base.is_absolute() else release_root / base
 
 
@@ -449,9 +479,7 @@ def _validate_expert_timeline(
     timeline_path = base_root / str(raw_path)
     if not timeline_path.is_file():
         raise FileNotFoundError(timeline_path)
-    actual_hash = sha256_file(timeline_path)
-    if actual_hash != expected_hash:
-        raise ValueError("expert_execution_timeline_hash_mismatch")
+    actual_hash = _frozen_digest(expected_hash, kind="expert_timeline")
     expected_rows = int(branch.get("ticks_executed", 0))
     if expected_rows <= 0:
         raise ValueError("expert_execution_timeline_ticks_missing")
@@ -470,7 +498,7 @@ def _validate_expert_timeline(
     if not np.isfinite(times).all() or (times.size >= 2 and not np.all(np.diff(times) > 0.0)):
         raise ValueError("expert_execution_timeline_time_invalid")
     dt_s = float(np.median(np.diff(times))) if times.size >= 2 else EXECUTION_DT_S
-    if times.size >= 2 and abs(dt_s - EXECUTION_DT_S) > 1e-3:
+    if times.size >= 2 and not np.allclose(np.diff(times), EXECUTION_DT_S, rtol=0.0, atol=1e-5):
         raise ValueError(f"expert_execution_timeline_dt_mismatch:{dt_s}")
     if not math.isfinite(dt_s) or dt_s <= 0.0:
         raise ValueError("expert_execution_timeline_dt_invalid")
@@ -505,9 +533,7 @@ def _validate_expert_outcome(
     label_path = base_root / raw_path
     if not label_path.is_file():
         raise FileNotFoundError(label_path)
-    actual_hash = sha256_file(label_path)
-    if actual_hash != expected_hash:
-        raise ValueError("expert_outcome_label_hash_mismatch")
+    actual_hash = _frozen_digest(expected_hash, kind="expert_outcome")
     label = _load_json(label_path)
     if str(label.get("schema_version", "")) != "safedrive.cora.outcome_labels.v1":
         raise ValueError("expert_outcome_label_schema_mismatch")
@@ -535,7 +561,7 @@ def _validate_expert_outcome(
         reasons.append("legal_terminal=false")
     if not bool(branch.get("cleanup_complete", False)):
         reasons.append("cleanup_complete=false")
-    quality = "verified_nominal_execution" if not reasons else "terminated_or_intervened"
+    quality = "no_recorded_failure_pending_behavior_audit" if not reasons else "terminated_or_intervened"
     return label_path, actual_hash, quality, tuple(sorted(set(reasons))), label_heads
 
 
@@ -543,6 +569,8 @@ def build_sft_manifest(
     release_root: Path | str,
     *,
     splits: Sequence[str] = TARGET_SPLITS,
+    reconstruction_manifest: Path | str | Mapping[str, Any] | None = None,
+    supplement_manifest: Path | str | Mapping[str, Any] | None = None,
 ) -> tuple[tuple[SFTSample, ...], dict[str, Any]]:
     """Build the immutable C3 SFT view from the existing C2 release."""
 
@@ -559,6 +587,29 @@ def build_sft_manifest(
     if not base_root.is_dir():
         raise FileNotFoundError(base_root)
     wanted = tuple(str(item) for item in splits)
+    reconstruction_payload: Mapping[str, Any] | None = None
+    if reconstruction_manifest is not None:
+        reconstruction_payload = (
+            reconstruction_manifest
+            if isinstance(reconstruction_manifest, Mapping)
+            else _load_json(Path(reconstruction_manifest))
+        )
+        if reconstruction_payload.get("schema_version") != "safedrive.c3.native_reconstruction.v1":
+            raise ValueError("c3_reconstruction_schema")
+        check = dict(reconstruction_payload)
+        check.pop("created_at_utc", None)
+        digest = check.pop("content_sha256", None)
+        if digest != object_sha256(check):
+            # The command adds a creation timestamp outside the semantic
+            # content hash.  It is intentionally not allowed to weaken this
+            # identity check.
+            raise ValueError("c3_reconstruction_digest_mismatch")
+        reconstruction_rows = {
+            str(row.get("pair_id")): row
+            for row in reconstruction_payload.get("rows", ())
+        }
+    else:
+        reconstruction_rows = {}
     # Ask the fail-closed C2 loader to resolve each permitted split first.  The
     # release index is still the immutable source of row order/metadata, while
     # this check prevents a caller from accidentally widening the training or
@@ -625,7 +676,7 @@ def build_sft_manifest(
                 raise FileNotFoundError(image_path)
             expected_image_hash = str(anchor.get("image_sha256", ""))
             actual_image_hash = sha256_file(image_path)
-            if expected_image_hash and actual_image_hash != expected_image_hash:
+            if actual_image_hash != _frozen_digest(expected_image_hash, kind="anchor_image"):
                 raise ValueError("anchor_image_hash_mismatch")
             ego_x = float(snapshot["ego_x"])
             ego_y = float(snapshot["ego_y"])
@@ -635,7 +686,7 @@ def build_sft_manifest(
             ego_speed_mps = float(snapshot["ego_v"])
             if not math.isfinite(ego_speed_mps) or ego_speed_mps < 0.0:
                 raise ValueError("anchor_speed_invalid")
-            route_target, route_mask, route_report = native_route_target_with_report(
+            _navigation_geometry, _navigation_mask, navigation_report = native_route_target_with_report(
                 anchor.get("route", ()), ego_x=ego_x, ego_y=ego_y, ego_yaw=ego_yaw
             )
             # Validate the canonical proposal's declared ten-point time grid.
@@ -647,6 +698,14 @@ def build_sft_manifest(
             )
             if canonical_failures or not canonical_mask.all():
                 raise ValueError(";".join(canonical_failures or ["canonical_speed_target_incomplete"]))
+            # Keep the old proposal geometry as a diagnostic fallback only.  A
+            # formal C3 manifest supplied with a reconstruction index replaces
+            # this with the independently replayed native planner trajectory.
+            proposal_points = np.asarray([[ego_x, ego_y]] + [[float(row["x"]), float(row["y"])] for row in proposal_file["trajectory"]])
+            proposal_arc = cumulative_arclength(proposal_points)
+            route_map, route_mask = sample_polyline(proposal_points, np.arange(ROUTE_STEPS, dtype=float))
+            route_target = map_to_ego(route_map, ego_x=ego_x, ego_y=ego_y, ego_yaw=ego_yaw)
+            route_report = {**navigation_report, "support_m": float(proposal_arc[-1])}
             _timeline_speed, _timeline_mask, timeline_failures = native_speed_target_from_timeline(
                 timeline_records,
                 ego_x=ego_x,
@@ -657,11 +716,38 @@ def build_sft_manifest(
             speed_target = _canonical_speed
             speed_mask = canonical_mask.copy()
             speed_failures = list(timeline_failures)
-            if execution_failure_reasons:
-                speed_mask[:] = False
-                speed_failures.extend(f"execution_untrusted:{reason}" for reason in execution_failure_reasons)
-            if not route_mask.any():
-                raise ValueError("expert_route_target_empty")
+            reconstruction = reconstruction_rows.get(pair_id)
+            native_status = "unavailable"
+            native_reconstruction_hash = ""
+            native_raw_plan_sha256 = ""
+            native_canonical_sha256 = ""
+            route_source = "legacy_proposal_diagnostic"
+            speed_source = "legacy_proposal_diagnostic"
+            if reconstruction is not None:
+                reconstruction_meta = reconstruction.get("reconstruction", {})
+                native_status = str(reconstruction_meta.get("status", "REVIEW"))
+                native_reconstruction_hash = object_sha256(reconstruction)
+                native_raw_plan_sha256 = str(reconstruction_meta.get("raw_plan_sha256", ""))
+                native_canonical_sha256 = str(reconstruction_meta.get("canonical_sha256", ""))
+                try:
+                    route_target = np.asarray(reconstruction["route_target_ego"], dtype=np.float64)
+                    route_mask = np.asarray(reconstruction["route_mask"], dtype=bool)
+                    speed_target = np.asarray(reconstruction["speed_target_ego"], dtype=np.float64)
+                    speed_mask = np.asarray(reconstruction["speed_mask"], dtype=bool)
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise ValueError(f"c3_reconstruction_target_invalid:{pair_id}") from exc
+                if route_target.shape != (ROUTE_STEPS, 2) or route_mask.shape != (ROUTE_STEPS,):
+                    raise ValueError(f"c3_reconstruction_route_shape:{pair_id}")
+                if speed_target.shape != (SPEED_STEPS, 2) or speed_mask.shape != (SPEED_STEPS,):
+                    raise ValueError(f"c3_reconstruction_speed_shape:{pair_id}")
+                route_report = {
+                    **navigation_report,
+                    "source": "native_classic_planner_trajectory",
+                    "support_m": float(reconstruction.get("route_support_m", 0.0)),
+                    "valid_points": int(route_mask.sum()),
+                }
+                route_source = "native_classic_planner_trajectory"
+                speed_source = "native_classic_planner_canonical"
             # Navigation target construction is the same implementation used by
             # the deployment policy.  Import lazily to keep CPU audits light.
             from driving_vla.model.simlingo_contract import SimLingoContractConfig, navigation_targets
@@ -688,11 +774,7 @@ def build_sft_manifest(
             anchor_time = float(snapshot.get("simulation_time_s"))
             timeline_start_time = float(timeline_records[0].get("simulation_time_s")) if timeline_records else float("nan")
             timeline_offset = timeline_start_time - anchor_time
-            timeline_alignment = (
-                "aligned_first_post_anchor"
-                if math.isfinite(timeline_offset) and abs(timeline_offset - timeline_dt_s) <= max(0.1, timeline_dt_s)
-                else "unaligned_branch_preroll"
-            )
+            timeline_alignment = "branch_local_grid_valid_initial_state_unverified"
             history = anchor.get("observable_history", ())
             history_speed = None
             if history:
@@ -702,11 +784,34 @@ def build_sft_manifest(
                     history_speed = None
             speed_disagreement = None if history_speed is None else float(history_speed - ego_speed_mps)
             missing_route_reasons: list[str] = []
+            if reconstruction is None:
+                missing_route_reasons.append("native_reconstruction_required_for_sft")
+            elif not all(route_mask):
+                missing_route_reasons.append("native_route_actual_support_only")
+            # Native planner quality and proposal identity are audited above.
+            # The execution branch is retained as a separate consequence
+            # record; its pre-roll speed conflict must not invalidate the
+            # independently reconstructed planner label or be repaired by
+            # copying future execution speed into the current input.
+            untrusted: list[str] = []
+            if speed_disagreement is None:
+                untrusted.append("current_history_speed_alignment_unknown")
+            elif abs(speed_disagreement) > 1e-8:
+                untrusted.append("current_history_speed_semantics_conflict_recorded")
+            if reconstruction is None or native_status != "PASS":
+                untrusted.append("native_reconstruction_not_accepted")
+                route_mask[:] = False
+                speed_mask[:] = False
+            missing_route_reasons.extend(untrusted)
+            speed_failures.extend(untrusted)
+            speed_failures.extend(
+                f"execution_audit_only:{reason}" for reason in execution_failure_reasons
+            )
             if not route_mask.all():
                 missing_route_reasons.extend(
                     (
                         f"route_points_available:{int(route_mask.sum())}/{ROUTE_STEPS}",
-                        f"route_support_shortfall_m:{max(0.0, ROUTE_STEPS - float(route_report['support_m'])):.6f}",
+                        f"route_support_shortfall_m:{max(0.0, ROUTE_STEPS - 1 - float(route_report['support_m'])):.6f}",
                     )
                 )
             if timeline_alignment != "aligned_first_post_anchor":
@@ -726,7 +831,7 @@ def build_sft_manifest(
                     image_sha256=actual_image_hash,
                     proposal_path=str(proposal_path),
                     proposal_sha256=proposal_sha,
-                    teacher_source=str(provenance.get("source", "expert")),
+                    teacher_source=str(proposal_file["audit_source"]),
                     teacher_generator=teacher_generator,
                     ego_x=ego_x,
                     ego_y=ego_y,
@@ -736,9 +841,10 @@ def build_sft_manifest(
                     target_ego_2=tuple(float(v) for v in target.target_ego_2),
                     route_target=tuple(tuple(float(v) for v in row) for row in route_target),
                     route_mask=tuple(bool(v) for v in route_mask),
+                    route_source=route_source,
                     speed_target=tuple(tuple(float(v) for v in row) for row in speed_target),
                     speed_mask=tuple(bool(v) for v in speed_mask),
-                    speed_source="expert_canonical_proposal",
+                    speed_source=speed_source,
                     execution_timeline_path=str(timeline_path),
                     execution_timeline_sha256=timeline_sha,
                     execution_timeline_rows=timeline_rows,
@@ -751,7 +857,11 @@ def build_sft_manifest(
                     route_projection_segment=int(route_report["projection_segment"]),
                     route_projection_ambiguous=bool(route_report["projection_ambiguous"]),
                     route_reference_revision=route_revision,
-                    route_validity_basis="native_expert_reference_path_audited",
+                    route_validity_basis=(
+                        "native_planner_replay_actual_support_only"
+                        if reconstruction is not None and native_status == "PASS"
+                        else "withheld_pending_native_reconstruction"
+                    ),
                     execution_quality=execution_quality,
                     execution_failure_reasons=execution_failure_reasons,
                     outcome_label_path=str(outcome_label_path),
@@ -763,37 +873,105 @@ def build_sft_manifest(
                     speed_input_source="anchor.observable_snapshot.ego_v",
                     anchor_history_speed_mps=history_speed,
                     anchor_history_speed_disagreement_mps=speed_disagreement,
+                    native_reconstruction_status=native_status,
+                    native_reconstruction_hash=native_reconstruction_hash,
+                    native_raw_plan_sha256=native_raw_plan_sha256,
+                    native_canonical_sha256=native_canonical_sha256,
+                    supervision_usage=(
+                        "sft_partial" if reconstruction is not None and native_status == "PASS" else "diagnostic_only"
+                    ),
                 )
             )
         except Exception as exc:  # noqa: BLE001 - audit records each root failure
             failures.append({"pair_id": pair_id, "split": split, "reason": f"{type(exc).__name__}:{exc}"})
+    # Newly collected rows are deliberately appended only after the complete
+    # frozen release has been checked.  The supplement is an independent
+    # manifest: a blocked collection therefore contributes an auditable empty
+    # cohort rather than silently changing the old release counts.
+    supplement_payload: Mapping[str, Any] | None = None
+    supplement_samples: list[SFTSample] = []
+    if supplement_manifest is not None:
+        supplement_payload = (
+            supplement_manifest
+            if isinstance(supplement_manifest, Mapping)
+            else _load_json(Path(supplement_manifest))
+        )
+        if supplement_payload.get("schema_version") != "safedrive.c3.supplement_manifest.v1":
+            raise ValueError("c3_supplement_schema")
+        supplement_check = dict(supplement_payload)
+        supplement_check.pop("created_at_utc", None)
+        supplement_digest = supplement_check.pop("content_sha256", None)
+        if supplement_digest != object_sha256(supplement_check):
+            raise ValueError("c3_supplement_digest_mismatch")
+        for row in supplement_payload.get("rows", ()):
+            if not isinstance(row, Mapping) or row.get("accepted") is not True:
+                continue
+            item = row.get("sample")
+            if not isinstance(item, Mapping):
+                raise ValueError("c3_supplement_sample_missing")
+            try:
+                sample = SFTSample(**dict(item))
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"c3_supplement_sample_schema:{row.get('root_id', '')}") from exc
+            if sample.split not in wanted:
+                continue
+            if sample.cohort != "c3_supplement":
+                raise ValueError(f"c3_supplement_cohort:{sample.root_id}")
+            if sample.root_id != sample.pair_id or not sample.physical_sha256:
+                raise ValueError(f"c3_supplement_physical_identity:{sample.root_id}")
+            if len(sample.route_target) != ROUTE_STEPS or len(sample.route_mask) != ROUTE_STEPS:
+                raise ValueError(f"c3_supplement_route_shape:{sample.root_id}")
+            if len(sample.speed_target) != SPEED_STEPS or len(sample.speed_mask) != SPEED_STEPS:
+                raise ValueError(f"c3_supplement_speed_shape:{sample.root_id}")
+            image = Path(sample.image_path)
+            if not image.is_file() or not sample.image_sha256 or sha256_file(image) != sample.image_sha256:
+                raise ValueError(f"c3_supplement_image_identity:{sample.root_id}")
+            if not any(sample.route_mask) and not any(sample.speed_mask):
+                raise ValueError(f"c3_supplement_no_supervision:{sample.root_id}")
+            supplement_samples.append(sample)
+    old_ids = {sample.root_id for sample in samples}
+    supplement_ids = [sample.root_id for sample in supplement_samples]
+    if len(supplement_ids) != len(set(supplement_ids)) or old_ids.intersection(supplement_ids):
+        raise ValueError("c3_supplement_root_overlap")
+    samples.extend(supplement_samples)
     samples.sort(key=lambda sample: (sample.split, sample.root_id))
+    legacy_split_counts = {
+        split: sum(sample.split == split for sample in samples if sample.cohort == "c2_release")
+        for split in wanted
+    }
     split_counts = {split: sum(sample.split == split for sample in samples) for split in wanted}
+    supplement_counts = {
+        split: sum(sample.split == split and sample.cohort == "c3_supplement" for sample in samples)
+        for split in wanted
+    }
     manifest = {
-        "schema_version": "safedrive.c3.sft_manifest.v2",
+        "schema_version": "safedrive.c3.sft_manifest.v4",
         "release_id": RELEASE_ID,
         "quality_profile": QUALITY_PROFILE,
+        "frozen_identity_policy": "reuse_c2_split_identity_and_verify_referenced_images;_new_derived_hashes",
         "base_root": str(base_root),
         "splits": list(wanted),
         "sample_count": len(samples),
         "split_counts": split_counts,
+        "legacy_release_split_counts": legacy_split_counts,
         "failure_count": len(failures),
         "failures": failures,
         "route_steps": ROUTE_STEPS,
         "route_spacing_m": 1.0,
         "speed_steps": SPEED_STEPS,
         "speed_dt_s": SPEED_DT_S,
-        "teacher_contract": "native_expert_reference_path_plus_canonical_speed_proposal",
+        "teacher_contract": "native_classic_planner_replay_bound_to_original_proposal_identity",
         "route_label_contract": {
-            "source": "native_expert_reference_path_projected",
-            "projection": "closest_ordered_segment_then_forward_suffix",
+            "source": "native_classic_planner_trajectory",
+            "navigation_is_supervision": False,
+            "quality_audit": "native_replay_and_per_root_behavior_audit",
             "spacing_m": 1.0,
             "arc_queries_m": list(range(ROUTE_STEPS)),
             "no_navigation_splice": True,
             "no_extrapolation": True,
         },
         "speed_label_contract": {
-            "source": "expert_canonical_proposal",
+            "source": "native_classic_planner_canonical",
             "steps": SPEED_STEPS,
             "dt_s": SPEED_DT_S,
             "execution_timeline_audit_only": True,
@@ -803,6 +981,30 @@ def build_sft_manifest(
         "route_projection_max_distance_m": ROUTE_PROJECTION_MAX_DISTANCE_M,
         "future_labels_in_input": False,
         "world_labels_in_sft": False,
+        "native_reconstruction_manifest_sha256": (
+            reconstruction_payload.get("content_sha256") if reconstruction_payload is not None else None
+        ),
+        "supplement_manifest_sha256": (
+            supplement_payload.get("content_sha256") if supplement_payload is not None else None
+        ),
+        "supplement_status": (
+            str(supplement_payload.get("status", "UNSPECIFIED"))
+            if supplement_payload is not None else "NOT_PROVIDED"
+        ),
+        "supplement_counts": supplement_counts,
+        "cohort_counts": {
+            cohort: sum(sample.cohort == cohort for sample in samples)
+            for cohort in sorted({sample.cohort for sample in samples})
+        },
+        "evaluation_scope": (
+            "partial_native_support"
+            if any(not all(sample.route_mask) for sample in samples)
+            else "complete_native_support"
+        ),
+        "supervision_usage_counts": {
+            usage: sum(sample.supervision_usage == usage for sample in samples)
+            for usage in sorted({sample.supervision_usage for sample in samples})
+        },
         "samples": [sample.to_dict() for sample in samples],
     }
     manifest["manifest_sha256"] = object_sha256(manifest)
@@ -870,19 +1072,26 @@ def root_metrics(
         failure_reasons.append("route_non_finite")
     if speed_shape_valid and not finite_speed.all():
         failure_reasons.append("speed_non_finite")
-    if not route_valid.any():
-        failure_reasons.append("route_no_valid_points")
-    if not speed_valid.any():
-        failure_reasons.append("speed_no_valid_points")
+    if route_mask.any() and not finite_route[route_mask].all():
+        failure_reasons.append("route_prediction_missing_on_fixed_support")
+    if speed_mask.any() and not finite_speed[speed_mask].all():
+        failure_reasons.append("speed_prediction_missing_on_fixed_support")
     if not canonical_output_valid:
         failure_reasons.append("canonical_output_invalid")
-    if not route_fde_valid:
-        failure_reasons.append("route_fde_point20_unavailable")
+    if route_fde_target_valid and not route_fde_valid:
+        failure_reasons.append("route_fde_point20_prediction_failed")
     result: dict[str, Any] = {
         "root_id": sample.root_id,
         "split": sample.split,
-        "route_valid_points": int(route_valid.sum()),
-        "speed_valid_points": int(speed_valid.sum()),
+        "cohort": sample.cohort,
+        "case_group": sample.case_group,
+        "physical_sha256": sample.physical_sha256,
+        "input_identity_sha256": sample.input_identity_sha256,
+        "route_support_m": float(sample.route_support_m),
+        "route_valid_points": int(route_mask.sum()),
+        "speed_valid_points": int(speed_mask.sum()),
+        "route_scored_finite_points": int(route_valid.sum()),
+        "speed_scored_finite_points": int(speed_valid.sum()),
         "route_shape_valid": route_shape_valid,
         "speed_shape_valid": speed_shape_valid,
         "route_finite": bool(route_shape_valid and finite_route.all()),
@@ -892,10 +1101,12 @@ def root_metrics(
         "speed_full_valid": bool(speed_mask.size == SPEED_STEPS and speed_mask.all() and speed_shape_valid and finite_speed.all()),
         "route_fde_target_valid": route_fde_target_valid,
         "route_fde_valid": route_fde_valid,
-        "route_ade_m": float(route_error[route_valid].mean()) if route_valid.any() else None,
+        "route_ade_m": float(route_error[route_mask].mean()) if route_mask.any() and finite_route[route_mask].all() else None,
+        "route_ade_conditional_m": float(route_error[route_valid].mean()) if route_valid.any() else None,
         "route_fde_m": float(route_error[ROUTE_STEPS - 1]) if route_fde_valid else None,
-        "speed_wp_ade_m": float(speed_error[speed_valid].mean()) if speed_valid.any() else None,
-        "prediction_valid": bool(canonical_output_valid and route_valid.any() and speed_valid.any()),
+        "speed_wp_ade_m": float(speed_error[speed_mask].mean()) if speed_mask.any() and finite_speed[speed_mask].all() else None,
+        "speed_wp_ade_conditional_m": float(speed_error[speed_valid].mean()) if speed_valid.any() else None,
+        "prediction_valid": bool(canonical_output_valid and route_shape_valid and speed_shape_valid and finite_route.all() and finite_speed.all()),
         "failure_reasons": sorted(set(failure_reasons)),
         "route_missing_reasons": list(sample.route_missing_reasons),
         "speed_missing_reasons": list(sample.speed_missing_reasons),
@@ -921,6 +1132,30 @@ def aggregate_metrics(
     for row in per_root:
         if row.get("model") in groups:
             groups[str(row["model"])].append(row)
+    sample_counts = {model: len(rows) for model, rows in groups.items()}
+    # Reduce anchors within each root before reducing roots. Keep incomplete
+    # predictions visible: a primary root metric is unavailable if any
+    # supervised anchor failed; conditional means are reported separately.
+    primary_keys = ("route_ade_m", "route_fde_m", "speed_wp_ade_m")
+    for model, rows in list(groups.items()):
+        root_rows: dict[str, list[Mapping[str, Any]]] = {}
+        for row in rows:
+            root_rows.setdefault(str(row["root_id"]), []).append(row)
+        reduced = []
+        for root_id, anchors in sorted(root_rows.items()):
+            item: dict[str, Any] = {"root_id": root_id, "model": model, "sample_count": len(anchors)}
+            for key in primary_keys:
+                support_key = "route_fde_target_valid" if key == "route_fde_m" else ("route_valid_points" if key == "route_ade_m" else "speed_valid_points")
+                supported = [row for row in anchors if bool(row.get(support_key, row.get(key) is not None))]
+                values = [float(row[key]) for row in supported if row.get(key) is not None and math.isfinite(float(row[key]))]
+                item[key] = float(np.mean(values)) if values and len(values) == len(supported) else None
+                item[f"{key}_conditional"] = float(np.mean(values)) if values else None
+                item[f"{key}_target_available"] = bool(supported)
+            for key in ("prediction_valid", "route_full_valid", "speed_full_valid"):
+                item[key] = all(bool(row.get(key)) for row in anchors)
+            item["failure_reasons"] = sorted({reason for row in anchors for reason in row.get("failure_reasons", ())})
+            reduced.append(item)
+        groups[model] = reduced
     by_root: dict[str, dict[str, Mapping[str, Any]]] = {}
     for model, rows in groups.items():
         for row in rows:
@@ -929,8 +1164,9 @@ def aggregate_metrics(
     rng = np.random.default_rng(bootstrap_seed)
 
     def mean_metric(rows: Sequence[Mapping[str, Any]], key: str) -> float | None:
-        vals = [float(row[key]) for row in rows if row.get(key) is not None and math.isfinite(float(row[key]))]
-        return float(np.mean(vals)) if vals else None
+        supported = [row for row in rows if row.get(f"{key}_target_available")]
+        vals = [float(row[key]) for row in supported if row.get(key) is not None and math.isfinite(float(row[key]))]
+        return float(np.mean(vals)) if vals and len(vals) == len(supported) else None
 
     metrics: dict[str, Any] = {}
     for key in ("route_ade_m", "route_fde_m", "speed_wp_ade_m"):
@@ -955,8 +1191,17 @@ def aggregate_metrics(
             "delta_m0_minus_m1": delta,
             "relative_improvement_percent": relative,
             "paired_root_count": int(diffs.size),
-            "bootstrap_ci95": ci,
+            "bootstrap_ci95": ci if base is not None and method is not None else None,
+            "conditional_paired_bootstrap_ci95": ci,
+            "conditional_means": {
+                model: float(np.mean([row[f"{key}_conditional"] for row in rows if row[f"{key}_conditional"] is not None]))
+                if any(row[f"{key}_conditional"] is not None for row in rows) else None
+                for model, rows in groups.items()
+            },
+            "target_root_count": {model: sum(bool(row[f"{key}_target_available"]) for row in rows) for model, rows in groups.items()},
+            "prediction_failed_root_count": {model: sum(bool(row[f"{key}_target_available"]) and row[key] is None for row in rows) for model, rows in groups.items()},
         }
+    metrics["sample_count"] = sample_counts
     metrics["root_count"] = {baseline_key: len(groups[baseline_key]), method_key: len(groups[method_key])}
     metrics["denominator_root_count"] = {model: len(rows) for model, rows in groups.items()}
     metrics["prediction_valid_count"] = {

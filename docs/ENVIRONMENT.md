@@ -17,9 +17,11 @@ ROS_DOMAIN_ID=42
 RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 ```
 
-用户已确认 CARLA 与 GPU 可用。任何代理/终端仍需在实际任务上下文中重新 probe；一次
-`CUDA_UNAVAILABLE`、RPC 不可达或 sandbox `PermissionError` 只证明该进程未成功访问，不能
-推导物理资产不存在。
+本次修复实际确认 WSL CUDA/BF16 与 RTX 4080 batch 可用；CARLA 可执行文件存在，但本次
+Windows server 在取得 RPC READY 前发生 `0xe06d7363` 进程崩溃，补采因此记录为
+`CARLA_BLOCKED_EXTERNAL`。一次 `CUDA_UNAVAILABLE`、RPC 不可达或 sandbox `PermissionError`
+只证明该进程未成功访问，不能推导物理资产不存在；本次 CARLA 阻断则有独立启动日志和
+crash 目录记录，不能在报告中写成 READY。
 
 版本锁以 `versions.lock` 为准。
 
@@ -134,7 +136,8 @@ find_spec 或设备只读 probe 不是训练兼容证明；bitsandbytes 不作�
 不自动重装 CUDA、改系统 Python 或照搬上游多 GPU 配置。
 
 真实训练 CLI 已实现并跑通，入口为 `scripts/h6_cora_sft.py`；C3 的 audit/smoke/baseline/train/
-evaluate/verify 命令与实际输出登记在其权威 run 的 `run_config.json`。当前下一入口为 C4，
+evaluate/verify 命令与实际输出登记在权威 run
+`generated/h6/cora/c3-repair-20260910T165902Z/run_config.json`。当前下一入口为 C4，
 尚未登记 C4 的新命令。
 离线训练无需 CARLA preflight，训练与渲染不并发。
 只有 C3 必要补采与 C5 开发闭环需要本次 READY 和唯一 ScenarioRuntime owner。

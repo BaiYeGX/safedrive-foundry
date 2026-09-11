@@ -2,7 +2,7 @@
 
 状态 `VERIFIED / ENGINEERING_COMPLETED / ALGORITHM_MEASURED`（修复版，2026-09-10）。本文件是完整
 C3 执行合同；权威实测记录位于
-`generated/h6/cora/c3-repair-20260910T100651Z/`，普通检查均在同一阶段内完成。初版 C3 的
+`generated/h6/cora/c3-repair-20260910T165902Z/`，普通检查均在同一阶段内完成。初版 C3 的
 监督错误、旧 manifest 和 90.77% 路线结果已撤回，勘误见
 [C3 SFT 修复记录](runtime-evidence/h6/c3-sft-repair-erratum.md)。修复版已交付 M0 离线基线、
 M1 常规微调，范围与预算服从 ROADMAP/RESOURCES。

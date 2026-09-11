@@ -2,10 +2,12 @@
 
 唯一研究链 H0→H1→H2→H3→H4→H5→H6 不变；下面的 C 阶段属于 H6。
 C0–C2 已完成并冻结。本周只做 C3、C4、C5、C6，不再设小数编号或并行路线。
-当前状态：C3 修复版已于 2026-09-10 `VERIFIED`，下一入口为 C4（尚未启动）。唯一执行入口见
-[START_TASK](START_TASK.md)；C3 修复版权威产物为
-`generated/h6/cora/c3-repair-20260910T100651Z/`。初版 C3 的监督和 90.77% 结果已撤回，
-勘误见 [C3 SFT 修复记录](docs/runtime-evidence/h6/c3-sft-repair-erratum.md)。
+当前状态：C3 `VERIFIED / ENGINEERING_COMPLETED / ALGORITHM_MEASURED`，C4 尚未启动。权威
+入口见 [START_TASK](START_TASK.md)，当前 run 为
+`generated/h6/cora/c3-repair-20260910T165902Z/`，完整记录见
+[C3 修复最终验收](docs/runtime-evidence/h6/c3-final-repair-20260910T165902Z.md)。
+初版 C3 的监督和 90.77% 结果撤回继续有效；当前算法结果只适用于
+`partial_native_support` 的离线开发评估，不代表普遍驾驶能力。
 
 ## 已有基础
 
@@ -18,7 +20,7 @@ C0–C2 已完成并冻结。本周只做 C3、C4、C5、C6，不再设小数编
 原 C2 稀有事件门仍失败；H5 闭环负结果与 H6 旧 pilot 保留。
 这些是已有基础，不重跑、不重新追齐稀有事件。详细历史见 [PROGRESS](PROGRESS.md)。
 
-## C3 — 数据接好，完成 VLA 微调（修复版已完成，2026-09-10）
+## C3 — 数据接好，完成 VLA 微调（修复版已验证，2026-09-11）
 
 时间：第 1–2 天。交付：原始模型 M0 的离线基线、常规 LoRA 微调 M1 及可重载权重。
 
@@ -35,7 +37,8 @@ C0–C2 已完成并冻结。本周只做 C3、C4、C5、C6，不再设小数编
 不得继续承诺能按原日程完成训练。
 
 修复版验收已通过：M1 确实更新 VLA 参数，可重载，有逐 root 开发预测、损失与资源记录；
-完整证据见 [PROGRESS](PROGRESS.md)、[EVIDENCE](docs/EVIDENCE.md) 和 [修复记录](docs/runtime-evidence/h6/c3-sft-repair-erratum.md)。
+完整证据见 [PROGRESS](PROGRESS.md)、[EVIDENCE](docs/EVIDENCE.md) 和
+[最终验收记录](docs/runtime-evidence/h6/c3-final-repair-20260910T165902Z.md)。
 M1 不要求必然胜 M0 才能完成工程验收，但初版无效监督不能再作为依据；C4 的 M2 必须从原始
 M0 起点开始，不能从 M1 续训。
 

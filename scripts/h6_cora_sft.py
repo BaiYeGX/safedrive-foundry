@@ -21,7 +21,9 @@ import os
 import random
 import subprocess
 import sys
+import threading
 import time
+from functools import wraps
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -56,9 +58,259 @@ DEFAULT_CKPT = REPO / "models/simlingo/simlingo/checkpoints/epoch=013.ckpt/pytor
 DEFAULT_HYDRA = REPO / "models/simlingo/simlingo/.hydra/config.yaml"
 DEFAULT_INTERNVL = REPO / "models/InternVL2-1B"
 DEFAULT_OUTPUT = REPO / "generated/h6/cora"
-RUN_SCHEMA_VERSION = "safedrive.c3.repair.v2"
+RUN_SCHEMA_VERSION = "safedrive.c3.repair.v3"
 OPTIMIZATION_BUDGET_HOURS = 10.0
 GPU_PEAK_LIMIT_GIB = 14.5
+
+
+class _WholeGpuSampler:
+    """Sample the whole physical GPU independently of torch's allocator.
+
+    Torch's peak counters describe this process's allocator.  They do not
+    prove that another CUDA context, driver workspace, or peer allocation did
+    not consume the remaining card memory.  Every model phase therefore gets
+    a small, append-only ``nvidia-smi`` trace as well as the allocator counters.
+    A missing ``nvidia-smi`` sample is retained as a gap and is never treated
+    as zero memory.
+    """
+
+    def __init__(self, run_dir: Path, phase: str, *, interval_s: float = 0.5) -> None:
+        self.run_dir = run_dir
+        self.phase = phase
+        self.interval_s = float(interval_s)
+        self.path = run_dir / f"gpu-memory-samples-{phase}.jsonl"
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
+        self._gaps: list[dict[str, Any]] = []
+        self._sample_count = 0
+        self._peak_used_gib = 0.0
+        self._uuid: str | None = None
+
+    def start(self) -> "_WholeGpuSampler":
+        if self.path.exists():
+            # A resumed or interrupted phase gets a new append-only trace.
+            # The ledger retains both traces so an interrupted attempt cannot
+            # disappear behind the successful retry.
+            index = 2
+            base = self.path
+            while self.path.exists():
+                self.path = base.with_name(f"{base.stem}-{index}{base.suffix}")
+                index += 1
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.touch()
+        self._thread = threading.Thread(target=self._run, name=f"c3-gpu-{self.phase}", daemon=True)
+        self._thread.start()
+        return self
+
+    def _record_gap(self, reason: str) -> None:
+        with self._lock:
+            self._gaps.append({
+                "time_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+                "reason": str(reason),
+            })
+
+    def _sample_once(self) -> None:
+        started = time.monotonic()
+        try:
+            result = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=uuid,memory.used,memory.total",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=max(1.0, self.interval_s),
+                check=False,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"returncode={result.returncode}:{result.stderr.strip()[:200]}")
+            rows = []
+            for line in result.stdout.splitlines():
+                fields = [item.strip() for item in line.split(",")]
+                if len(fields) != 3:
+                    continue
+                uuid, used_text, total_text = fields
+                used_mib = float(used_text)
+                total_mib = float(total_text)
+                if not math.isfinite(used_mib) or not math.isfinite(total_mib) or total_mib <= 0:
+                    continue
+                rows.append({"uuid": uuid, "used_mib": used_mib, "total_mib": total_mib})
+            if not rows:
+                raise RuntimeError("empty_gpu_query")
+            now = dt.datetime.now(dt.timezone.utc).isoformat()
+            monotonic_s = time.monotonic()
+            with self.path.open("a", encoding="utf-8") as handle:
+                for row in rows:
+                    payload = {
+                        "phase": self.phase,
+                        "time_utc": now,
+                        "monotonic_s": monotonic_s,
+                        **row,
+                    }
+                    handle.write(json.dumps(payload, ensure_ascii=True, sort_keys=True) + "\n")
+                    self._sample_count += 1
+                    self._uuid = self._uuid or str(row["uuid"])
+                    self._peak_used_gib = max(self._peak_used_gib, float(row["used_mib"]) / 1024.0)
+                handle.flush()
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+            self._record_gap(f"{type(exc).__name__}:{exc}")
+        finally:
+            # Record a grossly delayed sampler loop as a gap.  This does not
+            # invent a memory value for the interval.
+            if time.monotonic() - started > self.interval_s * 2.5:
+                self._record_gap("sampler_loop_overrun")
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            self._sample_once()
+            self._stop.wait(self.interval_s)
+
+    def stop(self) -> dict[str, Any]:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=max(2.0, self.interval_s * 4.0))
+        return {
+            "phase": self.phase,
+            "path": str(self.path),
+            "method": "nvidia-smi --query-gpu=uuid,memory.used,memory.total --format=csv,noheader,nounits",
+            "sampling_period_s": self.interval_s,
+            "gpu_uuid": self._uuid,
+            "sample_count": int(self._sample_count),
+            "gap_count": len(self._gaps),
+            "gaps": list(self._gaps),
+            "peak_used_gib": float(self._peak_used_gib) if self._sample_count else None,
+            "file_sha256": sha256_file(self.path) if self.path.is_file() else None,
+        }
+
+
+def _split_views(samples: Sequence[SFTSample]) -> tuple[list[SFTSample], list[SFTSample]]:
+    """Return train/validation views without embedding the C2 row counts."""
+
+    return (
+        [sample for sample in samples if sample.split == "train"],
+        [sample for sample in samples if sample.split == "validation"],
+    )
+
+
+def _training_view(samples: Sequence[SFTSample]) -> tuple[list[SFTSample], list[str]]:
+    """Keep a root if at least one supervised head has a valid coordinate."""
+
+    train, _ = _split_views(samples)
+    selected = [sample for sample in train if any(sample.route_mask) or any(sample.speed_mask)]
+    excluded = [sample.root_id for sample in train if not (any(sample.route_mask) or any(sample.speed_mask))]
+    return selected, excluded
+
+
+def _window_contract(root_count: int, accumulation: int) -> dict[str, Any]:
+    """Describe the first epoch, including a real short tail window."""
+
+    if root_count < 1 or accumulation < 1:
+        raise ValueError("c3_window_contract_empty")
+    full, tail = divmod(int(root_count), int(accumulation))
+    return {
+        f"full_size_{int(accumulation)}": int(full),
+        f"tail_size_{int(tail)}": int(bool(tail)),
+        "roots": int(root_count),
+        "accumulation": int(accumulation),
+        "tail_window_size": int(tail),
+    }
+
+
+def _attach_gpu_monitor(run_dir: Path, phase: str, monitor: Mapping[str, Any]) -> None:
+    """Attach a finished sampler to the phase event and refresh ledger hashes."""
+
+    path = run_dir / "resource-ledger.json"
+    if not path.is_file():
+        return
+    ledger = _read_json(path)
+    candidates = [
+        item for item in reversed(ledger.get("events", []))
+        if str(item.get("phase")) == phase
+        or (phase == "train" and str(item.get("phase")) == "train_resume")
+    ]
+    if not candidates:
+        return
+    event = candidates[0]
+    monitors = list(event.get("gpu_monitors", ()))
+    if event.get("gpu_monitor") is not None:
+        monitors.append(event.pop("gpu_monitor"))
+    monitors.append(dict(monitor))
+    event["gpu_monitors"] = monitors
+    phase_monitors: dict[str, Any] = {}
+    for item in ledger.get("events", []):
+        event_phase = str(item.get("phase"))
+        values = list(item.get("gpu_monitors", ()))
+        if item.get("gpu_monitor") is not None:
+            values.append(item["gpu_monitor"])
+        if values:
+            phase_monitors.setdefault(event_phase, []).extend(values)
+    phase_monitors = {
+        phase_name: values[0] if len(values) == 1 else values
+        for phase_name, values in phase_monitors.items()
+    }
+    peaks = [
+        float(item["peak_used_gib"])
+        for value in phase_monitors.values()
+        for item in (value if isinstance(value, list) else [value])
+        if isinstance(item, Mapping) and item.get("peak_used_gib") is not None
+    ]
+    ledger["gpu_monitoring"] = {
+        "method": "nvidia-smi whole-device sampling plus torch.cuda allocator peak counters",
+        "sampling_period_s": 0.5,
+        "phases": phase_monitors,
+        "gpu_uuid": next((item.get("gpu_uuid") for value in phase_monitors.values() for item in (value if isinstance(value, list) else [value]) if isinstance(item, Mapping) and item.get("gpu_uuid")), None),
+        "device_peak_used_gib": max(peaks) if peaks else None,
+        "peak_limit_gib": GPU_PEAK_LIMIT_GIB,
+        "gaps_are_failures": True,
+    }
+    digest_payload = {
+        key: value for key, value in ledger.items() if key not in {"content_sha256", "ledger_sha256"}
+    }
+    ledger["content_sha256"] = _sha_object(digest_payload)
+    ledger["ledger_sha256"] = _sha_object({**digest_payload, "content_sha256": ledger["content_sha256"]})
+    _write_json(path, ledger, overwrite=True)
+
+
+def _monitor_gpu_phase(phase: str):
+    """Decorate model phases so failures also leave a sampler record."""
+
+    def decorator(function):
+        @wraps(function)
+        def wrapped(args):
+            run_dir = _run_dir(args)
+            run_dir.mkdir(parents=True, exist_ok=True)
+            sampler = _WholeGpuSampler(run_dir, phase).start()
+            started = time.perf_counter()
+            try:
+                result = function(args)
+            except BaseException as exc:
+                monitor = sampler.stop()
+                try:
+                    _update_resource_ledger(
+                        run_dir,
+                        {
+                            "phase": "train_resume" if phase == "train" and bool(getattr(args, "resume", False)) else phase,
+                            "status": "FAILED_EXCEPTION",
+                            "wall_time_s": time.perf_counter() - started,
+                            "optimization_wall_time_s": 0.0,
+                            "optimization_wall_time_s_upper_bound": time.perf_counter() - started if phase == "train" else 0.0,
+                            "device": str(getattr(args, "device", "unknown")),
+                            "error": f"{type(exc).__name__}:{exc}",
+                            "gpu_monitor": monitor,
+                        },
+                    )
+                except Exception:
+                    # Preserve the original phase error.  The absence of a
+                    # ledger is itself visible to verify/deep self-check.
+                    pass
+                raise
+            monitor = sampler.stop()
+            _attach_gpu_monitor(run_dir, phase, monitor)
+            return result
+        return wrapped
+    return decorator
 
 
 def _canonical(value: Any) -> str:
@@ -133,12 +385,22 @@ def _ensure_run_dir(args: argparse.Namespace) -> Path:
 
 
 def _config_payload(args: argparse.Namespace, *, model_identity: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    reconstruction_path = getattr(args, "reconstruction_manifest", None)
+    supplement_path = getattr(args, "supplement_manifest", None)
     payload: dict[str, Any] = {
         "schema_version": "safedrive.c3.sft_run_config.v2",
         "repair_schema": RUN_SCHEMA_VERSION,
         "run_id": str(args.run_id),
         "release_root": str(Path(args.release_root).resolve()),
+        "reconstruction_manifest": str(Path(reconstruction_path).resolve()) if reconstruction_path else None,
+        "supplement_manifest": str(Path(supplement_path).resolve()) if supplement_path else None,
         "release_id": RELEASE_ID,
+        "checkpoint_path": str(Path(args.checkpoint).resolve()),
+        "hydra_config_path": str(Path(args.hydra_config).resolve()),
+        "internvl_path": str(Path(args.internvl_root).resolve()),
+        "preprocessing_identity": _configuration_asset_identity(args),
+        "source_identity": _source_identity(),
+        "roundtrip_tolerance": 1e-5,
         "seed": int(args.seed),
         "updates": int(args.updates),
         "microbatch": 1,
@@ -153,7 +415,7 @@ def _config_payload(args: argparse.Namespace, *, model_identity: Mapping[str, An
         "speed_steps": SPEED_STEPS,
         "speed_dt_s": SPEED_DT_S,
         "execution_timeline_dt_s": float(EXECUTION_DT_S),
-        "route_target_source": "native_expert_reference_path_projected",
+        "route_target_source": "audited_expert_output_supported_interval_only",
         "speed_target_source": "expert_canonical_proposal",
         "warmup_fraction": 0.05,
         "gradient_clip": 1.0,
@@ -164,22 +426,22 @@ def _config_payload(args: argparse.Namespace, *, model_identity: Mapping[str, An
         "bootstrap_seed": 71,
         "future_labels_in_input": False,
         "world_labels_in_sft": False,
-        "teacher_contract": "native_expert_reference_path_plus_canonical_speed_proposal",
+        "teacher_contract": "expert_output_separate_from_navigation_and_branch_outcome",
         "validation_input_freeze": "manifest_sample_order_and_masks_are_immutable_before_prediction",
         "m0_m1_start": "original_m0_checkpoint_each_model_load; no_m1_resume_for_m2",
         "resource_accounting": "historical_artifact_intervals_plus_current_phase_events",
         "carla": {
             "required": False,
             "installation": r"E:\CARLA_0.9.16\CarlaUE4.exe",
-            "reason": "C2 release already contains complete valid expert timelines; no supplemental collection was needed",
+            "reason": "supplement_preflight_is_recorded_separately;_old_native_replay_does_not_require_a_live_server",
         },
         "reproduction_commands": [
-            f"python scripts/h6_cora_sft.py audit --run-id {args.run_id} --device cuda",
-            f"python scripts/h6_cora_sft.py smoke --run-id {args.run_id} --device cuda",
-            f"python scripts/h6_cora_sft.py baseline --run-id {args.run_id} --device cuda",
-            f"python scripts/h6_cora_sft.py train --run-id {args.run_id} --device cuda --updates {int(args.updates)} --accumulation {int(args.accumulation)} --max-hours {float(args.max_hours):g}",
-            f"python scripts/h6_cora_sft.py evaluate --run-id {args.run_id} --device cuda",
-            f"python scripts/h6_cora_sft.py verify --run-id {args.run_id} --device cpu",
+            f"python scripts/h6_cora_sft.py audit --run-id {args.run_id} --device cuda --reconstruction-manifest {reconstruction_path or '<reconstruction.json>'} --supplement-manifest {supplement_path or '<supplement-manifest.json>'}",
+            f"python scripts/h6_cora_sft.py smoke --run-id {args.run_id} --device cuda --reconstruction-manifest {reconstruction_path or '<reconstruction.json>'} --supplement-manifest {supplement_path or '<supplement-manifest.json>'}",
+            f"python scripts/h6_cora_sft.py baseline --run-id {args.run_id} --device cuda --reconstruction-manifest {reconstruction_path or '<reconstruction.json>'} --supplement-manifest {supplement_path or '<supplement-manifest.json>'}",
+            f"python scripts/h6_cora_sft.py train --run-id {args.run_id} --device cuda --updates {int(args.updates)} --accumulation {int(args.accumulation)} --max-hours {float(args.max_hours):g} --reconstruction-manifest {reconstruction_path or '<reconstruction.json>'} --supplement-manifest {supplement_path or '<supplement-manifest.json>'}",
+            f"python scripts/h6_cora_sft.py evaluate --run-id {args.run_id} --device cuda --reconstruction-manifest {reconstruction_path or '<reconstruction.json>'} --supplement-manifest {supplement_path or '<supplement-manifest.json>'}",
+            f"python scripts/h6_cora_sft.py verify --run-id {args.run_id} --device cpu --reconstruction-manifest {reconstruction_path or '<reconstruction.json>'} --supplement-manifest {supplement_path or '<supplement-manifest.json>'}",
         ],
         "code_path": str(Path(__file__).resolve()),
         "code_sha256": sha256_file(Path(__file__).resolve()),
@@ -202,6 +464,20 @@ def _config_digest(config: Mapping[str, Any]) -> str:
     return digest
 
 
+def _source_identity() -> dict[str, str]:
+    """Hash executable adapter/deployment sources, never old data or weights."""
+    paths = [Path(__file__).resolve()]
+    for directory in (REPO / "safedrive_foundry/driving_vla/model", REPO / "simlingo-main/simlingo_training"):
+        paths.extend(sorted(directory.rglob("*.py")))
+    return {str(path.relative_to(REPO)): sha256_file(path) for path in paths}
+
+
+def _configuration_asset_identity(args: argparse.Namespace) -> dict[str, str]:
+    paths = [Path(args.hydra_config)]
+    paths.extend(Path(args.internvl_root) / name for name in ("config.json", "tokenizer_config.json", "preprocessor_config.json", "special_tokens_map.json"))
+    return {str(path.resolve()): sha256_file(path) for path in paths if path.is_file()}
+
+
 def _validate_run_config(run_dir: Path, args: argparse.Namespace, *, require_model_device: bool = True) -> dict[str, Any]:
     """Fail closed when a later phase is pointed at a different run contract."""
 
@@ -211,16 +487,84 @@ def _validate_run_config(run_dir: Path, args: argparse.Namespace, *, require_mod
         raise ValueError("c3_run_config_schema")
     if str(config.get("run_id")) != str(args.run_id):
         raise ValueError("c3_run_config_run_id_mismatch")
+    # Later stages commonly omit the two immutable data artifact paths.  In
+    # that case inherit the exact paths recorded at audit time; explicitly
+    # supplied paths are still compared and rejected on mismatch.
+    for key in ("reconstruction_manifest", "supplement_manifest"):
+        if getattr(args, key, None) is None and config.get(key) is not None:
+            setattr(args, key, Path(str(config[key])))
     if require_model_device and str(args.device).lower() != str(config.get("device", "")).lower():
         raise ValueError("c3_run_config_device_mismatch")
     if str(config.get("code_path")) != str(Path(__file__).resolve()) or str(config.get("code_sha256")) != sha256_file(Path(__file__).resolve()):
         raise ValueError("c3_run_config_code_identity_mismatch")
+    if config.get("source_identity") != _source_identity():
+        raise ValueError("c3_run_config_source_identity_mismatch")
+    expected_values = {
+        "seed": int(args.seed), "updates": int(args.updates),
+        "gradient_accumulation": int(args.accumulation),
+        "lora_learning_rate": float(args.lora_lr), "driving_head_learning_rate": float(args.head_lr),
+        "weight_decay": float(args.weight_decay), "max_hours": float(args.max_hours),
+        "checkpoint_path": str(Path(args.checkpoint).resolve()),
+        "hydra_config_path": str(Path(args.hydra_config).resolve()),
+        "internvl_path": str(Path(args.internvl_root).resolve()),
+        "release_root": str(Path(args.release_root).resolve()),
+        "reconstruction_manifest": str(Path(args.reconstruction_manifest).resolve()) if getattr(args, "reconstruction_manifest", None) else None,
+        "supplement_manifest": str(Path(args.supplement_manifest).resolve()) if getattr(args, "supplement_manifest", None) else None,
+    }
+    for key, expected in expected_values.items():
+        if config.get(key) != expected:
+            raise ValueError(f"c3_run_config_argument_conflict:{key}")
+    if config.get("preprocessing_identity") != _configuration_asset_identity(args):
+        raise ValueError("c3_run_config_preprocessing_identity")
+    for key in ("reconstruction_manifest", "supplement_manifest"):
+        configured = config.get(key)
+        if configured is not None and not Path(str(configured)).is_file():
+            raise FileNotFoundError(configured)
+    if not (0 < float(config["max_hours"]) <= 4.0 and 0 < int(config["updates"]) <= 200):
+        raise ValueError("c3_run_config_resource_limits")
+    if config.get("model", {}).get("path") != config["checkpoint_path"]:
+        raise ValueError("c3_run_config_model_path_identity")
     return config
+
+
+def _smoke_contract_errors(smoke: Mapping[str, Any], config: Mapping[str, Any]) -> list[str]:
+    """Evaluate measurements independently of the upstream status string."""
+    errors = []
+    for name in ("finite_grad", "lora_changed", "driving_head_changed", "frozen_parameters_unchanged"):
+        if smoke.get(name) is not True:
+            errors.append(f"smoke_{name}")
+    if not isinstance(smoke.get("nonzero_gradient_elements"), int) or smoke["nonzero_gradient_elements"] <= 0:
+        errors.append("smoke_no_nonzero_gradient")
+    tolerance = config.get("roundtrip_tolerance")
+    measured = smoke.get("checkpoint_roundtrip_max_abs")
+    if (tolerance != 1e-5 or smoke.get("checkpoint_roundtrip_tolerance") != tolerance
+            or not isinstance(measured, (float, int)) or not math.isfinite(measured)
+            or measured < 0 or measured > tolerance):
+        errors.append("smoke_roundtrip_measurement")
+    before, after = smoke.get("frozen_fingerprint_before"), smoke.get("frozen_fingerprint_after")
+    if not isinstance(before, dict) or not before or before != after:
+        errors.append("smoke_frozen_fingerprints")
+    changes = smoke.get("changed_parameter_max_abs", {})
+    for group, predicate in (("lora", lambda key: "lora_" in key), ("head", lambda key: key.startswith(("adaptors.driving.route_head.", "adaptors.driving.speed_wps_head.")))):
+        values = [value for key, value in changes.items() if predicate(key)]
+        if not values or not all(isinstance(value, (float, int)) and math.isfinite(value) and value >= 0 for value in values) or not any(value > 0 for value in values):
+            errors.append(f"smoke_{group}_change_measurements")
+    return errors
 
 
 def _model_identity(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise FileNotFoundError(path)
+    # The original M0 is immutable and its identity was already frozen. The
+    # repair must not repeatedly scan the multi-GB checkpoint.
+    if path.resolve() == DEFAULT_CKPT.resolve():
+        identity_record = DEFAULT_OUTPUT / "c3-repair-20260910T100651Z/run_config.json"
+        frozen = _read_json(identity_record)
+        _config_digest(frozen)
+        identity = frozen["model"]
+        if Path(identity["path"]).resolve() != path.resolve() or identity["size_bytes"] != path.stat().st_size:
+            raise ValueError("c3_frozen_m0_identity_conflict")
+        return {**identity, "identity_record": str(identity_record), "identity_policy": "reuse_frozen_m0_digest", "mtime_ns": path.stat().st_mtime_ns}
     return {"path": str(path.resolve()), "size_bytes": path.stat().st_size, "sha256": sha256_file(path)}
 
 
@@ -423,6 +767,11 @@ def _prediction_record(predictions: Mapping[str, Any], sample: SFTSample, latenc
     record.update(
         {
             "model": model_name,
+            "cohort": sample.cohort,
+            "case_group": sample.case_group,
+            "physical_sha256": sample.physical_sha256,
+            "input_identity_sha256": sample.input_identity_sha256,
+            "route_support_m": float(sample.route_support_m),
             "route": route.tolist(),
             "speed": speed.tolist(),
             "latency_s": float(latency_s),
@@ -445,6 +794,11 @@ def _failed_prediction_record(sample: SFTSample, latency_s: float, *, model_name
     record.update(
         {
             "model": model_name,
+            "cohort": sample.cohort,
+            "case_group": sample.case_group,
+            "physical_sha256": sample.physical_sha256,
+            "input_identity_sha256": sample.input_identity_sha256,
+            "route_support_m": float(sample.route_support_m),
             "route": [],
             "speed": [],
             "latency_s": float(latency_s),
@@ -761,67 +1115,138 @@ def _gradient_gate_stats(sft_loss: Any, features: Any, lora_params: Sequence[tup
     }
 
 
-def _c4_cost_smoke(runtime: Any, model: Any, samples: Sequence[SFTSample], *, device: str) -> dict[str, Any]:
-    """Measure the four-output residual path on one complete accumulation window.
+def _gradient_norm(values: Sequence[Any]) -> float:
+    """Return an L2 norm without changing or attaching gradient tensors."""
 
-    This is a diagnostic only.  The residual is represented as
-    ``head(h)-stop_gradient(head(h))`` so it starts exactly at zero while its
-    nonzero, deterministic head weights expose the shared LoRA gradient path.
-    No optimizer step is performed and no M2 checkpoint is produced.
+    import torch
+
+    flat = [value.detach().float().reshape(-1) for value in values if value is not None]
+    if not flat:
+        return 0.0
+    return float(torch.linalg.vector_norm(torch.cat(flat)).item())
+
+
+def _c4_cost_smoke(runtime: Any, model: Any, samples: Sequence[SFTSample], *, device: str) -> dict[str, Any]:
+    """Measure the contract-shaped C4 auxiliary path without training M2.
+
+    The candidate ridge is frozen and is fed together with the shared hidden
+    representation into ``concat -> 128 -> 64 -> 4``.  The last layer starts
+    at zero, so the initial residual is exactly zero.  A temporary in-memory
+    perturbation of that local head then checks that a real four-target loss
+    reaches the shared LoRA path; no M2 optimizer or checkpoint is written.
     """
 
     import torch
     from torch import nn
 
-    selected = list(samples[:4])
+    def _target(sample: SFTSample) -> tuple[list[float], list[bool]]:
+        heads = dict(sample.outcome_label_heads)
+        aliases = (
+            ("route_progress_m", "progress"),
+            ("acceleration_rms_mps2", "acceleration_rms"),
+            ("jerk_rms_mps3", "jerk_rms"),
+            ("lateral_acceleration_rms_mps2", "lateral_acceleration_rms"),
+        )
+        values: list[float] = []
+        masks: list[bool] = []
+        for canonical, legacy in aliases:
+            row = heads.get(canonical) or heads.get(legacy)
+            if not isinstance(row, Mapping):
+                values.append(0.0)
+                masks.append(False)
+                continue
+            value = row.get("value")
+            valid = bool(row.get("valid", row.get("mask", value is not None)))
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                number = 0.0
+                valid = False
+            values.append(number if math.isfinite(number) else 0.0)
+            masks.append(bool(valid and math.isfinite(number)))
+        return values, masks
+
+    selected = []
+    for sample in samples:
+        values, masks = _target(sample)
+        if all(masks):
+            selected.append((sample, values))
+        if len(selected) == 4:
+            break
     if len(selected) < 4:
-        return {"status": "INSUFFICIENT_WINDOW", "window_size": len(selected)}
+        return {
+            "status": "INSUFFICIENT_TRUSTED_OUTCOME_WINDOW",
+            "window_size": len(selected),
+            "required_window_size": 4,
+            "label_contract": ["progress", "acceleration_rms", "jerk_rms", "lateral_acceleration_rms"],
+        }
     model.train()
     model.vision_model.eval()
     model.wp_encoder.eval()
     start = time.perf_counter()
     hidden_values: list[Any] = []
+    candidate_values: list[Any] = []
     targets: list[Any] = []
-    for sample in selected:
+    for sample, target_values in selected:
         example = _make_example(runtime, model, sample, device)
-        _, features, _ = _forward_driving(model, example, train=True)
+        predictions, features, _ = _forward_driving(model, example, train=True)
         hidden_values.append(features.mean(dim=1).float())
-        heads = dict(sample.outcome_label_heads)
-        targets.append(
-            torch.tensor(
-                [
-                    float(bool(heads.get("collision", {}).get("value", False))),
-                    float(bool(heads.get("offroad", {}).get("value", False))),
-                    float(bool(heads.get("mrm", {}).get("value", False))),
-                    float(heads.get("progress", {}).get("value", 0.0)),
-                ],
-                dtype=torch.float32,
-                device=device,
-            )
-        )
-        del example
+        # Use the actual model candidate tensors as input to the frozen ridge;
+        # detaching them prevents this C4 diagnostic from becoming a second
+        # driver loss while still exercising the candidate-conditioned head.
+        candidate_values.append(torch.cat((predictions["route"].detach().float().flatten(1), predictions["speed_wps"].detach().float().flatten(1)), dim=1))
+        targets.append(torch.tensor(target_values, dtype=torch.float32, device=device).view(1, 4))
+        del example, predictions
     hidden = torch.cat(hidden_values, dim=0)
-    target = torch.stack(targets, dim=0)
-    residual_head = nn.Linear(hidden.shape[-1], 4).to(device=device, dtype=torch.float32)
-    generator = torch.Generator(device=device)
-    generator.manual_seed(71)
+    candidate = torch.cat(candidate_values, dim=0)
+    target = torch.cat(targets, dim=0)
+    candidate_dim = int(candidate.shape[-1])
+    candidate_ridge = nn.Linear(candidate_dim, 32, bias=True).to(device=device, dtype=torch.float32)
+    ridge_generator = torch.Generator(device=device)
+    ridge_generator.manual_seed(71)
     with torch.no_grad():
-        residual_head.weight.normal_(mean=0.0, std=0.01, generator=generator)
-        residual_head.bias.zero_()
-    raw = residual_head(hidden)
-    residual = raw - raw.detach()
-    aux_loss = torch.nn.functional.smooth_l1_loss(residual, target)
+        candidate_ridge.weight.normal_(mean=0.0, std=0.01, generator=ridge_generator)
+        candidate_ridge.bias.zero_()
+    for parameter in candidate_ridge.parameters():
+        parameter.requires_grad_(False)
+    candidate_feature = candidate_ridge(candidate)
+    residual_head = nn.Sequential(
+        nn.Linear(hidden.shape[-1] + candidate_feature.shape[-1], 128),
+        nn.ReLU(),
+        nn.Linear(128, 64),
+        nn.ReLU(),
+        nn.Linear(64, 4),
+    ).to(device=device, dtype=torch.float32)
+    with torch.no_grad():
+        nn.init.xavier_uniform_(residual_head[0].weight, generator=ridge_generator)
+        nn.init.zeros_(residual_head[0].bias)
+        nn.init.xavier_uniform_(residual_head[2].weight, generator=ridge_generator)
+        nn.init.zeros_(residual_head[2].bias)
+        nn.init.zeros_(residual_head[4].weight)
+        nn.init.zeros_(residual_head[4].bias)
+    joined = torch.cat((hidden, candidate_feature), dim=1)
+    initial_residual = residual_head(joined)
+    initial_loss = torch.nn.functional.smooth_l1_loss(initial_residual, target)
+    head_parameters = tuple(residual_head.parameters())
+    initial_head_grads = torch.autograd.grad(initial_loss, head_parameters, retain_graph=True, allow_unused=True)
+    initial_head_norm = _gradient_norm(initial_head_grads)
+    # This is a disposable smoke perturbation.  It is deliberately performed
+    # after the exact zero-residual measurement so the two contract properties
+    # cannot be conflated.
+    with torch.no_grad():
+        for parameter, gradient in zip(head_parameters, initial_head_grads):
+            if gradient is not None:
+                parameter.add_(0.01 * gradient.float())
+    updated_residual = residual_head(joined)
+    updated_loss = torch.nn.functional.smooth_l1_loss(updated_residual, target)
     lora = [(name, parameter) for name, parameter in model.named_parameters() if _is_lora_parameter(name)]
-    shared_grads = torch.autograd.grad(aux_loss, [parameter for _, parameter in lora], retain_graph=True, allow_unused=True)
-    head_grads = torch.autograd.grad(aux_loss, tuple(residual_head.parameters()), retain_graph=True, allow_unused=True)
-    shared_norm = float(torch.linalg.vector_norm(torch.cat([g.float().reshape(-1) for g in shared_grads if g is not None])).item()) if any(g is not None for g in shared_grads) else 0.0
-    head_norm = float(torch.linalg.vector_norm(torch.cat([g.float().reshape(-1) for g in head_grads if g is not None])).item()) if any(g is not None for g in head_grads) else 0.0
-    def _group_norm(values: Sequence[Any]) -> float:
-        finite = [value.float().reshape(-1) for value in values if value is not None]
-        return float(torch.linalg.vector_norm(torch.cat(finite)).item()) if finite else 0.0
+    shared_grads = torch.autograd.grad(updated_loss, [parameter for _, parameter in lora], retain_graph=True, allow_unused=True)
+    head_grads = torch.autograd.grad(updated_loss, head_parameters, retain_graph=False, allow_unused=True)
+    shared_norm = _gradient_norm(shared_grads)
+    head_norm = _gradient_norm(head_grads)
+    shared_clip = shared_norm
+    head_clip = head_norm
 
-    shared_clip = _group_norm(shared_grads)
-    head_clip = _group_norm(head_grads)
     def _clip_scale(norm: float, max_norm: float = 1.0) -> float:
         return float(min(1.0, max_norm / (norm + 1e-12))) if norm > 0.0 else 1.0
 
@@ -833,9 +1258,16 @@ def _c4_cost_smoke(runtime: Any, model: Any, samples: Sequence[SFTSample], *, de
     return {
         "status": "MEASURED",
         "window_size": len(selected),
+        "required_window_size": 4,
+        "candidate_ridge": {"input_dim": candidate_dim, "output_dim": 32, "frozen": True},
+        "residual_architecture": ["concat(h,candidate)", 128, "ReLU", 64, "ReLU", 4],
         "candidate_output_dim": 4,
-        "zero_residual_max_abs": float(residual.detach().abs().max().item()),
-        "aux_loss": float(aux_loss.detach().item()),
+        "label_contract": ["progress", "acceleration_rms", "jerk_rms", "lateral_acceleration_rms"],
+        "zero_initialized_last_layer": True,
+        "zero_residual_max_abs": float(initial_residual.detach().abs().max().item()),
+        "initial_aux_loss": float(initial_loss.detach().item()),
+        "aux_loss": float(updated_loss.detach().item()),
+        "initial_residual_head_grad_norm": initial_head_norm,
         "shared_lora_grad_norm": shared_norm,
         "shared_lora_grad_nonzero": bool(shared_norm > 0.0),
         "residual_head_grad_norm": head_norm,
@@ -846,10 +1278,12 @@ def _c4_cost_smoke(runtime: Any, model: Any, samples: Sequence[SFTSample], *, de
         "residual_head_clip_scale": head_scale,
         "shared_clip_norm_after": shared_clip * shared_scale,
         "residual_head_clip_norm_after": head_clip * head_scale,
+        "temporary_head_perturbation_only": True,
+        "optimizer_step": False,
         "wall_time_s": elapsed,
         "peak_allocated_gib": float(torch.cuda.max_memory_allocated() / 2**30) if device.startswith("cuda") else None,
         "peak_reserved_gib": float(torch.cuda.max_memory_reserved() / 2**30) if device.startswith("cuda") else None,
-        "label_source": "independent_c2_outcome_heads; diagnostic_only",
+        "label_source": "recorded_native_outcome_progress_and_kinematic_rms; diagnostic_only",
     }
 
 
@@ -923,100 +1357,52 @@ def _diagnostic_baselines(train: Sequence[SFTSample], validation: Sequence[SFTSa
 
 
 def _historical_resource_events(*, exclude_run_id: str | None = None) -> list[dict[str, Any]]:
-    """Recover conservative timing for superseded C3 attempts.
+    """Recover auditable historical costs without charging work never run.
 
-    The old runs did not write phase timings for baseline/evaluation.  Their
-    artifact mtime interval is a conservative, auditable upper bound for the
-    complete attempt; an empty ``-r1`` directory is retained as a bounded failed
-    attempt under the declared four-hour command budget.
+    A training summary is the only accepted evidence for optimizer time.  A
+    directory containing only audit or failed CARLA startup evidence contributes
+    its measured artifact interval to wall time and zero optimizer time.  This
+    distinction keeps the ten-hour GPU budget conservative while avoiding the
+    previous error of charging every incomplete directory four hours.
     """
 
     events: list[dict[str, Any]] = []
-    for path in sorted(DEFAULT_OUTPUT.glob("c3-vla-sft-20260909*")):
-        audit = path / "audit.json"
-        verify = path / "verify.json"
-        if audit.is_file() and verify.is_file():
-            start = int(audit.stat().st_mtime)
-            end = int(verify.stat().st_mtime)
-            summary_path = path / "m1_training_summary.json"
-            summary = _read_json(summary_path) if summary_path.is_file() else {}
-            known_optimization = float(summary.get("resources", {}).get("wall_time_s", 0.0) or 0.0)
-            events.append(
-                {
-                    "run_id": path.name,
-                    "phase": "historical_attempt_interval",
-                    "status": "SUPERSEDED_INVALID_SUPERVISION",
-                    "wall_time_s_upper_bound": float(max(0, end - start) + 1),
-                    "optimization_wall_time_s": known_optimization,
-                    # The interval includes idle time between commands and is
-                    # not an optimization measurement.  The training summary
-                    # is the authoritative upper bound for optimizer time.
-                    "optimization_wall_time_s_upper_bound": float(known_optimization),
-                    "peak_allocated_gib": summary.get("resources", {}).get("peak_allocated_gib"),
-                    "measurement": "artifact_mtime_interval_1s_resolution",
-                    "source": str(path),
-                }
-            )
-        elif path.name.endswith("-r1"):
-            events.append(
-                {
-                    "run_id": path.name,
-                    "phase": "historical_failed_attempt",
-                    "status": "FAILED_NO_ARTIFACT",
-                    "wall_time_s_upper_bound": 4.0 * 3600.0,
-                    "optimization_wall_time_s": 0.0,
-                    "optimization_wall_time_s_upper_bound": 4.0 * 3600.0,
-                    "peak_allocated_gib": None,
-                    "measurement": "declared_max_hours_upper_bound",
-                    "source": str(path),
-                }
-            )
-    # Earlier repair attempts are evidence too.  A complete artifact interval
-    # gives a conservative upper bound; an incomplete attempt is charged the
-    # declared four-hour command bound instead of being silently treated as 0.
-    for path in sorted(DEFAULT_OUTPUT.glob("c3-repair-*")):
-        if not path.is_dir():
-            continue
-        if exclude_run_id is not None and path.name == str(exclude_run_id):
-            continue
-        audit = path / "audit.json"
-        if not audit.is_file():
-            continue
-        start = int(audit.stat().st_mtime)
-        end = int(max(item.stat().st_mtime for item in path.iterdir() if item.is_file()))
-        interval = float(max(0, end - start) + 1)
+
+    def add(path: Path, *, family: str) -> None:
+        if not path.is_dir() or (exclude_run_id is not None and path.name == str(exclude_run_id)):
+            return
+        files = [item for item in path.rglob("*") if item.is_file()]
         summary_path = path / "m1_training_summary.json"
-        verify_path = path / "verify.json"
-        if summary_path.is_file() and verify_path.is_file():
-            summary = _read_json(summary_path)
-            known_optimization = float(summary.get("resources", {}).get("wall_time_s", 0.0) or 0.0)
-            events.append(
-                {
-                    "run_id": path.name,
-                    "phase": "historical_repair_attempt",
-                    "status": "SUPERSEDED_REPAIR_ATTEMPT",
-                    "wall_time_s_upper_bound": interval,
-                    "optimization_wall_time_s": known_optimization,
-                    "optimization_wall_time_s_upper_bound": known_optimization,
-                    "peak_allocated_gib": summary.get("resources", {}).get("peak_allocated_gib"),
-                    "measurement": "artifact_mtime_interval_1s_resolution",
-                    "source": str(path),
-                }
-            )
+        summary = _read_json(summary_path) if summary_path.is_file() else {}
+        known_optimization = float(summary.get("resources", {}).get("wall_time_s", 0.0) or 0.0)
+        if files:
+            start = min(int(item.stat().st_mtime) for item in files)
+            end = max(int(item.stat().st_mtime) for item in files)
+            wall_upper = float(max(0, end - start) + 1)
+            wall_basis = "artifact_mtime_interval_1s_resolution"
         else:
-            events.append(
-                {
-                    "run_id": path.name,
-                    "phase": "historical_repair_failed_attempt",
-                    "status": "FAILED_OR_UNVERIFIED_REPAIR_ATTEMPT",
-                    "wall_time_s_upper_bound": max(interval, 4.0 * 3600.0),
-                    "optimization_wall_time_s": 0.0,
-                    "optimization_wall_time_s_upper_bound": 4.0 * 3600.0,
-                    "peak_allocated_gib": None,
-                    "measurement": "incomplete_run_declared_four_hour_upper_bound",
-                    "source": str(path),
-                }
-            )
+            wall_upper = 0.0
+            wall_basis = "no_files_observed"
+        trained = summary_path.is_file() and bool(summary.get("actual_updates", 0))
+        events.append(
+            {
+                "run_id": path.name,
+                "phase": "historical_" + family,
+                "status": "SUPERSEDED_INVALID_SUPERVISION" if trained else "FAILED_OR_UNVERIFIED",
+                "wall_time_s_upper_bound": wall_upper,
+                "optimization_wall_time_s": known_optimization if trained else 0.0,
+                "optimization_wall_time_s_upper_bound": known_optimization if trained else 0.0,
+                "peak_allocated_gib": summary.get("resources", {}).get("peak_allocated_gib") if trained else None,
+                "measurement": wall_basis,
+                "optimization_evidence": str(summary_path) if trained else "no_training_summary_with_updates_observed",
+                "source": str(path),
+            }
+        )
+
+    for path in sorted(DEFAULT_OUTPUT.glob("c3-vla-sft-20260909*")):
+        add(path, family="legacy_attempt")
+    for path in sorted(DEFAULT_OUTPUT.glob("c3-repair-*")):
+        add(path, family="repair_attempt")
     return events
 
 
@@ -1040,6 +1426,11 @@ def _independent_metric_rows(
     result: list[dict[str, Any]] = []
     compare_keys = (
         "split",
+        "cohort",
+        "case_group",
+        "physical_sha256",
+        "input_identity_sha256",
+        "route_support_m",
         "route_valid_points",
         "speed_valid_points",
         "route_shape_valid",
@@ -1149,10 +1540,32 @@ def _update_resource_ledger(run_dir: Path, event: Mapping[str, Any]) -> dict[str
         if item.get("peak_reserved_gib") is not None
     ]
     ledger["observed_peak_reserved_gib"] = max(reserved_peaks) if reserved_peaks else None
+    phase_monitors: dict[str, Any] = {}
+    for item in ledger.get("events", []):
+        event_phase = str(item.get("phase"))
+        values = list(item.get("gpu_monitors", ()))
+        if item.get("gpu_monitor") is not None:
+            values.append(item["gpu_monitor"])
+        if values:
+            phase_monitors.setdefault(event_phase, []).extend(values)
+    phase_monitors = {
+        phase_name: values[0] if len(values) == 1 else values
+        for phase_name, values in phase_monitors.items()
+    }
+    device_peaks = [
+        float(item["peak_used_gib"])
+        for value in phase_monitors.values()
+        for item in (value if isinstance(value, list) else [value])
+        if isinstance(item, Mapping) and item.get("peak_used_gib") is not None
+    ]
     ledger["gpu_monitoring"] = {
-        "method": "torch.cuda.max_memory_allocated and max_memory_reserved reset per model phase; host nvidia-smi diagnostic",
-        "sampling_period": "phase boundary plus torch peak counters; nvidia-smi queried at GPU bring-up",
+        "method": "nvidia-smi whole-device sampling plus torch.cuda allocator peak counters",
+        "sampling_period_s": 0.5,
+        "phases": phase_monitors,
+        "gpu_uuid": next((item.get("gpu_uuid") for value in phase_monitors.values() for item in (value if isinstance(value, list) else [value]) if isinstance(item, Mapping) and item.get("gpu_uuid")), None),
+        "device_peak_used_gib": max(device_peaks) if device_peaks else None,
         "peak_limit_gib": GPU_PEAK_LIMIT_GIB,
+        "gaps_are_failures": True,
     }
     ledger["status"] = str(ledger["events"][-1].get("status", "")) if ledger["events"] else "NO_EVENTS"
     # Keep the two hashes non-circular. ``content_sha256`` covers the ledger
@@ -1173,23 +1586,55 @@ def cmd_audit(args: argparse.Namespace) -> int:
     run_dir = _ensure_run_dir(args)
     if (run_dir / "manifest.json").exists():
         raise FileExistsError(f"audit_already_exists:{run_dir}")
-    samples, manifest = build_sft_manifest(args.release_root, splits=("train", "validation"))
-    if manifest["split_counts"].get("train") != 158 or manifest["split_counts"].get("validation") != 53:
-        raise ValueError(f"c3_expected_release_counts:{manifest['split_counts']}")
+    samples, manifest = build_sft_manifest(
+        args.release_root,
+        splits=("train", "validation"),
+        reconstruction_manifest=getattr(args, "reconstruction_manifest", None),
+        supplement_manifest=getattr(args, "supplement_manifest", None),
+    )
+    release_index = _read_json(Path(args.release_root) / "release-index.json")
+    released_counts: dict[str, int] = {}
+    for item in release_index.get("samples", ()):
+        split = str(item.get("split", ""))
+        released_counts[split] = released_counts.get(split, 0) + 1
+    expected_train = released_counts.get("train", 0)
+    expected_validation = released_counts.get("validation", 0)
+    if manifest["split_counts"].get("train") != expected_train or manifest["split_counts"].get("validation") != expected_validation:
+        raise ValueError(f"c3_release_counts_changed:{manifest['split_counts']}:{released_counts}")
     model_identity = _model_identity(Path(args.checkpoint))
-    if any(sample.route_support_m < ROUTE_STEPS for sample in samples):
-        raise ValueError("c3_route_support_short_for_formal_manifest")
+    supervision_errors = []
+    for split in ("train", "validation"):
+        split_samples = [sample for sample in samples if sample.split == split]
+        if not split_samples:
+            supervision_errors.append(f"{split}_empty")
+        if not any(any(sample.route_mask) for sample in split_samples):
+            supervision_errors.append(f"{split}_no_native_route_support")
+        if not any(any(sample.speed_mask) for sample in split_samples):
+            supervision_errors.append(f"{split}_no_audited_speed_supervision")
+        if any(sample.cohort == "c2_release" and sample.native_reconstruction_status != "PASS" for sample in split_samples):
+            supervision_errors.append(f"{split}_native_reconstruction_not_passed")
     if any(sample.route_projection_ambiguous for sample in samples):
-        raise ValueError("c3_route_projection_ambiguous")
+        supervision_errors.append("route_projection_ambiguous")
     config = _config_payload(args, model_identity=model_identity)
     _write_json(run_dir / "run_config.json", config)
     _write_json(run_dir / "manifest.json", manifest)
     audit = {
         "schema_version": "safedrive.c3.sft_audit.v2",
-        "status": "AUDIT_PASSED",
+        "status": "AUDIT_FAILED" if supervision_errors else "AUDIT_PASSED",
+        "errors": supervision_errors,
+        "evaluation_scope": "partial_native_support" if any(
+            not all(sample.route_mask) for sample in samples
+        ) else "complete_native_support",
         "manifest_sha256": manifest["manifest_sha256"],
         "sample_count": len(samples),
         "split_counts": manifest["split_counts"],
+        "release_index_split_counts": released_counts,
+        "training_view_count": len(_training_view(samples)[0]),
+        "training_excluded_root_ids": _training_view(samples)[1],
+        "cohort_counts": manifest.get("cohort_counts", {}),
+        "supplement_status": manifest.get("supplement_status"),
+        "supplement_counts": manifest.get("supplement_counts", {}),
+        "supplement_manifest_sha256": manifest.get("supplement_manifest_sha256"),
         "teacher_sources": sorted({sample.teacher_source for sample in samples}),
         "teacher_generators": sorted({sample.teacher_generator for sample in samples}),
         "route_valid_point_counts": {
@@ -1202,6 +1647,14 @@ def cmd_audit(args: argparse.Namespace) -> int:
         },
         "route_target_source": sorted({sample.route_source for sample in samples}),
         "speed_target_source": sorted({sample.speed_source for sample in samples}),
+        "supervision_usage_counts": {
+            usage: sum(sample.supervision_usage == usage for sample in samples)
+            for usage in sorted({sample.supervision_usage for sample in samples})
+        },
+        "native_reconstruction_status_counts": {
+            status: sum(sample.native_reconstruction_status == status for sample in samples)
+            for status in sorted({sample.native_reconstruction_status for sample in samples})
+        },
         "route_projection_distance_m": {
             "max": max(sample.route_projection_distance_m for sample in samples),
             "p95": float(np.quantile([sample.route_projection_distance_m for sample in samples], 0.95)),
@@ -1248,8 +1701,91 @@ def cmd_audit(args: argparse.Namespace) -> int:
         "world_labels_in_sft": False,
         "future_labels_in_input": False,
         "release_index_sha256": sha256_file(Path(args.release_root) / "release-index.json"),
+        "native_reconstruction_manifest": (
+            str(Path(args.reconstruction_manifest).resolve())
+            if getattr(args, "reconstruction_manifest", None) else None
+        ),
+        "native_reconstruction_manifest_sha256": (
+            sha256_file(Path(args.reconstruction_manifest))
+            if getattr(args, "reconstruction_manifest", None) else None
+        ),
         "model_identity": model_identity,
     }
+    # Keep the complete old release visible for review.  Only train and
+    # validation rows enter the SFT manifest; pilot/calibration/locked rows
+    # remain catalog-only and can never leak into optimization or model
+    # selection through this command.
+    sft_by_root = {sample.root_id: sample for sample in samples}
+    catalog_rows: list[dict[str, Any]] = []
+    for item in release_index.get("samples", ()):
+        root_id = str(item.get("pair_id", ""))
+        sample = sft_by_root.get(root_id)
+        catalog_rows.append({
+            "root_id": root_id,
+            "split": str(item.get("split", "")),
+            "family": str(item.get("family", "")),
+            "map": str(item.get("map", "")),
+            "weather": str(item.get("weather", "")),
+            "purpose": "sft_or_evaluation" if sample is not None else "catalog_only",
+            "sft_supervision_usage": sample.supervision_usage if sample is not None else "catalog_only",
+            "route_valid_points": int(sum(sample.route_mask)) if sample is not None else None,
+            "speed_valid_points": int(sum(sample.speed_mask)) if sample is not None else None,
+            "route_support_m": float(sample.route_support_m) if sample is not None else None,
+            "execution_quality": sample.execution_quality if sample is not None else None,
+            "execution_failure_reasons": list(sample.execution_failure_reasons) if sample is not None else [],
+            "case_group": sample.case_group if sample is not None else "catalog_only",
+        })
+    catalog = {
+        "schema_version": "safedrive.c3.data_catalog.v1",
+        "release_id": RELEASE_ID,
+        "release_index_sha256": audit["release_index_sha256"],
+        "split_counts": released_counts,
+        "usage_policy": {
+            "train": "eligible_after_per_root_masks",
+            "validation": "frozen_evaluation_only",
+            "coverage_pilot": "catalog_only",
+            "calibration": "catalog_only",
+            "locked_development": "catalog_only",
+            "reserved_formal": "not_loaded_or_used",
+        },
+        "rows": catalog_rows,
+    }
+    catalog["content_sha256"] = _sha_object(catalog)
+    _write_json(run_dir / "data-catalog.json", catalog)
+    case_bank = {
+        "schema_version": "safedrive.c3.case_bank.v1",
+        "source": "frozen_c2_release_plus_native_reconstruction_audit",
+        "selection": "fixed_by_release_metadata_and_observed_masks; no validation fitting",
+        "cases": [
+            {
+                "root_id": sample.root_id,
+                "split": sample.split,
+                "cohort": sample.cohort,
+                "family": sample.family,
+                "map": sample.map_name,
+                "case_group": sample.case_group,
+                "route_support_m": sample.route_support_m,
+                "route_mask": list(sample.route_mask),
+                "speed_mask": list(sample.speed_mask),
+                "route_source": sample.route_source,
+                "speed_source": sample.speed_source,
+                "execution_quality": sample.execution_quality,
+                "execution_failure_reasons": list(sample.execution_failure_reasons),
+                "speed_input_source": sample.speed_input_source,
+                "history_speed_disagreement_mps": sample.anchor_history_speed_disagreement_mps,
+                "usage": sample.supervision_usage,
+                "anchor_path": sample.anchor_path,
+                "proposal_path": sample.proposal_path,
+            }
+            for sample in samples
+        ],
+    }
+    case_bank["content_sha256"] = _sha_object(case_bank)
+    _write_json(run_dir / "case-bank.json", case_bank)
+    audit["data_catalog_path"] = str(run_dir / "data-catalog.json")
+    audit["case_bank_path"] = str(run_dir / "case-bank.json")
+    audit["data_catalog_sha256"] = catalog["content_sha256"]
+    audit["case_bank_sha256"] = case_bank["content_sha256"]
     audit["audit_sha256"] = _sha_object(audit)
     _write_json(run_dir / "audit.json", audit)
     _update_resource_ledger(
@@ -1264,7 +1800,7 @@ def cmd_audit(args: argparse.Namespace) -> int:
         },
     )
     print(json.dumps(audit, ensure_ascii=False, indent=2))
-    return 0
+    return 2 if supervision_errors else 0
 
 
 def cmd_smoke(args: argparse.Namespace) -> int:
@@ -1273,8 +1809,10 @@ def cmd_smoke(args: argparse.Namespace) -> int:
     if output.exists():
         raise FileExistsError(f"smoke_already_exists:{output}")
     _validate_run_config(run_dir, args)
+    if _read_json(run_dir / "audit.json").get("status") != "AUDIT_PASSED":
+        raise ValueError("c3_smoke_requires_passed_audit")
     samples, manifest = _load_manifest(run_dir)
-    train = [sample for sample in samples if sample.split == "train"]
+    train, excluded_train = _training_view(samples)
     if not train:
         raise ValueError("c3_smoke_no_train_samples")
     _seed_everything(args.seed)
@@ -1403,14 +1941,15 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         raise FileExistsError(f"baseline_already_exists:{output}")
     _validate_run_config(run_dir, args)
     samples, manifest = _load_manifest(run_dir)
-    validation = [sample for sample in samples if sample.split == "validation"]
-    train = [sample for sample in samples if sample.split == "train"]
-    if len(validation) != 53 or len(train) != 158:
-        raise ValueError("c3_baseline_split_counts")
+    train, validation = _split_views(samples)
+    if len(validation) != int(manifest.get("split_counts", {}).get("validation", -1)) or not validation:
+        raise ValueError("c3_baseline_validation_view_invalid")
+    if len(train) != int(manifest.get("split_counts", {}).get("train", -1)) or not train:
+        raise ValueError("c3_baseline_training_view_invalid")
     _seed_everything(args.seed)
     runtime, model, device, report = _make_runtime(args)
     rows, repeats = _evaluate_model(runtime, model, validation, device=device, model_name="m0", repeat=True)
-    if len(rows) != 53:
+    if len(rows) != len(validation):
         raise ValueError(f"c3_m0_validation_count:{len(rows)}")
     max_repeat = max(repeats) if repeats else 0.0
     # Independent reload is part of the M0 numerical error budget.  Release
@@ -1516,7 +2055,7 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         "bootstrap_seed": 71,
         "p_speed": "N/A_without_trusted_time_speed_ground_truth",
         "fde": "fixed route point 20 only; missing point 20 is N/A",
-        "failure_denominator": 53,
+        "failure_denominator": len(validation),
         "validation_input_manifest_sha256": manifest["manifest_sha256"],
         "route_steps": ROUTE_STEPS,
         "speed_steps": SPEED_STEPS,
@@ -1653,6 +2192,70 @@ def _training_log_matches_summary(log_rows: Sequence[Mapping[str, Any]], summary
     return isinstance(recorded, list) and list(log_rows) == recorded
 
 
+def _reconcile_training_log(run_dir: Path, checkpoint: Mapping[str, Any]) -> tuple[list[dict[str, Any]], float]:
+    """Recover the checkpoint's committed prefix, retaining every later attempt.
+
+    The prefix is verified as bytes against the atomic checkpoint before any
+    write. A partial JSON suffix is a valid crash outcome; corruption inside
+    the committed prefix is not. Archive first, then atomically restore the
+    active prefix. Recovery evidence makes this operation idempotent.
+    """
+    path = run_dir / "training.jsonl"
+    raw = path.read_bytes() if path.exists() else b""
+    lines = raw.splitlines(keepends=True)
+    count = int(checkpoint["log_count"])
+    prefix = b"".join(lines[:count])
+    if len(lines) < count or hashlib.sha256(prefix).hexdigest() != checkpoint["training_log_sha256"]:
+        raise ValueError("c3_resume_committed_log_digest_mismatch")
+    rows = [json.loads(line) for line in lines[:count]]
+    if rows[-5:] != checkpoint.get("log_tail") or len(rows) != int(checkpoint["update"]):
+        raise ValueError("c3_resume_training_log_boundary_mismatch")
+    recovery_dir = run_dir / "recovery"
+    prefix_digest = hashlib.sha256(prefix).hexdigest()
+    prior_extra = 0.0
+    if recovery_dir.exists():
+        for saved in recovery_dir.glob("*.json"):
+            event = _read_json(saved)
+            if event.get("checkpoint_log_sha256") == prefix_digest:
+                prior_extra = max(prior_extra, float(event["uncommitted_wall_upper_bound_s"]))
+    timestamp = checkpoint.get("saved_at_utc")
+    if not timestamp:
+        raise ValueError("c3_resume_uncommitted_time_upper_bound_unknown")
+    checkpoint_time = dt.datetime.fromisoformat(str(timestamp))
+    now = dt.datetime.now(dt.timezone.utc)
+    gap = (now - checkpoint_time).total_seconds()
+    if not math.isfinite(gap) or gap < 0:
+        raise ValueError("c3_resume_wall_clock_invalid")
+    # Includes downtime/model reload as a conservative bound; never zeroes an
+    # uncommitted attempt's cost merely because optimizer state is rolled back.
+    extra = max(prior_extra, gap)
+    source_digest = hashlib.sha256(raw).hexdigest()
+    recovery_dir.mkdir(exist_ok=True)
+    archived = recovery_dir / f"{source_digest}.jsonl"
+    if not archived.exists():
+        temporary = archived.with_suffix(".tmp")
+        temporary.write_bytes(raw)
+        os.replace(temporary, archived)
+    if archived.read_bytes() != raw:
+        raise ValueError("c3_resume_archive_mismatch")
+    evidence = recovery_dir / f"{source_digest}-{now.strftime('%Y%m%dT%H%M%S%fZ')}.json"
+    if not evidence.exists():
+        _write_json(evidence, {
+            "schema_version": "safedrive.c3.log_recovery.v1",
+            "source_log_sha256": source_digest,
+            "checkpoint_log_sha256": prefix_digest,
+            "checkpoint_update": int(checkpoint["update"]),
+            "uncommitted_bytes": len(raw) - len(prefix),
+            "uncommitted_wall_upper_bound_s": extra,
+            "bound_basis": "elapsed_utc_since_checkpoint_including_downtime",
+            "recovered_at_utc": now.isoformat(),
+        })
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.recovery.tmp")
+    temporary.write_bytes(prefix)
+    os.replace(temporary, path)
+    return rows, extra
+
+
 def cmd_train(args: argparse.Namespace) -> int:
     phase_start = time.perf_counter()
     run_dir = _ensure_run_dir(args)
@@ -1668,12 +2271,19 @@ def cmd_train(args: argparse.Namespace) -> int:
         raise ValueError("c3_train_requires_passed_smoke")
     if not (run_dir / "m0_predictions.json").is_file():
         raise FileNotFoundError("c3_train_requires_m0_baseline")
-    train = [sample for sample in samples if sample.split == "train"]
-    validation = [sample for sample in samples if sample.split == "validation"]
-    if len(train) != 158 or len(validation) != 53:
-        raise ValueError(f"c3_train_split_counts:{len(train)}:{len(validation)}")
+    train_all, validation = _split_views(samples)
+    train, excluded_train = _training_view(samples)
+    expected_train_count = int(manifest.get("split_counts", {}).get("train", len(train_all)))
+    expected_validation_count = int(manifest.get("split_counts", {}).get("validation", len(validation)))
+    if len(train_all) != expected_train_count or not train:
+        raise ValueError(f"c3_train_split_counts:{len(train_all)}:{len(validation)}")
+    if len(validation) != expected_validation_count or not validation:
+        raise ValueError(f"c3_train_validation_count:{len(validation)}")
     config = _validate_run_config(run_dir, args)
     config_sha = _config_digest(config)
+    smoke_errors = _smoke_contract_errors(smoke, config)
+    if smoke_errors:
+        raise ValueError(f"c3_train_invalid_smoke:{smoke_errors}")
     contract_values = {
         "seed": int(args.seed),
         "updates": int(args.updates),
@@ -1754,25 +2364,20 @@ def cmd_train(args: argparse.Namespace) -> int:
         if not required_checkpoint_keys.issubset(resume_meta):
             raise ValueError("c3_resume_checkpoint_state_incomplete")
         start_update, sample_index, epoch, restored_tail = _restore_training_checkpoint(resume_path, model, optimizer)
-        logs = _training_log_rows(run_dir / "training.jsonl")
-        expected_log_count = int(resume_meta.get("log_count", start_update))
-        if len(logs) != expected_log_count or len(logs) < start_update:
-            raise ValueError("c3_resume_training_log_truncated")
-        if list(resume_meta.get("log_tail", [])) != list(restored_tail) or list(restored_tail) != logs[-5:]:
-            raise ValueError("c3_resume_training_log_boundary_mismatch")
-        if str(resume_meta.get("training_log_sha256", "")) != sha256_file(run_dir / "training.jsonl"):
-            raise ValueError("c3_resume_training_log_digest_mismatch")
+        logs, recovery_wall_upper = _reconcile_training_log(run_dir, resume_meta)
         restored_exposures = resume_meta.get("root_exposures", {})
         if set(restored_exposures) != set(exposures):
             raise ValueError("c3_resume_root_exposure_set")
         exposures = {root_id: int(restored_exposures[root_id]) for root_id in exposures}
-        prior_elapsed = float(resume_meta.get("accumulated_wall_time_s", 0.0) or 0.0)
+        prior_elapsed = float(resume_meta.get("accumulated_wall_time_s", 0.0) or 0.0) + recovery_wall_upper
         max_allocated = float(resume_meta.get("peak_allocated_gib", 0.0) or 0.0)
         max_reserved = float(resume_meta.get("peak_reserved_gib", 0.0) or 0.0)
     if start_update >= total_updates:
         raise ValueError("c3_resume_already_complete")
     if sample_index < 0 or sample_index > len(train):
         raise ValueError("c3_resume_sample_index_invalid")
+    if prior_elapsed >= float(args.max_hours) * 3600.0:
+        raise ValueError("c3_resume_optimization_budget_exhausted")
     start_wall = time.perf_counter()
     if device.startswith("cuda"):
         torch.cuda.reset_peak_memory_stats()
@@ -1782,6 +2387,7 @@ def cmd_train(args: argparse.Namespace) -> int:
         current_elapsed = time.perf_counter() - start_wall
         return {
             "run_id": str(args.run_id),
+            "saved_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
             "config_sha256": config_sha,
             "manifest_sha256": manifest["manifest_sha256"],
             "target_updates": total_updates,
@@ -1798,6 +2404,14 @@ def cmd_train(args: argparse.Namespace) -> int:
             "training_log_sha256": sha256_file(run_dir / "training.jsonl") if (run_dir / "training.jsonl").is_file() else "",
         }
 
+    if not args.resume:
+        # A crash during head-only warmup must also have a recoverable base.
+        with (run_dir / "training.jsonl").open("xb"):
+            pass
+        _save_training_checkpoint(
+            resume_path, model, optimizer, update=0, sample_index=0, epoch=0,
+            log=logs, metadata=checkpoint_metadata(),
+        )
     while start_update < total_updates:
         if sample_index >= len(root_order):
             epoch += 1
@@ -1930,9 +2544,11 @@ def cmd_train(args: argparse.Namespace) -> int:
         "samples_seen": int(sum(window_sizes)),
         "window_size_histogram": {str(size): window_sizes.count(size) for size in sorted(set(window_sizes))},
         "epoch_window_sizes": epoch_window_sizes,
-        "tail_window_size": 2,
-        "tail_window_count": int(sum(size == 2 for size in window_sizes)),
-        "expected_first_epoch_windows": {"full_size_4": 39, "tail_size_2": 1, "roots": 158},
+        "tail_window_size": _window_contract(len(train), int(args.accumulation))["tail_window_size"],
+        "tail_window_count": int(sum(size == _window_contract(len(train), int(args.accumulation))["tail_window_size"] for size in window_sizes)) if _window_contract(len(train), int(args.accumulation))["tail_window_size"] else 0,
+        "expected_first_epoch_windows": _window_contract(len(train), int(args.accumulation)),
+        "training_excluded_root_ids": excluded_train,
+        "training_all_root_count": len(train_all),
         "adapter": adapter_meta,
         "checkpoint_latest": str(resume_path),
         "logs": logs,
@@ -1972,6 +2588,13 @@ def cmd_train(args: argparse.Namespace) -> int:
             "training_status": payload["status"],
         },
     )
+    payload["checkpoint_sha256"] = sha256_file(resume_path)
+    # The summary digest is deliberately non-circular.  The first digest is
+    # replaced after the final checkpoint identity is known, so remove the
+    # previous value before hashing the final payload.
+    summary_digest_payload = dict(payload)
+    summary_digest_payload.pop("content_sha256", None)
+    payload["content_sha256"] = _sha_object(summary_digest_payload)
     _write_json(summary_path, payload, overwrite=args.resume and summary_path.exists())
     ledger = _update_resource_ledger(
         run_dir,
@@ -2001,7 +2624,9 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         raise FileExistsError(f"evaluation_already_exists:{output}")
     config = _validate_run_config(run_dir, args)
     samples, manifest = _load_manifest(run_dir)
-    validation = [sample for sample in samples if sample.split == "validation"]
+    _, validation = _split_views(samples)
+    if len(validation) != int(manifest.get("split_counts", {}).get("validation", -1)) or not validation:
+        raise ValueError("c3_evaluation_validation_view_invalid")
     training = _read_json(run_dir / "m1_training_summary.json")
     if training.get("status") != "M1_COMPLETED":
         raise ValueError(f"c3_evaluation_requires_completed_m1:{training.get('status')}")
@@ -2012,7 +2637,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     lora, heads = _freeze_trainable(model)
     _load_trainable_state(model, run_dir / "m1_adapter.pt")
     m1_rows, _ = _evaluate_model(runtime, model, validation, device=device, model_name="m1", repeat=False)
-    if len(m1_rows) != 53:
+    if len(m1_rows) != len(validation):
         raise ValueError(f"c3_m1_validation_count:{len(m1_rows)}")
     m0 = _read_json(run_dir / "m0_predictions.json")
     m0_rows = list(m0.get("rows", ()))
@@ -2021,6 +2646,14 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     metric_rows = independent_m0 + independent_m1
     aggregate = aggregate_metrics(metric_rows, bootstrap_rounds=1000, bootstrap_seed=71)
     aggregate["eps_ADE_m"] = float(m0["eps_ADE_m"])
+    cohort_aggregates: dict[str, Any] = {}
+    for cohort in sorted({sample.cohort for sample in validation}):
+        cohort_ids = {sample.root_id for sample in validation if sample.cohort == cohort}
+        cohort_rows = [row for row in metric_rows if str(row.get("root_id")) in cohort_ids]
+        cohort_aggregates[cohort] = aggregate_metrics(
+            cohort_rows, bootstrap_rounds=1000, bootstrap_seed=71
+        )
+    aggregate["cohort_aggregates"] = cohort_aggregates
     aggregate["primary_target"] = {
         "absolute_threshold_m": 0.01,
         "relative_target_percent": 2.0,
@@ -2068,6 +2701,10 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         "status": "EVALUATION_MEASURED",
         "run_id": str(args.run_id),
         "validation_root_count": len(validation),
+        "validation_cohort_counts": {
+            cohort: sum(sample.cohort == cohort for sample in validation)
+            for cohort in sorted({sample.cohort for sample in validation})
+        },
         "m0_prediction_path": str(run_dir / "m0_predictions.json"),
         "m1_prediction_path": str(output),
         "metrics_path": str(run_dir / "metrics.json"),
@@ -2079,7 +2716,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         "validation_manifest_sha256": manifest["manifest_sha256"],
         "p_fail_denominator": len(validation),
         "p_speed": "N/A_without_trusted_time_speed_ground_truth",
-        "reproduction_command": f"python scripts/h6_cora_sft.py evaluate --run-id {args.run_id} --device cuda",
+        "reproduction_command": f"python scripts/h6_cora_sft.py evaluate --run-id {args.run_id} --device cuda --reconstruction-manifest {args.reconstruction_manifest} --supplement-manifest {args.supplement_manifest}",
     }
     report_payload["content_sha256"] = _sha_object(report_payload)
     _write_json(run_dir / "evaluation-report.json", report_payload)
@@ -2123,6 +2760,9 @@ def cmd_verify(args: argparse.Namespace) -> int:
         "metrics.json",
         "resource-ledger.json",
         "evaluation-report.json",
+        "data-catalog.json",
+        "case-bank.json",
+        "supplement/audit.json",
     ]
     missing = [name for name in required if not (run_dir / name).is_file()]
     if missing:
@@ -2143,6 +2783,10 @@ def cmd_verify(args: argparse.Namespace) -> int:
     metrics = _read_json(run_dir / "metrics.json")
     resources = _read_json(run_dir / "resource-ledger.json")
     evaluation = _read_json(run_dir / "evaluation-report.json")
+    catalog = _read_json(run_dir / "data-catalog.json")
+    case_bank = _read_json(run_dir / "case-bank.json")
+    supplement_audit_path = run_dir / "supplement" / "audit.json"
+    supplement_audit = _read_json(supplement_audit_path)
     errors: list[str] = []
     try:
         config = _validate_run_config(run_dir, args, require_model_device=False)
@@ -2207,6 +2851,35 @@ def cmd_verify(args: argparse.Namespace) -> int:
         errors.append("metrics_digest")
     if not digest_check(evaluation, "content_sha256"):
         errors.append("evaluation_digest")
+    if not digest_check(catalog, "content_sha256"):
+        errors.append("data_catalog_digest")
+    if not digest_check(case_bank, "content_sha256"):
+        errors.append("case_bank_digest")
+    if not digest_check(supplement_audit, "content_sha256"):
+        errors.append("supplement_audit_digest")
+    if catalog.get("release_index_sha256") != audit.get("release_index_sha256") or len(catalog.get("rows", ())) < len(samples):
+        errors.append("data_catalog_identity")
+    reconstruction_rows: dict[str, Mapping[str, Any]] = {}
+    reconstruction_path = config.get("reconstruction_manifest") or getattr(args, "reconstruction_manifest", None)
+    if reconstruction_path:
+        try:
+            reconstruction_payload = _read_json(Path(str(reconstruction_path)))
+            reconstruction_check = dict(reconstruction_payload)
+            reconstruction_check.pop("created_at_utc", None)
+            reconstruction_digest = reconstruction_check.pop("content_sha256", None)
+            if reconstruction_payload.get("schema_version") != "safedrive.c3.native_reconstruction.v1":
+                errors.append("reconstruction_schema")
+            if reconstruction_digest != _sha_object(reconstruction_check):
+                errors.append("reconstruction_digest")
+            reconstruction_rows = {
+                str(row.get("pair_id")): row
+                for row in reconstruction_payload.get("rows", ())
+                if row.get("pair_id")
+            }
+            if len(reconstruction_rows) != len(reconstruction_payload.get("rows", ())):
+                errors.append("reconstruction_duplicate_pairs")
+        except Exception as exc:  # noqa: BLE001 - keep tamper evidence in verify output
+            errors.append(f"reconstruction_validation:{type(exc).__name__}:{exc}")
     resource_payload = {
         key: value for key, value in resources.items() if key not in {"content_sha256", "ledger_sha256"}
     }
@@ -2216,8 +2889,44 @@ def cmd_verify(args: argparse.Namespace) -> int:
         errors.append("resource_ledger_digest")
     if audit.get("status") != "AUDIT_PASSED":
         errors.append("audit_not_passed")
+    if supplement_audit.get("status") != "PASSED":
+        errors.append("supplement_audit_not_passed")
+    if supplement_audit.get("manifest_sha256") != manifest.get("supplement_manifest_sha256"):
+        errors.append("supplement_audit_manifest_identity")
+    if manifest.get("supplement_status") == "CARLA_BLOCKED_EXTERNAL" and int(manifest.get("supplement_counts", {}).get("train", 0)) + int(manifest.get("supplement_counts", {}).get("validation", 0)) != 0:
+        errors.append("blocked_supplement_has_accepted_rows")
     if smoke.get("status") != "SMOKE_PASSED":
         errors.append("smoke_not_passed")
+    errors.extend(_smoke_contract_errors(smoke, config))
+    if train.get("config_sha256") != config.get("content_sha256"):
+        errors.append("training_current_config_identity")
+    if train.get("seed") != config.get("seed") or train.get("target_updates") != config.get("updates"):
+        errors.append("training_current_config_schedule")
+    if not isinstance(resources.get("gpu_monitoring"), dict) or not resources.get("gpu_monitoring"):
+        errors.append("whole_gpu_monitoring_missing")
+    else:
+        gpu_monitoring = resources["gpu_monitoring"]
+        monitor_phases = gpu_monitoring.get("phases", {})
+        for phase in ("smoke", "baseline", "train", "evaluate"):
+            monitor = monitor_phases.get(phase)
+            if phase == "train" and monitor is None:
+                monitor = monitor_phases.get("train_resume")
+            monitor_rows = monitor if isinstance(monitor, list) else [monitor]
+            if not monitor_rows or not all(isinstance(item, Mapping) for item in monitor_rows):
+                errors.append(f"gpu_monitor_phase_missing:{phase}")
+                continue
+            for monitor_row in monitor_rows:
+                monitor_path = Path(str(monitor_row.get("path", "")))
+                if not monitor_path.is_file() or monitor_row.get("file_sha256") != sha256_file(monitor_path):
+                    errors.append(f"gpu_monitor_file:{phase}")
+                if int(monitor_row.get("sample_count", 0) or 0) <= 0:
+                    errors.append(f"gpu_monitor_no_samples:{phase}")
+                if int(monitor_row.get("gap_count", 0) or 0) > 0:
+                    errors.append(f"gpu_monitor_gaps:{phase}")
+                if monitor_row.get("peak_used_gib") is not None and float(monitor_row["peak_used_gib"]) > GPU_PEAK_LIMIT_GIB:
+                    errors.append(f"gpu_monitor_peak_over_budget:{phase}")
+        if gpu_monitoring.get("device_peak_used_gib") is not None and float(gpu_monitoring["device_peak_used_gib"]) > GPU_PEAK_LIMIT_GIB:
+            errors.append("gpu_device_peak_over_budget")
     if train.get("status") != "M1_COMPLETED":
         errors.append("m1_not_completed")
     if m0.get("schema_version") != "safedrive.c3.m0_predictions.v2":
@@ -2232,11 +2941,29 @@ def cmd_verify(args: argparse.Namespace) -> int:
         errors.append("independent_schema")
     if metrics.get("schema_version") != "safedrive.c3.metrics.v2" or metrics_spec.get("schema_version") != "safedrive.c3.metrics_spec.v2":
         errors.append("metrics_schema")
-    if len(samples) != 211 or manifest.get("split_counts") != {"train": 158, "validation": 53}:
+    expected_counts = {
+        str(key): int(value) for key, value in manifest.get("split_counts", {}).items()
+    }
+    observed_counts = {
+        split: sum(sample.split == split for sample in samples)
+        for split in manifest.get("splits", ("train", "validation"))
+    }
+    if manifest.get("sample_count") != len(samples) or observed_counts != expected_counts:
         errors.append("manifest_split_counts")
+    if manifest.get("legacy_release_split_counts", {}).get("train") != 158 or manifest.get("legacy_release_split_counts", {}).get("validation") != 53:
+        errors.append("legacy_release_split_counts")
     sample_ids = [sample.root_id for sample in samples]
     if len(sample_ids) != len(set(sample_ids)):
         errors.append("manifest_duplicate_roots")
+    case_ids = [str(row.get("root_id", "")) for row in case_bank.get("cases", ())]
+    if set(case_ids) != set(sample_ids) or len(case_ids) != len(set(case_ids)):
+        errors.append("case_bank_identity")
+    pair_ids = [sample.pair_id for sample in samples]
+    if len(pair_ids) != len(set(pair_ids)) or any(not item for item in pair_ids):
+        errors.append("manifest_duplicate_pair_ids")
+    physical_ids = [sample.physical_sha256 for sample in samples if sample.physical_sha256]
+    if len(physical_ids) != len(set(physical_ids)):
+        errors.append("manifest_duplicate_physical_ids")
     if manifest.get("future_labels_in_input") is not False or manifest.get("world_labels_in_sft") is not False:
         errors.append("leakage_flags")
     for sample in samples:
@@ -2244,14 +2971,53 @@ def cmd_verify(args: argparse.Namespace) -> int:
             errors.append(f"route_shape:{sample.root_id}")
         if len(sample.speed_target) != SPEED_STEPS or len(sample.speed_mask) != SPEED_STEPS:
             errors.append(f"speed_shape:{sample.root_id}")
-        if sample.route_source != "native_expert_reference_path_projected" or sample.teacher_generator != "classic-frenet-st@h1":
+        allowed_route_sources = {"native_classic_planner_trajectory", "c3_live_native_expert_planner"}
+        allowed_speed_sources = {"native_classic_planner_canonical", "c3_live_native_expert_canonical"}
+        if sample.route_source not in allowed_route_sources or sample.teacher_generator != "classic-frenet-st@h1":
             errors.append(f"source_contract:{sample.root_id}")
-        if sample.route_projection_ambiguous or sample.route_projection_distance_m > 2.5 or sample.route_support_m < ROUTE_STEPS:
+        if sample.route_projection_ambiguous or sample.route_projection_distance_m > 2.5 or sample.route_support_m < 0.0 or sample.route_support_m > 1000.0:
             errors.append(f"route_projection:{sample.root_id}")
         if sample.route_reference_revision == "" or sample.outcome_label_sha256 == "":
             errors.append(f"label_identity:{sample.root_id}")
-        if sample.speed_source != "expert_canonical_proposal":
+        if sample.speed_source not in allowed_speed_sources:
             errors.append(f"speed_source:{sample.root_id}")
+        for path_text, digest, label in (
+            (sample.image_path, sample.image_sha256, "image"),
+            (sample.execution_timeline_path, sample.execution_timeline_sha256, "timeline"),
+            (sample.outcome_label_path, sample.outcome_label_sha256, "outcome"),
+        ):
+            if not path_text or not Path(path_text).is_file():
+                errors.append(f"{label}_path_missing:{sample.root_id}")
+            elif digest and sha256_file(Path(path_text)) != digest:
+                errors.append(f"{label}_digest:{sample.root_id}")
+        proposal_path = Path(sample.proposal_path)
+        if not proposal_path.is_file():
+            errors.append(f"proposal_path_missing:{sample.root_id}")
+        else:
+            try:
+                proposal_payload = _read_json(proposal_path)
+                semantic_proposal_sha = str(
+                    proposal_payload.get("provenance", {}).get("canonical_sha256", "")
+                )
+                if semantic_proposal_sha != sample.proposal_sha256:
+                    errors.append(f"proposal_semantic_identity:{sample.root_id}")
+                expected_file_sha = ""
+                reconstruction_row = reconstruction_rows.get(sample.pair_id)
+                if sample.cohort == "c2_release":
+                    if reconstruction_row is None:
+                        errors.append(f"proposal_reconstruction_missing:{sample.root_id}")
+                    else:
+                        expected_semantic_sha = str(reconstruction_row.get("original_proposal_sha256", ""))
+                        if expected_semantic_sha != sample.proposal_sha256:
+                            errors.append(f"proposal_reconstruction_identity:{sample.root_id}")
+                        expected_file_sha = str(reconstruction_row.get("proposal_file_sha256", ""))
+                if expected_file_sha and sha256_file(proposal_path) != expected_file_sha:
+                    errors.append(f"proposal_file_digest:{sample.root_id}")
+                if not expected_file_sha and sample.cohort == "c3_supplement":
+                    if not semantic_proposal_sha or len(semantic_proposal_sha) != 64:
+                        errors.append(f"proposal_supplement_identity:{sample.root_id}")
+            except Exception as exc:  # noqa: BLE001 - preserve per-root failure evidence
+                errors.append(f"proposal_validation:{sample.root_id}:{type(exc).__name__}:{exc}")
     validation = [sample for sample in samples if sample.split == "validation"]
     try:
         independent_m0 = _independent_metric_rows(m0.get("rows", []), validation, model_name="m0")
@@ -2266,8 +3032,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
             errors.append("independent_saved_aggregate_mismatch")
     except Exception as exc:  # noqa: BLE001 - verifier converts attacks to a failed evidence record
         errors.append(f"independent_recompute_failed:{type(exc).__name__}:{exc}")
-    if len(m0.get("rows", [])) != 53 or len(m1.get("rows", [])) != 53 or len(m0_reload.get("rows", [])) != 53:
-        errors.append("validation_rows_not_53")
+    if len(m0.get("rows", [])) != len(validation) or len(m1.get("rows", [])) != len(validation) or len(m0_reload.get("rows", [])) != len(validation):
+        errors.append("validation_rows_count")
     expected_validation_ids = {sample.root_id for sample in validation}
     for payload, name in ((m0, "m0"), (m0_reload, "m0_reload"), (m1, "m1")):
         ids = [row.get("root_id") for row in payload.get("rows", [])]
@@ -2275,31 +3041,35 @@ def cmd_verify(args: argparse.Namespace) -> int:
             errors.append(f"{name}_root_set")
     if not digest_check(metrics_spec, "content_sha256"):
         errors.append("metrics_spec_digest")
-    if metrics_spec.get("primary") != "P-ADE.route_ade_m" or metrics_spec.get("failure_denominator") != 53:
+    if metrics_spec.get("primary") != "P-ADE.route_ade_m" or metrics_spec.get("failure_denominator") != len(validation):
         errors.append("metrics_spec_contract")
     if float(m0.get("eps_ADE_m", 0.0)) != max(1e-5, 10.0 * float(m0.get("reload_route_ade_max_abs", 0.0))):
         errors.append("eps_ADE_not_locked_from_reload")
-    if train.get("actual_updates") != train.get("target_updates") or train.get("target_updates") != 200:
+    if train.get("actual_updates") != train.get("target_updates") or train.get("target_updates") != int(config.get("updates", -1)):
         errors.append("update_budget_not_reached")
     logs = _training_log_rows(run_dir / "training.jsonl")
     if not _training_log_matches_summary(logs, train):
         errors.append("training_log_summary_mismatch")
     if len(logs) != int(train.get("actual_updates", -1)) or [int(row.get("update", -1)) for row in logs] != list(range(1, len(logs) + 1)):
         errors.append("training_log_update_sequence")
-    if any(int(row.get("window_size", 0)) not in {1, 2, 3, 4} for row in logs):
+    accumulation = int(config.get("gradient_accumulation", 4))
+    if any(int(row.get("window_size", 0)) < 1 or int(row.get("window_size", 0)) > accumulation for row in logs):
         errors.append("training_window_size")
-    # The final window of every 158-root epoch has two roots.  Therefore the
-    # exact sample count is derived from the recorded windows (200 updates
-    # produce 790 samples), rather than incorrectly assuming 200*4 samples.
     expected_samples = int(sum(int(row.get("window_size", 0)) for row in logs))
-    if int(train.get("samples_seen", -1)) != expected_samples or expected_samples != 790:
+    if int(train.get("samples_seen", -1)) != expected_samples:
         errors.append("training_samples_seen")
-    if train.get("expected_first_epoch_windows") != {"full_size_4": 39, "tail_size_2": 1, "roots": 158}:
+    expected_contract = _window_contract(len([sample for sample in samples if sample.split == "train" and (any(sample.route_mask) or any(sample.speed_mask))]), accumulation)
+    if train.get("expected_first_epoch_windows") != expected_contract:
         errors.append("training_tail_contract")
     first_epoch = [row for row in logs if int(row.get("epoch", -1)) == 0]
-    if [int(row.get("window_size", 0)) for row in first_epoch] != [4] * 39 + [2]:
+    full, tail = divmod(expected_contract["roots"], accumulation)
+    expected_first_sizes = [accumulation] * full + ([tail] if tail else [])
+    if [int(row.get("window_size", 0)) for row in first_epoch] != expected_first_sizes:
         errors.append("training_first_epoch_tail")
-    expected_order = deterministic_order([sample for sample in samples if sample.split == "train"], int(train.get("seed", 17)))
+    train_view, excluded_train = _training_view(samples)
+    if train.get("training_excluded_root_ids") != excluded_train:
+        errors.append("training_excluded_roots")
+    expected_order = deterministic_order(train_view, int(train.get("seed", 17)))
     expected_epoch = 0
     expected_index = 0
     expected_exposures = {sample.root_id: 0 for sample in samples if sample.split == "train"}
@@ -2307,7 +3077,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     for row in logs:
         if expected_index >= len(expected_order):
             expected_epoch += 1
-            expected_order = deterministic_order([sample for sample in samples if sample.split == "train"], int(train.get("seed", 17)) + expected_epoch)
+            expected_order = deterministic_order(train_view, int(train.get("seed", 17)) + expected_epoch)
             expected_index = 0
         expected_window = expected_order[expected_index : min(expected_index + int(config.get("gradient_accumulation", 4)), len(expected_order))]
         actual_ids = [str(item) for item in row.get("root_ids", [])]
@@ -2323,7 +3093,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         errors.append("training_schedule_sample_count")
     if exposures != expected_exposures or set(exposures) != set(expected_exposures) or sum(int(value) for value in exposures.values()) != expected_samples:
         errors.append("training_root_exposures")
-    if min((int(value) for value in exposures.values()), default=0) != 5 or max((int(value) for value in exposures.values()), default=0) != 5:
+    if exposures and max(int(value) for value in exposures.values()) - min(int(value) for value in exposures.values()) > 1:
         errors.append("training_exposure_balance")
     if train.get("frozen_parameters_unchanged") is not True or train.get("initial_frozen_fingerprints") != train.get("final_frozen_fingerprints"):
         errors.append("frozen_parameters_changed")
@@ -2356,6 +3126,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
             errors.append("checkpoint_exposure_or_finite_update")
         if checkpoint.get("initial_parameter_snapshot_sha256") != sha256_file(run_dir / "m1_initial_parameters.pt"):
             errors.append("checkpoint_initial_snapshot_identity")
+        if train.get("checkpoint_sha256") != sha256_file(run_dir / "checkpoint_latest.pt"):
+            errors.append("training_checkpoint_file_identity")
         if not {"python_random_state", "numpy_random_state", "torch_random_state", "optimizer_state", "model_state"}.issubset(checkpoint):
             errors.append("checkpoint_state_incomplete")
         initial_state = _load_update_state(run_dir / "m1_initial_parameters.pt")
@@ -2397,11 +3169,17 @@ def cmd_verify(args: argparse.Namespace) -> int:
         errors.append("resource_phase_coverage")
     if any(float(event.get("wall_time_s", 0.0) or 0.0) < 0.0 or float(event.get("optimization_wall_time_s", 0.0) or 0.0) < 0.0 for event in resources.get("events", [])):
         errors.append("resource_negative_duration")
-    if any(
-        float(event.get("optimization_wall_time_s_upper_bound", -1.0) or -1.0) < float(event.get("optimization_wall_time_s", 0.0) or 0.0)
-        for event in resources.get("historical_events", [])
-    ):
-        errors.append("resource_historical_upper_bound_missing")
+    for event in resources.get("historical_events", []):
+        measured_value = event.get("optimization_wall_time_s")
+        upper_value = event.get("optimization_wall_time_s_upper_bound")
+        try:
+            measured = float(measured_value) if measured_value is not None else 0.0
+            upper = float(upper_value) if upper_value is not None else float("nan")
+        except (TypeError, ValueError):
+            measured, upper = 0.0, float("nan")
+        if not math.isfinite(upper) or upper < measured:
+            errors.append("resource_historical_upper_bound_missing")
+            break
     if resources.get("status") != evaluation.get("status"):
         errors.append("resource_ledger_status_mismatch")
     if not any(event.get("status") == train.get("status") for event in resources.get("events", [])):
@@ -2464,11 +3242,22 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 0 if not errors else 2
 
 
+# Keep the sampler outside each command body so model loading, evaluation,
+# checkpoint reload and exceptional exits are covered by the same evidence
+# contract.
+cmd_smoke = _monitor_gpu_phase("smoke")(cmd_smoke)
+cmd_baseline = _monitor_gpu_phase("baseline")(cmd_baseline)
+cmd_train = _monitor_gpu_phase("train")(cmd_train)
+cmd_evaluate = _monitor_gpu_phase("evaluate")(cmd_evaluate)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("audit", "smoke", "baseline", "train", "evaluate", "verify"))
     parser.add_argument("--run-id", default="")
     parser.add_argument("--release-root", type=Path, default=DEFAULT_RELEASE)
+    parser.add_argument("--reconstruction-manifest", type=Path, default=None)
+    parser.add_argument("--supplement-manifest", type=Path, default=None)
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CKPT)
     parser.add_argument("--hydra-config", type=Path, default=DEFAULT_HYDRA)

@@ -53,10 +53,15 @@ cleanup and terminal status
 | H6-CORA C2 data | MEASURED | GATE_FAILED | 351 valid paired roots；真实覆盖不足，已冻结并停止 |
 | H6-CORA C2 repair v2/v3 | MEASURED | GATE_FAILED | v2 保留历史失败证据；v3 修通 recipe/trace/预算链，Town03 diagnostic 12 roots / 34 branches，repair-failure 1/2、offroad 5/1，正式批次被诊断门阻断 |
 | H6-CORA C2 dev baseline | MEASURED | DEV_BASELINE_GATE_PASSED | 现有数据 release 340 usable roots；World 三 seed 已跑完，`NO_DEMONSTRATED_GAIN`；原 coverage gate 仍失败 |
-| H6-CORA C3 repair | VERIFIED | ENGINEERING_COMPLETED / ALGORITHM_MEASURED | 修复版监督语义、CUDA smoke、M0/M1 checkpoint、逐 root 评估、独立重算和资源账本已绑定；详见下方 C3 repair VERIFIED |
+| H6-CORA C3 repair | VERIFIED | ENGINEERING_COMPLETED / ALGORITHM_MEASURED | 修复版真实训练、逐 root 评估、独立重算、资源与篡改拦截完成；范围为 `partial_native_support`，C4 未执行 |
 | H6-CORA C4–C6 | PLANNED | NOT_RUN | C4 联合微调、C5 闭环和 C6 交付尚未启动 |
 
 ## 3. 指标口径
+
+当前权威记录为 [C3 修复最终验收](runtime-evidence/h6/c3-final-repair-20260910T165902Z.md)，
+身份索引为 [c3-repair-20260910T165902Z-index.json](runtime-evidence/h6/c3-repair-20260910T165902Z-index.json)。
+此前勘误仍解释旧运行为何撤回；旧运行不覆盖当前修复版。当前指标是带
+`partial_native_support` 限制的开发集测量，不能引用为普遍驾驶能力。
 
 | 名称 | 本项目固定解释 |
 |---|---|
@@ -338,7 +343,22 @@ Guard、risk、branch order 的 missingness。CORA outcome 只解释冻结 CARLA
 真实 batch smoke 不等于完整训练；未测字段为 NOT_MEASURED/null。
 不重扫旧模型/数据 Hash，新权重必须有新身份。
 
-### C3 — 常规 VLA 微调（修复版 VERIFIED，2026-09-10）
+### C3 — 常规 VLA 微调（当前修复版 VERIFIED，2026-09-11）
+
+当前权威 run：
+
+```text
+generated/h6/cora/c3-repair-20260910T165902Z/
+```
+
+当前 run 的逐项数据、监督来源、补采阻断、M0/M1 数字、简单基线、资源、独立复算和六类
+验收攻击见 [C3 修复最终验收](runtime-evidence/h6/c3-final-repair-20260910T165902Z.md)。
+`verify.json` 为 `VERIFIED` 且 `errors=[]`；`deep-self-check.json` 为 `PASSED`，六类篡改
+均被拒绝。route ADE 虽相对 M0 降低，但略差于 train-mean，且 29/53 个 root 退化；speed
+waypoint ADE 改善。因此这里的 `ALGORITHM_MEASURED` 只表示固定离线任务的实测结果，
+不表示算法泛化或闭环安全成立。
+
+### C3 — 常规 VLA 微调（早期修复 run，SUPERSEDED）
 
 权威 run：
 

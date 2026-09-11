@@ -4,7 +4,56 @@
 [`archive/2026-08-27-cora-document-consolidation/`](archive/2026-08-27-cora-document-consolidation/README.md)
 的原始快照和阶段文档中，不能作为活动任务或阈值来源。
 
-## 2026-09-10 — C3 修复完成：监督、训练与验收重新验证（VERIFIED）
+## 2026-09-11 — C3 修复最终验收（VERIFIED / ENGINEERING_COMPLETED / ALGORITHM_MEASURED）
+
+当前权威 run 为 `generated/h6/cora/c3-repair-20260910T165902Z/`，完整交付记录见
+[C3 修复最终验收记录](docs/runtime-evidence/h6/c3-final-repair-20260910T165902Z.md)，身份索引见
+[C3 delivery index](docs/runtime-evidence/h6/c3-repair-20260910T165902Z-index.json)。
+`verify.json` 为 `VERIFIED` 且 `errors=[]`；独立分析、独立 checkpoint 重载和六类验收攻击
+均通过。下一入口已切到 C4，C4/M2 本轮没有执行。
+
+修复版恢复冻结 C2 release 的 211/211 个原生规划身份，使用 train 158 / validation 53
+的逐头 mask 监督；route 支持最大约 15.978 m，未外推成 19 m。真实 RTX 4080 CUDA/BF16
+M1 从原始 M0 完成 200/200 updates，790 次样本暴露，LoRA/驾驶 head 更新且冻结参数未变。
+补采预登记 48 个 root，但 CARLA 在 RPC READY 前外部崩溃，接受 0 个，不写伪造样本。
+
+修复版 validation route ADE 从 1.170243 m 到 0.749253 m，speed waypoint ADE 从 2.178557
+到 0.337217；route 仍略差于 train-mean 诊断基线，且 29/53 个 root 退化，因此只记为
+本次离线任务的 `ALGORITHM_MEASURED`，不声称普遍驾驶能力提升。P-FDE 因固定第 20 点无
+有效支持为 N/A，P-SPEED 因旧数据时间/速度口径不可信为 N/A。旧 `90.77%` 结论继续撤回。
+
+## 历史：2026-09-10 C3 再次重开（已由上方修复版取代）
+
+撤回 `c3-repair-20260910T100651Z` 的完整验收结论，保留真实 200 次 GPU 更新、790 次
+样本暴露及原产物作诊断。全部 211 个样本同帧 anchor/history 为 0/3 m/s；保存专家 proposal
+和执行轨迹最长分别 4.43/6.39 m，无一支持完整 19 m。当前 route 标签仍来自导航，不能
+以 route_revision 匹配证明专家规划输出。配置、smoke 和资源语义错误可通过原 verify；
+checkpoint 间中断恢复已复现报错。详见 [再复核勘误](docs/runtime-evidence/h6/c3-second-review-erratum.md)。
+
+当前入口恢复 C3，C4 NOT_RUN。工作分支 `codex/c3-repair`，新 run 根目录
+`generated/h6/cora/c3-repair-20260910T143846Z/`。首先修复数据和验收，不启动新的正式训练。
+下节为被撤回的历史完成报告，其监督、完整验收与资源上界声明不再作为活动事实。
+
+本轮已落实第一批防错修复：投影检查全部等距候选；固定真值支持和 root 内聚合；未知来源
+不默认专家；旧导航不再作 SFT route；阶段参数、预处理及源码身份冲突拒绝；验收独立检查
+smoke 梯度、参数变化与重载误差，并绑定当前配置。恢复保留 checkpoint 后未提交日志、
+部分 JSON 行与保守耗时，新增第 0 步 checkpoint。小型 CPU 模型在更新 1/9/10/11/39/40/41
+后中断，恢复参数和样本顺序均与连续 200 步相同（790 次暴露，5 个两样本尾窗口）。
+
+实际相关测试 24 项通过；全量 unittest 519 项、1 skipped、OK（96.948 s），日志为
+`generated/h6/cora/c3-repair-20260910T143846Z/diagnostics/unittest.txt`；compileall 与 diff
+检查通过。全量后对额外 InternVL/预处理身份检查再次运行 4 项直接相关验收测试，全部通过
+（4.357 s）。
+
+新版诊断 audit 读取 211 个旧样本，保留 train 158/validation 53，输出 AUDIT_FAILED：
+未建立可信初态和行为质量，route/speed 暂均不启用监督；canonical 空间支持最长 4.43 m。
+其 manifest SHA-256 为 `e23cafad7ee1ec16fbdfce8c851ce6812f028598174250a3d7104ad677604538`，
+位于新 run 下 `diagnostics/c3-repair-legacy-audit/`。这是失败审计证据，不是正式 manifest，
+后续代码身份变化后不能直接用于训练。本轮未做新 GPU 优化、未启动 CARLA、未合并或推送。
+仍需完成可信监督重建/补采、真实部署/恢复/C4 成本 smoke、整卡测量与历史资源上界、
+完整语义验收、正式重训及独立评估。状态仍为 UNDER_REPAIR。
+
+## 2026-09-10 — C3 首次修复报告（SUPERSEDED：完整验收撤回）
 
 状态：
 

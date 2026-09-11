@@ -7,10 +7,10 @@
 硬件写实验设置；不声称实车部署或从头训练基础模型。
 
 本周完整范围固定为 [ROADMAP](../ROADMAP.md) 的 C3、C4、C5、C6。
-C3 修复版已于 2026-09-10 `VERIFIED`（监督语义审计、M0/M1 离线评估和 200 更新 LoRA SFT）；
-当前下一入口为 C4，旧 C3 route 监督与 90.77% 结论已撤回，旧 C2 基线仍未证明学习增益。
-修复版权威 run 为 `generated/h6/cora/c3-repair-20260910T100651Z/`，勘误见
-[C3 SFT 修复记录](runtime-evidence/h6/c3-sft-repair-erratum.md)。
+C3 当前为 `VERIFIED / ENGINEERING_COMPLETED / ALGORITHM_MEASURED`，C4 尚未启动。权威
+run 为 `generated/h6/cora/c3-repair-20260910T165902Z/`，route 结果有逐 root 退化且只在
+`partial_native_support` 离线范围内解释；旧 C3 route 监督与 90.77% 结论撤回继续有效。
+完整记录见 [C3 修复最终验收](runtime-evidence/h6/c3-final-repair-20260910T165902Z.md)。
 
 ## 方法与工作量
 

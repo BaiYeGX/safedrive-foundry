@@ -32,7 +32,7 @@
 | C3 常规训练 | 完整优化最多 4 小时 |
 | C4 联合训练 | 完整优化最多 4 小时 |
 | 全部 GPU 优化 | 含 smoke/失败累计最多 10 小时 |
-| 训练数据补采 | 仅必要时一次，最多 12 新 roots / 24 attempts / 2 小时 CARLA 含启动恢复，先到即停 |
+| 训练数据补采 | 仅必要时一次，最多 48 新 roots / 96 attempts / 4 小时 CARLA 含启动恢复，先到即停 |
 | C5 开发闭环 | 6 roots × 3 臂 = 18 runs，每 run 最多 60 s 仿真 |
 | C5 CARLA wall | 含启动、失败、恢复最多 4 小时 |
 | whole-GPU peak | <=14.5 GiB |
@@ -55,12 +55,13 @@ C2 CPU baseline 为当时四线程/30 分钟预算，三 seed MLP 已完成；�
 记录 wall time、优化步数、allocated/reserved/整卡峰值、P50/P95/P99 与 deadline miss。
 清理只针对可重建缓存，不删除旧模型、冻结 Evidence 或失败数据；不重扫旧 Hash。
 
-C3 修复版实测资源账本已写入
+C3 历史运行的资源账本保留在
 `generated/h6/cora/c3-repair-20260910T100651Z/resource-ledger.json`：RTX 4080 CUDA/BF16
 正式 M1 共 200 updates，训练 wall `285.198 s`，峰值 allocated/reserved 为
-`4.259/4.398 GiB`；含历史失败和已撤回运行的优化总账保守上界为 `8.622365 h`，整卡观测
-峰值 allocated/reserved 为 `9.889132/10.845703 GiB`，低于 10 h 与 14.5 GiB 上限。
-旧账本保留作追溯，C4 尚未消耗新预算。初版 C3 的资源数字不再作为活动验收依据。
+`4.259/4.398 GiB`。该账本声称的 `8.622365 h` 尚未完整包含 smoke 等历史优化耗时，
+不能称为已证明的全部优化保守上界；`9.889132/10.845703 GiB` 是进程 allocated/reserved，
+不是训练期间整卡周期采样峰值。该旧账本保留作追溯，当前修复版另行纳入历史失败、smoke
+和正式训练的资源上界。
 
 ## 固定训练与运行口径
 
@@ -77,7 +78,8 @@ M2 增加残差 head 与同 accumulation window 的两类共享梯度计算，�
 不承诺零算力开销。必须在正式 M1 前用真实 smoke 测出成本后冻结共同 T。
 固定 b 的 CPU 拟合/导出计入阶段 wall，M2 在线只增加小型 b+R 运算，不加载第二个 VLA。
 不增加 teacher 网络、SAM、ensemble、多 seed、完整消融或新 CARLA 臂；
-原 4h/4h 完整优化、10h GPU 总账与 18 attempts/4h CARLA 上限不变。
+原 4h/4h 完整优化、10h GPU 总账与 18 attempts/4h CARLA 上限不变；C3 修复补采的独立上限
+为 48 roots / 96 attempts / 4h CARLA，实际因外部启动崩溃接受 0 roots。
 
 ## 论文资源指标
 

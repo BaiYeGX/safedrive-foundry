@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 import sys
 import unittest
+import tempfile
+from unittest.mock import patch
 from pathlib import Path
 
 import numpy as np
@@ -107,6 +109,21 @@ class C3SamplingTests(unittest.TestCase):
         self.assertGreater(float(target[1, 0]), 0.0)
         self.assertLess(float(target[10, 1]), 0.0)
 
+    def test_projection_rejects_later_crossing_hidden_by_adjacent_ties(self) -> None:
+        with self.assertRaisesRegex(ValueError, "route_projection_ambiguous"):
+            native_route_target_with_report(
+                [[-10, 0], [0, 0], [10, 0], [10, 10], [0, 0], [0, -10]],
+                ego_x=0.0, ego_y=0.0, ego_yaw=0.0,
+            )
+
+    def test_exact_19_metres_supports_twenty_points_without_provenance_claim(self) -> None:
+        _, mask, report = native_route_target_with_report(
+            [[0, 0], [19, 0]], ego_x=0.0, ego_y=0.0, ego_yaw=0.0,
+        )
+        self.assertEqual(int(mask.sum()), 20)
+        self.assertEqual(report["support_m"], 19.0)
+        self.assertEqual(report["source"], "ordered_polyline_geometry_only")
+
     def test_speed_sampling_requires_native_time_grid_and_keeps_missing(self) -> None:
         trajectory = [
             {"t": 0.25 * (i + 1), "x": float(i + 1), "y": 0.0}
@@ -159,12 +176,44 @@ class C3MetricTests(unittest.TestCase):
         speed[4] += 2.0
         route[7, 0] = np.nan
         row = root_metrics({"route": route, "speed": speed}, sample)
-        self.assertEqual(row["route_valid_points"], 19)
+        self.assertEqual(row["route_valid_points"], 20)
+        self.assertEqual(row["route_scored_finite_points"], 19)
         self.assertEqual(row["speed_valid_points"], 10)
         self.assertFalse(row["route_finite"])
         self.assertFalse(row["prediction_valid"])
         self.assertIn("route_non_finite", row["failure_reasons"])
-        self.assertIsNotNone(row["route_ade_m"])
+        self.assertIsNone(row["route_ade_m"])
+        self.assertIsNotNone(row["route_ade_conditional_m"])
+
+    def test_failed_point_cannot_improve_primary_ade_by_shrinking_support(self) -> None:
+        sample = _sample("root")
+        route = np.asarray(sample.route_target, dtype=float)
+        route[5, 0] += 100
+        finite = root_metrics({"route": route, "speed": sample.speed_target}, sample)
+        self.assertEqual(finite["route_ade_m"], 5.0)
+        route[5, 0] = np.nan
+        failed = root_metrics({"route": route, "speed": sample.speed_target}, sample)
+        self.assertIsNone(failed["route_ade_m"])
+        self.assertEqual(failed["route_valid_points"], 20)
+        self.assertEqual(failed["route_ade_conditional_m"], 0.0)
+        result = aggregate_metrics([{**finite, "model": "m0"}, {**failed, "model": "m1"}])
+        self.assertIsNone(result["metrics"]["route_ade_m"]["delta_m0_minus_m1"])
+        self.assertEqual(result["metrics"]["route_ade_m"]["prediction_failed_root_count"]["m1"], 1)
+
+    def test_missing_truth_is_distinct_from_prediction_failure(self) -> None:
+        sample = SFTSample(**{**_sample("root").to_dict(), "route_mask": (False,) * 20, "speed_mask": (False,) * 10})
+        row = root_metrics({"route": sample.route_target, "speed": sample.speed_target, "canonical_output_valid": True}, sample)
+        self.assertTrue(row["prediction_valid"])
+        self.assertIsNone(row["route_ade_m"])
+        self.assertEqual(row["failure_reasons"], [])
+
+    def test_multiple_anchors_do_not_increase_root_weight(self) -> None:
+        rows = [{"root_id": "a", "model": "m1", "route_ade_m": 0.0, "prediction_valid": True}] * 9
+        rows.append({"root_id": "b", "model": "m1", "route_ade_m": 10.0, "prediction_valid": True})
+        result = aggregate_metrics(rows)["metrics"]
+        self.assertEqual(result["route_ade_m"]["m1"], 5.0)
+        self.assertEqual(result["root_count"]["m1"], 2)
+        self.assertEqual(result["sample_count"]["m1"], 10)
 
     def test_route_fde_is_fixed_point_twenty_only(self) -> None:
         sample = _sample("root")
@@ -196,6 +245,42 @@ class C3MetricTests(unittest.TestCase):
 
 
 class C3VerifierTests(unittest.TestCase):
+    def test_changed_stage_arguments_are_rejected_before_model_load(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            args = c3_sft._parser().parse_args(["smoke", "--run-id", "c3-repair-test", "--output-root", temporary, "--device", "cuda"])
+            run = c3_sft._ensure_run_dir(args)
+            config = c3_sft._config_payload(args, model_identity={"path": str(Path(args.checkpoint).resolve())})
+            c3_sft._write_json(run / "run_config.json", config)
+            self.assertEqual(c3_sft._validate_run_config(run, args), config)
+            for key, replacement in (("checkpoint", "/nonexistent/model.pt"), ("hydra_config", "/nonexistent/config.yaml"), ("internvl_root", "/nonexistent/internvl"), ("seed", 999), ("updates", 1), ("max_hours", 400)):
+                with self.subTest(argument=key), patch.object(args, key, replacement):
+                    with self.assertRaisesRegex(ValueError, "argument_conflict"):
+                        c3_sft._validate_run_config(run, args)
+
+    def test_redigested_configuration_does_not_override_stage_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            args = c3_sft._parser().parse_args(["verify", "--run-id", "c3-repair-test", "--output-root", temporary, "--device", "cpu"])
+            run = c3_sft._ensure_run_dir(args)
+            config = c3_sft._config_payload(args, model_identity={"path": str(Path(args.checkpoint).resolve())})
+            config["updates"] = 1
+            config.pop("content_sha256")
+            config["content_sha256"] = c3_sft._sha_object(config)
+            c3_sft._write_json(run / "run_config.json", config)
+            with self.assertRaisesRegex(ValueError, "argument_conflict:updates"):
+                c3_sft._validate_run_config(run, args)
+
+    def test_smoke_success_string_cannot_hide_bad_measurements(self) -> None:
+        smoke = {"status": "SMOKE_PASSED", "finite_grad": False, "lora_changed": False,
+                 "driving_head_changed": True, "frozen_parameters_unchanged": True,
+                 "nonzero_gradient_elements": 0, "checkpoint_roundtrip_max_abs": 100.0,
+                 "checkpoint_roundtrip_tolerance": 1e-5}
+        smoke["smoke_sha256"] = c3_sft._sha_object(smoke)
+        errors = c3_sft._smoke_contract_errors(smoke, {"roundtrip_tolerance": 1e-5})
+        self.assertIn("smoke_finite_grad", errors)
+        self.assertIn("smoke_lora_changed", errors)
+        self.assertIn("smoke_no_nonzero_gradient", errors)
+        self.assertIn("smoke_roundtrip_measurement", errors)
+
     def test_training_log_is_bound_to_redundant_summary(self) -> None:
         rows = [{"update": 1, "epoch": 0}, {"update": 2, "epoch": 0}]
         summary = {"logs": rows}

@@ -1,0 +1,123 @@
+{
+  "schema_version": "safedrive.c3.delivery_index.v1",
+  "status": "VERIFIED",
+  "stage": "C3",
+  "run_id": "c3-repair-20260910T165902Z",
+  "evaluation_scope": "partial_native_support",
+  "engineering_status": "COMPLETED",
+  "algorithm_status": "MEASURED_OFFLINE_DEVELOPMENT_ONLY",
+  "next_stage": "C4",
+  "next_stage_status": "NOT_RUN",
+  "m2_start_policy": "MUST_START_FROM_ORIGINAL_M0",
+  "report": {
+    "path": "docs/runtime-evidence/h6/c3-final-repair-20260910T165902Z.md",
+    "sha256": "1659ec289e82523650e20541c7620029ddcac89e3ca2e6d47ad9f5bbcd86b21d"
+  },
+  "dataset": {
+    "release_id": "h6-cora-c2-devbaseline-20260907-v1",
+    "split_counts": {
+      "train": 158,
+      "validation": 53
+    },
+    "total_roots": 211,
+    "training_view_roots": 158,
+    "native_reconstruction_status": "211_OF_211_IDENTITY_MATCHED",
+    "manifest_path": "generated/h6/cora/c3-repair-20260910T165902Z/manifest.json",
+    "manifest_sha256": "fd9ac07e9b7cb08b83f3602ffbc7565f9a9d71f7da1a048b821b009bde18829d",
+    "route_valid_points": {
+      "train": 2173,
+      "validation": 691
+    },
+    "speed_valid_points": {
+      "train": 1580,
+      "validation": 530
+    },
+    "route_support_m": {
+      "min": 0.0,
+      "max": 15.978125000222303
+    },
+    "future_labels_in_input": false,
+    "world_labels_in_sft": false
+  },
+  "supplement": {
+    "plan_path": "generated/h6/cora/c3-repair-20260910T165902Z/supplement/manifest-plan.json",
+    "plan_sha256": "f2ec3808bb5219320a86b7f0bde80275019647f4714019f1c84cbc6ab59abfda",
+    "manifest_path": "generated/h6/cora/c3-repair-20260910T165902Z/supplement/supplement-manifest.json",
+    "manifest_sha256": "83c173cfe7f055f265c0eea3d75c706711bb04dbf111c7ec314553f5861764b5",
+    "audit_path": "generated/h6/cora/c3-repair-20260910T165902Z/supplement/audit.json",
+    "status": "CARLA_BLOCKED_EXTERNAL",
+    "planned_roots": 48,
+    "accepted_roots": 0,
+    "attempts_started": 0
+  },
+  "training": {
+    "m0_content_sha256": "a75b78625cf8cda3b43220ffb8b9bac82a7c5ebfc8d941082557f3594565581c",
+    "m1_content_sha256": "bd99b3bf78cb32e1df2b71e291df2d8be19cff9ea5a785207757d39356fee2bf",
+    "m1_training_content_sha256": "ed084c1a61cb1cb7ebbb573206fcf9c5ada8ee54dd6143373b7823344fb7ff75",
+    "target_updates": 200,
+    "actual_updates": 200,
+    "samples_seen": 790,
+    "window_size_histogram": {
+      "2": 5,
+      "4": 195
+    },
+    "frozen_parameters_unchanged": true,
+    "trainable_parameter_element_count": 18417664,
+    "parameter_change_evidence": "smoke.json_and_m1_training_summary.json"
+  },
+  "metrics": {
+    "path": "generated/h6/cora/c3-repair-20260910T165902Z/metrics.json",
+    "sha256": "136a26259dbd0baf5320f38fdfdb43366c9b227a227487c0087994f59f6e9e89",
+    "route_ade_m0": 1.1702425842832171,
+    "route_ade_m1": 0.7492531840360475,
+    "route_delta_m0_minus_m1": 0.4209894002471697,
+    "route_relative_improvement_percent": 35.97454116789204,
+    "speed_wp_ade_m0": 2.1785574563937677,
+    "speed_wp_ade_m1": 0.33721728661193856,
+    "speed_wp_delta_m0_minus_m1": 1.8413401697818292,
+    "speed_wp_relative_improvement_percent": 84.52107445583995,
+    "route_fde": "N/A_NO_FIXED_POINT_20_SUPPORT",
+    "p_speed": "N/A_UNTRUSTED_TIME_SPEED_GROUND_TRUTH",
+    "bootstrap_rounds": 1000,
+    "bootstrap_seed": 71,
+    "eps_ade_m": 0.00001
+  },
+  "verification": {
+    "verify_path": "generated/h6/cora/c3-repair-20260910T165902Z/verify.json",
+    "verify_sha256": "ad60ae1b22044f9fc567542e6451df3872d9a1196453124e9b24670a6322757c1",
+    "verify_status": "VERIFIED",
+    "verify_errors": [],
+    "deep_self_check_path": "generated/h6/cora/c3-repair-20260910T165902Z/deep-self-check.json",
+    "deep_self_check_sha256": "988b5bd381a9122fc803178c995c26344c508e525a90a3dcf6d25ec960071f02",
+    "deep_self_check_status": "PASSED",
+    "attack_count": 6,
+    "all_attacks_rejected": true,
+    "independent_analysis_path": "generated/h6/cora/c3-repair-20260910T165902Z/independent-analysis.json",
+    "independent_analysis_status": "PASSED",
+    "independent_recompute_sha256": "3b262e13043f99ea1b143475fa8801965d7fa0cab06702571375a973540b868d"
+  },
+  "resources": {
+    "ledger_path": "generated/h6/cora/c3-repair-20260910T165902Z/resource-ledger.json",
+    "ledger_sha256": "8c211e8a3f69a057fad0f5a56c8f2a4693437c1859d417a67a8955fba711fddc",
+    "optimization_total_hours_upper_bound": 0.860777641614167,
+    "whole_gpu_peak_used_gib": 13.6865234375,
+    "process_peak_allocated_gib": 9.88913345336914,
+    "process_peak_reserved_gib": 10.845703125,
+    "gpu_peak_limit_gib": 14.5,
+    "single_optimization_limit_hours": 4.0,
+    "total_optimization_limit_hours": 10.0
+  },
+  "source_identity": {
+    "run_source_head": "d9762395ae0d16a376f22e8f4f79e5b4b0a07734",
+    "model_sha256": "ec8943723d266ee9f5f56f45d153a163b22616960bfccb741965ea5daa700d28",
+    "code_sha256": "8c2127bba5e8110cb149e7ea16cad93be83d341262a3c15702f3971567dd1a45",
+    "release_id": "h6-cora-c2-devbaseline-20260907-v1",
+    "run_config_path": "generated/h6/cora/c3-repair-20260910T165902Z/run_config.json",
+    "stage_summary_path": "generated/h6/cora/c3-repair-20260910T165902Z/stage-summary.json"
+  },
+  "large_artifacts": {
+    "policy": "LOCAL_ONLY_IGNORED",
+    "root": "generated/h6/cora/c3-repair-20260910T165902Z",
+    "includes": ["model weights", "raw images", "full predictions", "training logs", "GPU samples"]
+  }
+}

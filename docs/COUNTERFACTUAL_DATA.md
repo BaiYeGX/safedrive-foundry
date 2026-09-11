@@ -2,11 +2,12 @@
 
 ## 本周只准备两种视图
 
-状态：C3 修复版数据适配 `VERIFIED`（2026-09-10）；C4 World 视图仍 `PLANNED / NOT_RUN`。
+状态：C3 数据适配 `VERIFIED / ENGINEERING_COMPLETED`，评估范围为
+`partial_native_support`；C4 World 视图仍 `PLANNED / NOT_RUN`。
 C3 用经过当前位置投影和语义审计的可信专家轨迹微调 VLA；C4 用已有真实四维后果联合学习。
-权威 C3 manifest 位于
-`generated/h6/cora/c3-repair-20260910T100651Z/manifest.json`。初版 route 前缀监督和 90.77%
-结果已撤回，详见 [C3 SFT 勘误](runtime-evidence/h6/c3-sft-repair-erratum.md)。
+当前 manifest 为 `generated/h6/cora/c3-repair-20260910T165902Z/manifest.json`；旧 manifest
+保留作诊断，详见 [C3 最终验收](runtime-evidence/h6/c3-final-repair-20260910T165902Z.md)。
+初版 route 前缀监督和 90.77% 结果撤回继续有效。
 数据先用 C2 release 的 train 158 / validation 53，不重开稀有事件覆盖任务。
 
 | 视图 | 输入 | 标签 |
@@ -19,8 +20,9 @@ SFT teacher 不等于 branch outcome；不能复制 Expert 后果给 VLA。
 失败分支可用于真实后果监督，但不能自动成为正确驾驶示范。
 配对损失只用同 root 两个真实有效分支；缺一个 outcome 不得补造。
 
-修复版 route 监督来自有序 native expert reference path 的当前位置投影后前向片段，按 1 m
-采样 20 点；speed 监督独立来自 10 点、0.25 s 的 canonical expert proposal。导航只作为
+route 监督必须来自可追踪的专家规划输出或经过初态和行为质量审计的执行片段，按 1 m
+采样 20 点。旧 canonical proposal 最长仅 4.43 m，保存执行记录最长仅 6.39 m；不能称为
+完整 19 m 专家监督。旧样本当前速度与 history 同帧冲突，可信 mask 需要重新审计。导航只作为
 部署输入或明确诊断来源，不能替代专家标签；未知、提前终止、碰撞和时间未对齐区间保留
 原因并逐头 mask，不用零填充或导航拼接。
 
